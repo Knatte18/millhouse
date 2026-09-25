@@ -92,6 +92,12 @@ This task makes the autonomous skills ask that session for guidance before halti
 - Rationale: matches the brief ("fall back to asking the user");
   for an autonomous skill, the halt message plus `blocked` status is how it asks the user.
 - Rejected: pre-checking with `ListAgents` — the `SendMessage` result is the authoritative check, and a pre-check adds a race without removing the need to handle the send error.
+- Name exactness: `parent_thread` is sent verbatim, never case-folded.
+  The spawner must pass `--parent` the exact live session name as `ListAgents` prints it.
+  Whether `SendMessage` name lookup is case-sensitive is unverified;
+  `_vscode_tasks.session_prefix` lower-cases the names it assembles (`mh:orch`), while `ListAgents` in this task's session listed the orchestrator as `MH:orch`, so a case mismatch between what a spawner passes and the live name is possible and surfaces as the unreachable fallback.
+  Record this in the `harness-tool-contracts.md` note.
+  Unit tests use a lower-case name (`mh:orch`).
 
 ### reply-format
 
@@ -146,6 +152,10 @@ This task makes the autonomous skills ask that session for guidance before halti
 - Decision: at each converted site, the escalation runs before the site's `set_blocked` / `set_batch_field(..., "blocked")` / commit, so `retry` and `approve` have nothing to undo.
   Where the current text records the block first and then jumps to a shared funnel (mill-go-base's per-stuck-type bullets all set batch state `blocked` then "go to *Blocked*"), restructure so the bullets compute `blocked_reason` and go to *Blocked*, and *Blocked* runs the escalation first, then records state.
   No `_status.append_phase` call happens during the wait: `append_phase` overwrites `phase:`, which entry gates read.
+  The `handoff.md` halts (`go-handoff-gate`) never call `set_blocked`;
+  they call `_notify.notify(...)` then `millpy-builder-lock.py release`, then halt.
+  There the escalation runs before that notify + release pair, and the builder lock stays held for the whole wait (the lock is per-worktree, so holding it blocks nothing else).
+  The same ordering applies at *Blocked* in mill-go-base: escalate first, then notify, release the lock, and tell the user only when the halt proceeds.
 - Rationale: keeps `status.md` consistent if the session dies mid-wait (it still reads as the pre-halt phase and a re-run resumes normally).
 - Rejected: record `blocked` first and flip it back on `retry` — a crash mid-wait leaves a block that the parent already cleared.
 
@@ -163,10 +173,10 @@ This task makes the autonomous skills ask that session for guidance before halti
 
   | Site id | Location | Accepted actions | Effect of `retry` / `approve` |
   |---|---|---|---|
-  | `go-batch` | `mill-go-base/SKILL.md` `### Blocked` (covers every `### Stuck escalation` branch: infrastructure after re-fire, transient, incomplete, verify/logic after self-resolve) | `retry`, `halt` | `retry`: apply the guidance (plan-file edits, a `## Prior failure` bullet quoting the guidance), append phase `parent-guided-retry`, commit, re-fire the implementer fresh for the batch (for `incomplete`, the `start_sha`-preserving resume path). |
+  | `go-batch` | `mill-go-base/SKILL.md` `### Blocked` (covers every `### Stuck escalation` branch: infrastructure after re-fire, transient, incomplete, verify/logic after self-resolve) | `retry`, `halt` | `retry`: apply the guidance (plan-file edits, a `## Prior failure` bullet quoting the guidance), append phase `parent-guided-retry`, commit, re-fire the implementer for the batch under the same re-dispatch rules as the existing verify/logic self-resolve re-fire (fresh session; for `incomplete`, the `start_sha`-preserving resume path instead). mill-go-base has no `Commit: none` idempotency guard today, so a re-fire can repeat an uncommitted external action exactly as the self-resolve re-fire can; this task inherits that behaviour and adds no guard. |
   | `go-holistic-cap` | `mill-go-base/holistic-review.md` round-cap exhausted with `auto_approve_on_cap: false` | `approve`, `retry`, `halt` | `approve`: run the same terminal actions the `auto_approve_on_cap: true` branch runs, with commit-message suffix `(approved by parent)`. `retry`: one extra holistic round with the guidance passed to the fixer. |
   | `go-handoff-gate` | `mill-go-base/handoff.md` done-gate still `blocked` after the one fixer dispatch, and the "unfixed nits" halt | `retry`, `halt` | `retry`: dispatch the fixer once more with the guidance, then re-run the gate. |
-  | `plan-cap` | `mill-plan/SKILL.md` step 6 max-rounds escape (the `"max-rounds exhausted"` block) | `approve`, `retry`, `halt` | `approve`: the same effect as the existing `--approve` re-entry (flip `approved: true`, proceed to handoff). `retry`: one extra review round with the guidance applied to the plan first (mirrors the existing non-progress extension round, `--max-rounds <max+1>`). |
+  | `plan-cap` | `mill-plan/SKILL.md` step 6 max-rounds escape (the `"max-rounds exhausted"` block) | `approve`, `retry`, `halt` | `approve`: the site applies the effect directly — flip `approved: true` in `plan/00-overview.md` (same direct-`Edit` convention the `--approve` re-entry uses), commit with suffix `(approved by parent)`, fall into Handoff. It does not re-enter through the Entry step 4 `--approve` pre-check, whose `phase == "blocked"` / `"max-rounds exhausted"` conditions do not hold because the block is not yet recorded. `retry`: one extra review round with the guidance applied to the plan first (mirrors the existing non-progress extension round, `--max-rounds <max+1>`). |
   | `start-cap` | `mill-start/SKILL.md` `--auto`/`--orch` non-progress cap branch with `auto_approve_on_cap: false` | `approve`, `retry`, `halt` | `approve`: the same terminal actions as the `auto_approve_on_cap: true` branch, commit-message suffix `(approved by parent)`. `retry`: one extra round with the guidance applied to `discussion.md` first (`--max-rounds <max+1>`). |
   | `quick-gate` | `mill-quick/SKILL.md` done-gate failure | `retry`, `halt` | `retry`: apply the guidance as a fix, commit, re-run the done gate once. |
 

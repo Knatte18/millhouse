@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussion-fix-r1
 slug: parent-thread-escalation
 branch: hanf/parent-thread-escalation
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-24T10:47:59Z'
+discussion-fix-r1  '2026-09-25T05:33:02Z'
 ```
