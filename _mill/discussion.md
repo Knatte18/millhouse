@@ -27,6 +27,7 @@ This task makes the autonomous skills ask that session for guidance before halti
 - New config key `pipeline.parent_escalation_timeout_minutes` in both the hub `mill-config.yaml` and `plugins/mill/templates/mill-config.yaml`.
 - Wiring the escalation into the converted halt sites listed under the `converted-sites` Decision.
 - A short "SendMessage to a peer session" note in `plugins/mill/docs/harness-tool-contracts.md` recording what is and is not verified.
+  In the same file's Monitor section, update the "four wait sections" references and their named list to five, adding the `ask-parent` skill's wait.
 - Regenerating root `SKILLS.md` for the new skill (the `mill-skills-index` skill).
 - Unit tests for the new helper, CLI, and status reader.
 
@@ -159,6 +160,17 @@ This task makes the autonomous skills ask that session for guidance before halti
 - Rationale: keeps `status.md` consistent if the session dies mid-wait (it still reads as the pre-halt phase and a re-run resumes normally).
 - Rejected: record `blocked` first and flip it back on `retry` — a crash mid-wait leaves a block that the parent already cleared.
 
+### no-new-phase-strings
+
+- Decision: this task introduces no new `phase:` value at any site.
+  A `retry` leaves `phase:` exactly as it was when the would-be halt was reached (for `go-batch`: `implementing`/`reviewing`/`fixing` or `self-resolved-verify-logic`, all of which the mill-go-base "Mid-execution phase-gate widening" already routes to `## Resume` with the batch still non-terminal).
+  The audit trail for a parent-guided retry is the `## Prior failure` bullet (mill-go) or the edited artifact, plus a commit message naming the parent guidance.
+  `approve` paths append only the phases their reused terminal actions already append.
+- Rationale: every phase string must be registered in mill-go-base's `matches_wait_trigger` set and given a routing branch, or a crash mid-retry lands on the Entry table's `any other -> surface + halt` row;
+  `millpy-implement.py` also keys a session-reuse heuristic on the last timeline row (`self-resolved-verify-logic`).
+  Adding nothing avoids both.
+- Rejected: a `parent-guided-retry` phase with its own resume branch — more routing surface for an audit row the commit log already provides.
+
 ### one-escalation-per-site
 
 - Decision: each converted site escalates at most once per failure site per run: once per batch in mill-go (`go-batch`), once per review loop in mill-plan/mill-start/holistic review (`plan-cap`, `start-cap`, `go-holistic-cap`), once per run in mill-quick (`quick-gate`), and once per gate per Phase: Handoff run for `go-handoff-gate` — the "unfixed nits" halt and the done-gate-after-fixer halt each get their own single escalation, so a run that clears unfixed nits via `retry` and later fails the done gate may ask once more for that gate.
@@ -175,7 +187,7 @@ This task makes the autonomous skills ask that session for guidance before halti
 
   | Site id | Location | Accepted actions | Effect of `retry` / `approve` |
   |---|---|---|---|
-  | `go-batch` | `mill-go-base/SKILL.md` `### Blocked` (covers every `### Stuck escalation` branch: infrastructure after re-fire, transient, incomplete, verify/logic after self-resolve) | `retry`, `halt` | `retry`: apply the guidance (plan-file edits, a `## Prior failure` bullet quoting the guidance), append phase `parent-guided-retry`, commit, re-fire the implementer for the batch under the same re-dispatch rules as the existing verify/logic self-resolve re-fire (fresh session; for `incomplete`, the `start_sha`-preserving resume path instead). mill-go-base has no `Commit: none` idempotency guard today, so a re-fire can repeat an uncommitted external action exactly as the self-resolve re-fire can; this task inherits that behaviour and adds no guard. |
+  | `go-batch` | `mill-go-base/SKILL.md` `### Blocked` (covers every `### Stuck escalation` branch: infrastructure after re-fire, transient, incomplete, verify/logic after self-resolve) | `retry`, `halt` | `retry`: apply the guidance (plan-file edits, a `## Prior failure` bullet quoting the guidance), commit with message `<VARIANT_LABEL>: parent-guided retry ({batch_name})` — no `append_phase` call (see `no-new-phase-strings`) — then re-fire the implementer for the batch under the same re-dispatch rules as the existing verify/logic self-resolve re-fire (fresh session; for `incomplete`, the `start_sha`-preserving resume path instead). mill-go-base has no `Commit: none` idempotency guard today, so a re-fire can repeat an uncommitted external action exactly as the self-resolve re-fire can; this task inherits that behaviour and adds no guard. |
   | `go-holistic-cap` | `mill-go-base/holistic-review.md` round-cap exhausted with `auto_approve_on_cap: false` | `approve`, `retry`, `halt` | `approve`: run the same terminal actions the `auto_approve_on_cap: true` branch runs, with commit-message suffix `(approved by parent)`. `retry`: one extra holistic round with the guidance passed to the fixer. |
   | `go-handoff-gate` | `mill-go-base/handoff.md` done-gate still `blocked` after the one fixer dispatch, and the "unfixed nits" halt | `retry`, `halt` | `retry`: dispatch the fixer once more with the guidance, then re-run the gate. |
   | `plan-cap` | `mill-plan/SKILL.md` step 6 max-rounds escape (the `"max-rounds exhausted"` block) | `approve`, `retry`, `halt` | Reuse mill-plan's own in-session override procedures (Phase: Plan Review), treating the parent's reply as the live operator instruction they already accept. `approve`: run the "Live operator waiver of step 6" implicit-approve-at-cap path (direct-`Edit` `approved: true` in `plan/00-overview.md`, commit, push, Handoff), with the commit-message parenthetical reading `(parent waived remaining BLOCKINGs at round cap)` so the audit trail names who waived. It does not re-enter through the Entry step 4 `--approve` pre-check, whose `phase == "blocked"` / `"max-rounds exhausted"` conditions do not hold because the block is not yet recorded. `retry`: apply the guidance to the plan files first, then bind `operator_max_review_rounds = <current effective cap> + 1` per "Live operator-raised round-cap override" (its precedence over `max_review_rounds` / `local_max_review_rounds` and its `--max-rounds <operator_max_review_rounds>` threading through every prepare/finalize and Step 3.5 retry site apply unchanged) and continue the loop. |
