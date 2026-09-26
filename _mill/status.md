@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-wiki-guard
+phase: approved-symbol-resolution
 slug: tooling-false-positives
 branch: hanf/tooling-false-positives
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-fix-r2  '2026-09-26T08:58:32Z'
 planned  '2026-09-26T08:58:38Z'
 implementing  '2026-09-26T08:59:18Z'
 approved-wiki-guard  '2026-09-26T09:53:35Z'
+approved-symbol-resolution  '2026-09-26T09:55:30Z'
 ```
 
 ## Batches
@@ -41,9 +42,10 @@ batches:
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: Using CPython 3.14.4 interpreter at: /usr/bin/python3', 'NONZERO_EXIT:
     exit 1: --only: unknown test file(s): [''test-wiki-guard.py'']']
   - name: symbol-resolution
-    state: running
+    state: approved
     implementer_session: a3842c6e-bdf8-442e-a02b-7a671b58e1cb
     start_sha: 27fa3b621d37e5828f346588a5fbd7e3406ed231
+    commit_sha: 284c358abc66991868c50a49dcbc465fdcbe6718
     verify_baseline_failures: []
   - name: hook-install
     state: pending
