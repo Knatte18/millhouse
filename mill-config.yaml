@@ -34,7 +34,7 @@ pipeline:
   max_batch_context_tokens: 700000
   entry_wait: true  # master on/off switch for the mill-go/mill-plan entry-gate blocking wait; see _phase_wait.py
   entry_wait_timeout_minutes: 240  # give-up timeout (minutes) for the entry-gate wait before halting
-  parent_escalation_timeout_minutes: 60  # minutes an autonomous skill waits for its parent_thread session's reply before halting; 0 disables parent escalation
+  parent_escalation_timeout_minutes: 60  # minutes ask-thread waits for a reply in either mode (automatic halt escalation, direct /ask-thread); 0 disables automatic escalation only, direct mode then waits the 60-minute default
   done_gate: null  # Repo-wide check command run from git_root before marking done; null = disabled. Default to including the language's lint command (e.g. golangci-lint run, ruff check .) even when a full test run is skipped as too slow. e.g. "go test ./... && golangci-lint run" or "dotnet test". (#561)
   done_gate_baseline_preflight: false  # Opt-in Prepare-phase done_gate baseline capture for self-capturing regression suites; see done_gate above. (#650)
   baseline_verify_timeout_minutes: null  # Per-run wall-clock ceiling (minutes) for every verify command --stage baseline runs (module-wide, per-batch); null = no ceiling. A timeout is treated as "computation failed, leave the baseline unset", the same fail-safe as any other infrastructure failure, so a hung test runner cannot block the pre-flight indefinitely before batch 1 dispatches. (#1101)
