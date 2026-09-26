@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: merge-teardown-hygiene
 branch: hanf/merge-teardown-hygiene
 plan: _mill/plan
@@ -30,6 +30,7 @@ holistic-reviewing  '2026-09-26T08:59:36Z'
 holistic-fixing  '2026-09-26T09:00:15Z'
 nits-fixed-holistic  '2026-09-26T09:00:56Z'
 holistic-approved  '2026-09-26T09:01:00Z'
+done  '2026-09-26T09:01:09Z'
 ```
 
 ## Batches
