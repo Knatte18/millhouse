@@ -128,7 +128,7 @@ def parse_actions(actions_csv: str, site: str | None = None) -> list[str]:
 
 
 def timeout_minutes(cfg: dict) -> int:
-    """Return the parent-reply wait in minutes from ``pipeline.parent_escalation_timeout_minutes``, defaulting to 60."""
+    """Return the reply wait in minutes from ``pipeline.parent_escalation_timeout_minutes``, defaulting to 60."""
     value = (cfg.get("pipeline") or {}).get("parent_escalation_timeout_minutes", DEFAULT_TIMEOUT_MINUTES)
     if value is None:
         return DEFAULT_TIMEOUT_MINUTES
