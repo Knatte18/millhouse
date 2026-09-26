@@ -37,3 +37,9 @@ batches:
     state: pending
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-thread.py'', ''test-millpy-ask-thread.py'']']
 ```
+
+## Inferred-success log
+
+```text
+'2026-09-26T08:47:53Z'  ask-thread-scripts  round 1
+```
