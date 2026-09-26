@@ -62,3 +62,9 @@ batches:
   - name: cross-references
     state: pending
 ```
+
+## Inferred-success log
+
+```text
+'2026-09-26T14:39:44Z'  merge-cli  round 1
+```
