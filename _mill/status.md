@@ -57,3 +57,9 @@ batches:
     state: pending
     verify_baseline_failures: []
 ```
+
+## Inferred-success log
+
+```text
+'2026-09-26T07:27:41Z'  fixer-parent-guidance  round 1
+```
