@@ -152,7 +152,14 @@ This task makes the autonomous skills ask that session for guidance before halti
 ### escalate-before-recording-block
 
 - Decision: at each converted site, the escalation runs before the site's `set_blocked` / `set_batch_field(..., "blocked")` / commit, so `retry` and `approve` have nothing to undo.
-  Where the current text records the block first and then jumps to a shared funnel (mill-go-base's per-stuck-type bullets all set batch state `blocked` then "go to *Blocked*"), restructure so the bullets compute `blocked_reason` and go to *Blocked*, and *Blocked* runs the escalation first, then records state.
+  Where the current text records the block first and then jumps to a shared funnel (mill-go-base's per-stuck-type bullets all set batch state `blocked` then "go to *Blocked*"), restructure so the bullets compute their halt parameters and go to *Blocked*, and *Blocked* runs the escalation first, then records state.
+  *Blocked* takes three parameters so every bullet's current recording behaviour survives unchanged:
+  `blocked_reason` (the bullet's existing reason string);
+  `commit_suffix` (empty for infrastructure, transient, and verify/logic;
+  ` (incomplete after resume)` for `incomplete`), appended to the existing `<VARIANT_LABEL>: blocked on {batch_name}` commit message;
+  and `push` (false for infrastructure, transient, and verify/logic;
+  true for `incomplete`, which today is the only bullet that pushes its block commit).
+  The recording step is then: `set_batch_field(status_path, batch_name, "state", "blocked")`, `set_batch_field(..., "blocked_reason", blocked_reason)`, `append_phase(status_path, "blocked", ...)`, commit with `commit_suffix`, push only when `push` is true — then the existing notify / lock release / tell-user steps.
   No `_status.append_phase` call happens during the wait: `append_phase` overwrites `phase:`, which entry gates read.
   The `handoff.md` halts (`go-handoff-nits`, `go-handoff-done-gate`) never call `set_blocked`;
   they call `_notify.notify(...)` then `millpy-builder-lock.py release`, then halt.
