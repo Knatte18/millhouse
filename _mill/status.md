@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: subagent-handback-report
 branch: hanf/subagent-handback-report
 plan: _mill/plan
@@ -23,4 +23,19 @@ planning  '2026-09-26T09:08:47Z'
 plan-review-r1  '2026-09-26T09:09:30Z'
 plan-fix-r1  '2026-09-26T09:09:30Z'
 planned  '2026-09-26T09:09:32Z'
+implementing  '2026-09-26T09:10:14Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: agent-dispatch-core
+    state: pending
+  - name: sibling-skill-wording
+    state: pending
+  - name: script-wording
+    state: pending
+  - name: test-comments
+    state: pending
 ```
