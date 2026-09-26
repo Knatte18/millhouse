@@ -5,12 +5,12 @@ Builds an isolated hub+wiki pair under ``.scratch/`` and runs ``millpy-spawn.py`
 Asserts the end-to-end artefacts:
 
     - Home.md heading for the seeded task switches to ``[active]``.
-    - A new worktree directory exists at ``<container>/worktrees/<slug>`` (hub-form default, via
-    _sibling.resolve_path).
-    - The task's branch exists with the expected name.
-    - ``wiki/active/<slug>/status.md`` exists with the expected title.
+    - A new worktree directory exists at ``<container>/wts/<slug>`` (container layout: the hub is
+    ``<container>/wts/hub`` with a sibling ``<container>/wiki`` clone and a ``hub.git`` origin).
+    - The task's branch exists with the expected name (``spawn.branch_prefix`` from the hub's mill-config.yaml).
+    - ``<worktree>/_mill/status.md`` exists with the expected title.
     - ``<worktree>/.vscode/settings.json`` has a non-green colour.
-    - ``<worktree>/.millhouse/wiki`` is a working junction to the wiki clone.
+    - ``<worktree>/.wiki`` is a working link to the wiki clone.
 
 Local-dev only.
 Requires a working ``git`` in PATH.
@@ -61,16 +61,17 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
     Layout mirrors real use:
         <container>/wiki.git — bare "remote"
         <container>/wiki — working clone of the bare
-        <container>/hub — working hub repo
-        <container>/hub/.millhouse/wiki — junction to wiki clone
+        <container>/wts/hub — working hub repo
+        <container>/wts/hub/.millhouse/wiki — junction to wiki clone
 
     Returns ``(hub, wiki, worktrees_dir)``.
     """
     container.mkdir(parents=True, exist_ok=True)
     bare = container / "wiki.git"
     wiki = container / "wiki"
-    hub = container / "hub"
-    worktrees_dir = container / "worktrees"
+    hub_bare = container / "hub.git"
+    worktrees_dir = container / "wts"
+    hub = worktrees_dir / "hub"
 
     # Bare wiki + clone.
     # The bare acts as origin so mill-spawn's sync_pull/write_commit_push paths exercise real push/pull.
@@ -79,7 +80,28 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
     _run(["git", "-C", str(wiki), "config", "user.email", "test@example.com"], cwd=container)
     _run(["git", "-C", str(wiki), "config", "user.name", "Test"], cwd=container)
 
-    # Seed Home.md with one spawn-ready task so pick_task hits fast-path.
+    # Seed the TinyDB task index (the source of truth) and a Home.md the daemon re-renders on claim.
+    (wiki / "tasks.json").write_text(
+        json.dumps(
+            {
+                "_default": {
+                    "1": {
+                        "id": 1,
+                        "slug": "demo-task",
+                        "title": "Demo task",
+                        "brief": "Seed task for the mill-spawn integration test.",
+                        "body": "",
+                        "depends_on": [],
+                        "isolated": False,
+                        "deferred": False,
+                        "status": None,
+                    }
+                }
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     (wiki / "Home.md").write_text(
         "# Tasks\n\n"
         "## Demo task\n"
@@ -106,27 +128,24 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
 
     # Hub repo — any non-empty git history is fine;
     # mill-spawn only needs the toplevel to be resolvable.
-    hub.mkdir()
+    # Container layout: the hub lives at <container>/wts/hub so the sibling wiki/ resolves without overrides.
+    # The hub needs an origin because mill-spawn pushes the new task branch.
+    _run(["git", "init", "--bare", str(hub_bare), "-b", "main"], cwd=container)
+    hub.mkdir(parents=True)
     _run(["git", "init", str(hub), "-b", "main"], cwd=container)
+    _run(["git", "-C", str(hub), "remote", "add", "origin", str(hub_bare)], cwd=container)
     _run(["git", "-C", str(hub), "config", "user.email", "test@example.com"], cwd=container)
     _run(["git", "-C", str(hub), "config", "user.name", "Test"], cwd=container)
     (hub / "README.md").write_text("hub test\n", encoding="utf-8")
     _run(["git", "-C", str(hub), "add", "README.md"], cwd=container)
     _run(["git", "-C", str(hub), "commit", "-m", "init"], cwd=container)
+    _run(["git", "-C", str(hub), "push", "origin", "main"], cwd=container)
 
-    # .millhouse/ with wiki junction + config.local.yaml (spawn overlay).
-    millhouse = hub / ".millhouse"
-    millhouse.mkdir()
-    if sys.platform == "win32":
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(millhouse / "wiki"), str(wiki)],
-            check=True,
-            capture_output=True,
-        )
-    else:
-        os.symlink(str(wiki), str(millhouse / "wiki"))
-    # Empty local overlay is fine — mill-config.yaml carries everything.
-    (millhouse / "config.local.yaml").write_text("", encoding="utf-8")
+    # Branch prefix comes from the hub's mill-config.yaml.
+    (hub / "mill-config.yaml").write_text('spawn:\n  branch_prefix: "test/"\n', encoding="utf-8")
+    _run(["git", "-C", str(hub), "add", "mill-config.yaml"], cwd=container)
+    _run(["git", "-C", str(hub), "commit", "-m", "config"], cwd=container)
+    _run(["git", "-C", str(hub), "push", "origin", "main"], cwd=container)
 
     return hub, wiki, worktrees_dir
 
@@ -190,7 +209,7 @@ def main() -> int:
         )
 
         # status.md written with parent branch recorded.
-        status_path = wiki / "active" / "demo-task" / "status.md"
+        status_path = worktree / "_mill" / "status.md"
         _assert(status_path.exists(), f"status.md missing: {status_path}")
         status_text = status_path.read_text(encoding="utf-8")
         _assert(
@@ -204,7 +223,7 @@ def main() -> int:
 
         # discover_active_worktrees finds the new worktree by branch slug.
         home_tasks = parse_home_md((wiki / "Home.md").read_text(encoding="utf-8"))
-        found = _spawn_core.discover_active_worktrees(worktrees_dir, home_tasks, "test/")
+        found = _spawn_core.discover_active_worktrees(worktrees_dir, home_tasks, "test/", cwd=hub)
         _assert(
             any(s == "demo-task" for _, s, _ in found),
             f"discover_active_worktrees did not find demo-task in {worktrees_dir}; found={found}",
@@ -224,7 +243,7 @@ def main() -> int:
         )
 
         # Wiki junction in new worktree.
-        wiki_junction = worktree / ".millhouse" / "wiki"
+        wiki_junction = worktree / ".wiki"
         _assert(
             wiki_junction.exists() and wiki_junction.is_dir(),
             f"wiki junction missing: {wiki_junction}",
@@ -254,8 +273,8 @@ def main() -> int:
             # Remove worktree registration BEFORE deleting the dir so git's worktree bookkeeping stays consistent on repeated runs.
             try:
                 _run(
-                    ["git", "worktree", "remove", "--force", str(container / "worktrees" / "demo-task")],
-                    cwd=container / "hub",
+                    ["git", "worktree", "remove", "--force", str(container / "wts" / "demo-task")],
+                    cwd=container / "wts" / "hub",
                     check=False,
                 )
             except Exception:

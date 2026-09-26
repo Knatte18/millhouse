@@ -212,7 +212,7 @@ def _reclassify_verify_failure(
             "session_id": session_id or "unknown",
         }
 
-    reason = _cards_incomplete_reason(card_ids, cards_done, content)
+    reason = _cards_incomplete_reason(card_ids, cards_done, content, commit_none_card_ids=commit_none_card_ids)
     if reason is not None:
         # Partial batch -- implementer stopped after some cards (or self-reported fewer cards done than declared).
         # Reclassify as incomplete (not transient) so the orchestrator knows to resume rather than retry fresh.
@@ -232,6 +232,8 @@ def _cards_incomplete_reason(
     card_ids: set[int],
     cards_done,
     content: int,
+    *,
+    commit_none_card_ids: set[int] | None = None,
 ) -> str | None:
     """
     Decide whether a batch is incomplete, sharing the identical rule between
@@ -258,6 +260,9 @@ def _cards_incomplete_reason(
         this function is responsible for validating and coercing it.
         content: The content-commit count since start_sha (excluding the batch-start housekeeping
         commit).
+        commit_none_card_ids: Card numbers whose Commit: field is the literal none.
+        They never produce a content commit, so the count-only path excludes them from the
+        expected commit count; the cards_done set-difference path is unaffected.
 
     Returns:
         The "batch incomplete: ..."
@@ -267,10 +272,11 @@ def _cards_incomplete_reason(
 
     def _count_only_reason() -> str | None:
         # Raw commit-count heuristic: cannot see which specific cards were combined, so it only knows "fewer commits than declared cards".
-        if content < len(card_ids):
+        expected = len(card_ids - (commit_none_card_ids or set()))
+        if content < expected:
             return (
                 f"batch incomplete: {content} content commit(s) since start but"
-                f" {len(card_ids)} card(s) in batch -- implementer stopped before finishing all cards"
+                f" {expected} card(s) in batch -- implementer stopped before finishing all cards"
             )
         return None
 
@@ -304,6 +310,7 @@ def _batch_completeness_stuck(
     ignore_verify: bool = False,
     cards_done=None,
     already_complete: bool = False,
+    commit_none_card_ids: set[int] | None = None,
 ) -> dict | None:
     """
     Check whether the implementer's commits/self-report satisfy the declared card_ids.
@@ -345,6 +352,8 @@ def _batch_completeness_stuck(
                 sessions never regress.
         already_complete: When True, short-circuits the gate to "complete" regardless of every other
             argument -- the resume backstop.
+        commit_none_card_ids: Card numbers whose Commit: field is the literal none; they produce
+            no content commit, so the count-only recount excludes them from the expected total.
 
     Returns:
         A stuck dict with stuck_type="incomplete" and commits_made when incomplete,
@@ -371,7 +380,7 @@ def _batch_completeness_stuck(
     if content is None:
         return None
 
-    reason = _cards_incomplete_reason(card_ids, cards_done, content)
+    reason = _cards_incomplete_reason(card_ids, cards_done, content, commit_none_card_ids=commit_none_card_ids)
     if reason is None:
         return None
 
@@ -414,6 +423,16 @@ def _attach_commit_sha(stuck_dict: dict, project_root: Path) -> dict:
     return stuck_dict
 
 
+def _is_brief_path(path: str) -> bool:
+    """
+    Return True when a repo-root-relative path lies under a `_mill/briefs/` directory at any depth.
+
+    A nested (hub-relative) task layout puts briefs at `<subdir>/_mill/briefs/...`, so a plain
+    prefix test misses them.
+    """
+    return "/_mill/briefs/" in "/" + path
+
+
 def _in_scope_dirty_stuck(
     project_root: Path,
     task_dir: Path | None,
@@ -433,7 +452,7 @@ def _in_scope_dirty_stuck(
     gate, so it cannot false-block finalize if it becomes dirty again for reasons unrelated to the
     current batch. Do not "fix" this function to match compute_terminal_dirt's broader scope --
     that would reintroduce the false-block this function exists to avoid.
-    `_mill/briefs/` paths are excluded from `owned_paths` entirely -- they are Builder-owned
+    `_mill/briefs/` paths, at any depth (flat or under a hub subdirectory), are excluded from `owned_paths` entirely -- they are Builder-owned
     orchestration bookkeeping (rendered prompt / captured transcript), never implementer content
     this gate exists to police, and the Builder already stages and commits them itself at
     batch-approve/holistic-approve/handoff time (see mill-go-base/SKILL.md and holistic-review.md's
@@ -469,7 +488,7 @@ def _in_scope_dirty_stuck(
             return None
         owned_paths = {
             line for line in diff_result.stdout.splitlines()
-            if line and not line.startswith("_mill/briefs/")
+            if line and not _is_brief_path(line)
         }
         porcelain_lines = _pygit2_util.status_porcelain(project_root, include_untracked=False)
         dirt = [line for line in porcelain_lines if line[3:] in owned_paths]
@@ -1613,12 +1632,12 @@ def finalize_from_output(
         print(
             f"ERROR: --agent-output file not found: {agent_output_path} -- for"
             " implementer/fixer/merge-in dispatches the orchestrator must write the"
-            " notification message to this path before calling --stage finalize",
+            " subagent report message to this path before calling --stage finalize",
             file=sys.stderr,
         )
         return 1
 
-    # The harness HTML-escapes the <task-notification> payload uniformly before delivery, so the text captured to agent_output_path may contain entities like "&amp;" and "&lt;".
+    # The harness HTML-escapes a <task-notification> payload, so the text captured to agent_output_path may contain entities like "&amp;" and "&lt;"; unescaping is a no-op for a hand-back message that carries none.
     # Unescape here (at the read site) so downstream JSON parsing and status.md writes see the original, uncorrupted text.
     output = html.unescape(Path(agent_output_path).read_text(encoding="utf-8"))
     return _forward_output(
@@ -1843,9 +1862,9 @@ def _forward_output(
     SHA under the new key name, so the two never coexist.
     card_commit_messages is an optional {card_number: Commit-field-message} dict, used as a
     full-batch-history fallback ahead of the two SHA-range no-content-commit demotions below: when
-    every value for this batch's own card_ids (per commit_none_card_ids exclusion is not applied
-    here -- only cards with a real Commit: message are ever keys) is found as a substring of `git log
-    --oneline --all`, the demotion is skipped and an inferred success is emitted instead, since a
+    every value for this batch's own card_ids is found as a substring of `git log --oneline --all`
+    (the commit_none_card_ids exclusion is not applied here -- only cards with a real Commit:
+    message are ever keys), the demotion is skipped and an inferred success is emitted instead, since a
     self-resolve re-fire mints a fresh start_sha that can no longer see cards committed before it.
     Defaults to None (the fallback never fires, preserving today's behavior for every caller that
     doesn't pass it).
@@ -1994,6 +2013,7 @@ def _forward_output(
                 verify_cmd=verify_cmd,
                 cards_done=_cards_done,
                 already_complete=_already_complete,
+                commit_none_card_ids=commit_none_card_ids,
             )
             if _completeness_result is not None:
                 _attach_commit_sha(_completeness_result, project_root)
@@ -2166,6 +2186,7 @@ def _forward_output(
                                             card_ids,
                                             session_id,
                                             cards_done=None,
+                                            commit_none_card_ids=commit_none_card_ids,
                                         )
                                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                                             gate_result["commit_sha"] = new_head
@@ -2191,6 +2212,7 @@ def _forward_output(
                                         verify_cmd=verify_cmd,
                                         ignore_verify=True,
                                         cards_done=None,
+                                        commit_none_card_ids=commit_none_card_ids,
                                     )
                                     if _comp is not None:
                                         _attach_commit_sha(_comp, project_root)
@@ -2273,6 +2295,7 @@ def _forward_output(
                             card_ids,
                             session_id,
                             cards_done=None,
+                            commit_none_card_ids=commit_none_card_ids,
                         )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
@@ -2298,6 +2321,7 @@ def _forward_output(
                         verify_cmd=verify_cmd,
                         ignore_verify=True,
                         cards_done=None,
+                        commit_none_card_ids=commit_none_card_ids,
                     )
                     if _comp is not None:
                         _attach_commit_sha(_comp, project_root)
@@ -2380,6 +2404,7 @@ def _forward_output(
                             card_ids,
                             session_id,
                             cards_done=None,
+                            commit_none_card_ids=commit_none_card_ids,
                         )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
@@ -2405,6 +2430,7 @@ def _forward_output(
                         verify_cmd=verify_cmd,
                         ignore_verify=True,
                         cards_done=None,
+                        commit_none_card_ids=commit_none_card_ids,
                     )
                     if _comp is not None:
                         _attach_commit_sha(_comp, project_root)

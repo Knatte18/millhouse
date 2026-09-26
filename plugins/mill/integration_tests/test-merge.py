@@ -1220,6 +1220,9 @@ def main() -> int:
         # Dead by construction -- never pushed to origin.
 
         _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        # Mirrors what mill-cleanup does to a torn-down parent: check_liveness treats a local
+        # refs/heads/<branch> as live, so the archived branch must be deleted to be dead.
+        _run(["git", "-C", str(repo_dead), "branch", "-D", "test/task-c"], cwd=container_dead)
         _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/task-b"], cwd=container_dead)
         # main tracks no _mill/ (checkout removed the now-empty directory) -- recreate it.
         chain_mill.mkdir(exist_ok=True)
@@ -1276,6 +1279,10 @@ def main() -> int:
         _run(["git", "-C", str(repo_dead), "add", "cycle-y-trivial.txt"], cwd=container_dead)
         _run(["git", "-C", str(repo_dead), "commit", "-m", "chore: trivial follow-up for cycle Y"], cwd=container_dead)
         _run(["git", "-C", str(repo_dead), "tag", "archive/cycle-y", "test/cycle-y"], cwd=container_dead)
+
+        # Mirror mill-cleanup: a torn-down parent has no local branch, only its archive tag.
+        _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        _run(["git", "-C", str(repo_dead), "branch", "-D", "test/cycle-x", "test/cycle-y"], cwd=container_dead)
 
         # Uses the default max_hops=10 -- the loop runs exactly 10 iterations, alternating
         # cycle-x/cycle-y, and never finds a live branch or a chain-end.

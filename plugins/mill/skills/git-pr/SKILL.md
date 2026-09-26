@@ -14,7 +14,10 @@ Auto-generates title and body from commit history.
 ```
 /git-pr
 /git-pr develop
+/git-pr develop --pr-notes <path>
 ```
+
+`--pr-notes <path>` is an optional reviewer-notes file, appended to the PR body.
 
 No argument: base branch is resolved automatically.
 With argument: use the given branch as base.
@@ -82,7 +85,7 @@ Otherwise, proceed to step 2.
 
 Resolve the base branch in this order:
 
-1. **Argument** — strip/ignore the `--skip-task-branch-guard` token from `$ARGUMENTS` first (it is a coordination flag, not the base branch), then take the first remaining non-flag token, if any (e.g. `/git-pr develop` or `/git-pr develop --skip-task-branch-guard`), and use it as the base branch.
+1. **Argument** — strip/ignore the `--skip-task-branch-guard` token, and the `--pr-notes` token together with its following value, from `$ARGUMENTS` first (they are coordination flags, not the base branch, and the path must never be read as one), then take the first remaining non-flag token, if any (e.g. `/git-pr develop` or `/git-pr develop --skip-task-branch-guard`), and use it as the base branch.
 2. **`.millhouse/config.yaml`** — if the file exists and contains a `git.parent-branch` key, use its value.
    If the file doesn't exist, skip silently.
 3. **Default** — `main`.
@@ -205,6 +208,8 @@ Group related commits, explain the "why" not the "what".
 Use bullet points.
 Keep it concise — a few sentences, not a wall of text.
 
+When `--pr-notes <path>` was given and the file exists, append its contents verbatim to the generated body under a `## Reviewer notes` heading.
+
 ### 10. Create the PR
 
 ```bash
@@ -248,6 +253,9 @@ If this command also fails:
     Report that URL (see step 12) and stop — do not proceed to step 11.
     If both URL-lookup attempts also fail, report "A pull request already exists for this branch, but its URL could not be retrieved — check the repository's Pull Requests tab" and stop — do not proceed to step 11.
   - If not matched: proceed to step 11.
+
+After step 10 or step 10.5 succeeds (PR created or REST-created), delete the `--pr-notes` file if one was given.
+On failure leave it in place for a retry.
 
 ### 11. Fallback to browser
 

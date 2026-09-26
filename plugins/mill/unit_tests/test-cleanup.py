@@ -614,7 +614,9 @@ def main() -> int:
                 f"Expected no 'git worktree remove' call, got: {worktree_remove_calls}"
             )
             branch_delete_calls = [
-                c for c in run_calls if "branch" in c and ("-d" in c or "-D" in c)
+                c for c in run_calls
+                if "branch" in c and ("-d" in c or "-D" in c)
+                and not any(str(a).startswith("mill-checkpoint-") for a in c)
             ]
             assert len(branch_delete_calls) == 1, (
                 f"Expected exactly one branch delete call, got: {branch_delete_calls}"
@@ -786,7 +788,9 @@ def main() -> int:
                 f"Expected no 'git worktree remove' after inplace choice, got: {worktree_remove_calls2}"
             )
             branch_delete_calls2 = [
-                c for c in run_calls2 if "branch" in c and ("-d" in c or "-D" in c)
+                c for c in run_calls2
+                if "branch" in c and ("-d" in c or "-D" in c)
+                and not any(str(a).startswith("mill-checkpoint-") for a in c)
             ]
             assert len(branch_delete_calls2) == 1, (
                 f"Expected exactly one branch delete call, got: {branch_delete_calls2}"
@@ -923,7 +927,11 @@ def main() -> int:
             )
 
             # _read_phase must resolve to _mill/status.md (done -> -d, not abandoned -> -D)
-            branch_calls_ip = [args for args in git_calls_ip if "branch" in args and ("-d" in args or "-D" in args)]
+            branch_calls_ip = [
+                args for args in git_calls_ip
+                if "branch" in args and ("-d" in args or "-D" in args)
+                and not any(str(a).startswith("mill-checkpoint-") for a in args)
+            ]
             assert len(branch_calls_ip) == 1, f"Expected one branch delete call, got: {branch_calls_ip}"
             assert "-d" in branch_calls_ip[0], (
                 f"Expected '-d' (done from _mill/status.md), not '-D' (abandoned from root), got: {branch_calls_ip[0]}"
@@ -1015,6 +1023,13 @@ def main() -> int:
             )
             assert any(c == wt_path_pr for c in remove_safe_calls_18a), (
                 f"Expected remove_safe called with {wt_path_pr}, got: {remove_safe_calls_18a}"
+            )
+            checkpoint_delete_calls_pr = [
+                c for c in run_calls_18a
+                if "branch" in c and "-D" in c and "mill-checkpoint-impl-pr-slug" in c
+            ]
+            assert len(checkpoint_delete_calls_pr) == 1, (
+                f"Expected exactly one checkpoint branch -D call, got: {run_calls_18a}"
             )
             print("PASS apply_plan — PR-reap MERGED: archive tag created, Home.md flipped to [done], worktree removed")
 
@@ -1696,6 +1711,76 @@ def main() -> int:
                 f"'remote ref does not exist' must not produce a non-fatal warning for inplace, got: {stderr_text_irt!r}"
             )
             print("PASS _apply_inplace_record: 'remote ref does not exist' tolerated silently")
+
+        # --- checkpoint branch deletion: worktree record, in-place record, non-fatal failure ---
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            hub_root_cp = tmp / "hub"
+            hub_root_cp.mkdir()
+            (hub_root_cp / "_mill").mkdir()
+            (hub_root_cp / "_mill" / "status.md").write_text(
+                _make_status_md("done", parent="main"), encoding="utf-8"
+            )
+            wt_path_cp = tmp / "wts" / "my-task"
+            wt_path_cp.mkdir(parents=True)
+            wiki_path_cp = tmp / "wiki"
+            wiki_path_cp.mkdir()
+            record_cp_wt = SlugRecord(
+                slug="my-task", worktree_path=wt_path_cp, branch="hanf/my-task", home_marker="active",
+            )
+            record_cp_ip = SlugRecord(
+                slug="my-task", worktree_path=hub_root_cp, branch="hanf/my-task", home_marker="done",
+            )
+            checkpoint_argv = ["git", "-C", str(hub_root_cp), "branch", "-D", "mill-checkpoint-hanf-my-task"]
+
+            def _make_fake_run_cp(calls: list, fail_checkpoint_delete: bool):
+                def _fake_run_cp(argv, **kwargs):
+                    calls.append(list(argv))
+                    result = MagicMock()
+                    result.returncode = 0
+                    result.stdout = ""
+                    result.stderr = ""
+                    if fail_checkpoint_delete and list(argv) == checkpoint_argv:
+                        result.returncode = 1
+                        result.stderr = "error: cannot delete"
+                    return result
+                return _fake_run_cp
+
+            calls_cp_wt: list = []
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_make_fake_run_cp(calls_cp_wt, False)):
+                with patch("mill_cleanup._worktree.remove_safe"):
+                    with patch("mill_cleanup._junction.remove"):
+                        with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                            mod._apply_worktree_record(record_cp_wt, hub_root_cp, wiki_path_cp, {})
+            assert checkpoint_argv in calls_cp_wt, (
+                f"expected checkpoint branch -D call for worktree record, got: {calls_cp_wt}"
+            )
+            print("PASS _apply_worktree_record: mill-checkpoint branch deleted")
+
+            calls_cp_ip: list = []
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_make_fake_run_cp(calls_cp_ip, False)):
+                with patch("mill_cleanup._junction.remove"):
+                    with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                        mod._apply_inplace_record(
+                            record_cp_ip, hub_root_cp, task_branch="hanf/my-task",
+                            cfg={"paths": {"status_md": "_mill/status.md"}},
+                        )
+            assert checkpoint_argv in calls_cp_ip, (
+                f"expected checkpoint branch -D call for in-place record, got: {calls_cp_ip}"
+            )
+            print("PASS _apply_inplace_record: mill-checkpoint branch deleted")
+
+            calls_cp_fail: list = []
+            with patch("mill_cleanup._subprocess_util.run", side_effect=_make_fake_run_cp(calls_cp_fail, True)):
+                with patch("mill_cleanup._worktree.remove_safe"):
+                    with patch("mill_cleanup._junction.remove"):
+                        with patch("mill_cleanup._paths.resolve_container_path", return_value=tmp / "container"):
+                            with contextlib.redirect_stderr(io.StringIO()):
+                                mod._apply_worktree_record(record_cp_wt, hub_root_cp, wiki_path_cp, {})
+            assert checkpoint_argv in calls_cp_fail, (
+                f"expected failing checkpoint delete to be attempted, got: {calls_cp_fail}"
+            )
+            print("PASS _apply_worktree_record: failed checkpoint delete does not raise")
 
         # --- Card 7: reconcile orphaned 'active' markers to unclaimed ---
         # (a) active task with no worktree/branch/portal -> reset to None

@@ -201,15 +201,27 @@ fi
 This step runs on the success path only: any failure in steps 2-5 triggers the Rollback (`git reset --hard "$CHK"`) before reaching this point, so the brief commit is intentionally outside rollback scope and captures successful state.
 Clean merges (no conflicts, no verify failures) skip steps 3 and 4 entirely, so this step gracefully handles the case where no briefs were written -- the `git diff --cached --name-only` guard returns empty and the block no-ops.
 
+### 5b. Delete checkpoint
+
+Success path only.
+Each fenced block is a separate tool call, so recompute the name:
+
+```bash
+CHK="mill-checkpoint-$(git rev-parse --abbrev-ref HEAD | tr '/' '-')"
+git branch -D "$CHK" || echo "[mill-merge-in] note: could not delete $CHK (non-fatal)"
+```
+
+A failure to delete never fails the skill.
+The checkpoint is kept only on the Rollback path.
+
 ### 6. Report
 
 ```
 Merged <parent-branch> into <current-branch>. <N> commits integrated.
 Verify: <ran> batch tests ran.
-Checkpoint: <CHK> (delete manually once you are confident the merge is stable).
 ```
 
-If `substituted_parent_branch` was recorded during this run (Entry's "Liveness check (#817)" paragraph, `if dead` branch), append one more line to the report, after the `Checkpoint:` line:
+If `substituted_parent_branch` was recorded during this run (Entry's "Liveness check (#817)" paragraph, `if dead` branch), append one more line to the report, after the `Verify:` line:
 
 ```
 Substituted parent branch: <parent-branch> -> <substituted_parent_branch> (dead; not persisted to status.md unless status_path.exists() was True above). If this skill was called from mill-merge Step 2, that caller must rebind its own parent_branch/<parent-path> to <substituted_parent_branch> before continuing to Step 3.
@@ -222,8 +234,7 @@ Terminate with a single trailing period regardless of how many clauses were appe
 When all three counters are zero the line is exactly `Verify: <ran> batch tests ran.`;
 when only `skipped` is nonzero the line is exactly `Verify: <ran> batch tests ran, <skipped> skipped (allowlisted as known-broken).` -- preserving today's exact wording for that one case.
 
-Leave the checkpoint branch in place on success.
-The user decides when to delete it — typically after mill-merge's squash lands on parent without follow-up fixes.
+The checkpoint is deleted on success (step 5b) and preserved only when the skill halts on a conflict or failed verify.
 
 ## Rollback
 

@@ -80,6 +80,17 @@ This prevents PR diffs from being polluted with unrelated deletions on stacked-b
 
 Call `_finalize_cleanup.base_tracks_task_dir(git_root, parent_branch, task_dir)`.
 
+**Stash PR notes (non-blocking).** Before either branch below runs, copy the task's pr-notes file out of `<task_dir>`:
+
+```bash
+PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _finalize_cleanup; print(_finalize_cleanup.stash_pr_notes('<worktree>', '<task_dir>', '<slug>'))"
+```
+
+When it returns True, bind `pr_notes_path = <worktree>/.scratch/pr-notes-<slug>.md`; otherwise bind `pr_notes_path = None`.
+A failure of this call only prints a warning and never halts Step 3.
+The source is `<task_dir>/pr-notes.md`; no mill script writes it, so it exists only when a session or the operator authored it, and a missing file yields False.
+The scratch file survives both the `git rm -r` and the restore-from-base branches because `.scratch/` is gitignored.
+
 **Citation scan (non-blocking).** Before either branch below runs, scan for permanent-doc citations of `_mill/discussion.md` that this cleanup is about to invalidate. A citation can live in either the worktree's own tracked tree or the wiki, so this is two separate greps, both read-only and neither one halts Step 3 under any outcome:
 
 ```bash
@@ -129,7 +140,8 @@ git push origin "$CHILD_BRANCH"
 
 ### Step 5: Create PR
 
-Invoke `/git-pr <parent_branch> --skip-task-branch-guard` directly.
+Invoke `/git-pr <parent_branch> --skip-task-branch-guard` directly, adding ` --pr-notes <pr_notes_path>` only when `pr_notes_path` is bound.
+git-pr appends the notes to the PR body and removes the scratch file after the PR is created.
 
 The skill generates title and body from commit history.
 Cleanup has already run in Step 3 (task_dir is either absent on the rm path or restored-to-base on the restore path),
