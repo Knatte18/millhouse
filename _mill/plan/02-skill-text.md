@@ -19,15 +19,15 @@ Depends on batch 1 for the `stash_pr_notes` helper.
 ### Card 4: mill-merge-in deletes its checkpoint on success
 
 - **Context:**
-  - `plugins/mill/scripts/_finalize_cleanup.py`
+  - `plugins/mill/skills/mill-merge/SKILL.md`
 - **Edits:**
   - `plugins/mill/skills/mill-merge-in/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
-- **Requirements:** In `mill-merge-in/SKILL.md`, insert a new step between "### 5. Commit dispatch briefs" and "### 6. Report", titled "### 5.5. Delete checkpoint", that runs, on the success path only, a bash block recomputing the name (`CHK="mill-checkpoint-$(git rev-parse --abbrev-ref HEAD | tr '/' '-')"`, since each fenced block is a separate tool call) followed by `git branch -D "$CHK" || echo "[mill-merge-in] note: could not delete $CHK (non-fatal)"`.
+- **Requirements:** In `mill-merge-in/SKILL.md`, insert a new step between "### 5. Commit dispatch briefs" and "### 6. Report", titled "### 5b. Delete checkpoint" (not 5.5, which the step 5 prose already uses for a historical reference), that runs, on the success path only, a bash block recomputing the name (`CHK="mill-checkpoint-$(git rev-parse --abbrev-ref HEAD | tr '/' '-')"`, since each fenced block is a separate tool call) followed by `git branch -D "$CHK" || echo "[mill-merge-in] note: could not delete $CHK (non-fatal)"`.
   State that a failure to delete never fails the skill and that the checkpoint is kept only on the Rollback path.
-  In "### 6. Report": remove the `Checkpoint: <CHK> (delete manually ...)` line from the report template, reword the sentence that says to append the substituted-parent line "after the `Checkpoint:` line" to say "after the `Verify:` line", and replace the closing paragraph "Leave the checkpoint branch in place on success. ..." with one sentence saying the checkpoint is deleted on success (step 5.5) and preserved only when the skill halts on a conflict or failed verify.
+  In "### 6. Report": remove the `Checkpoint: <CHK> (delete manually ...)` line from the report template, reword the sentence that says to append the substituted-parent line "after the `Checkpoint:` line" to say "after the `Verify:` line", and replace the closing paragraph "Leave the checkpoint branch in place on success. ..." with one sentence saying the checkpoint is deleted on success (step 5b) and preserved only when the skill halts on a conflict or failed verify.
   Leave the "## Rollback" section and the "Do **not** delete the checkpoint" line unchanged.
   Keep the existing `git add _mill/briefs/` block in step 5 byte-identical.
 - **Commit:** `fix(mill-merge-in): delete checkpoint branch after successful merge and verify`
