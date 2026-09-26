@@ -41,7 +41,9 @@ batches:
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: Using CPython 3.14.4 interpreter at: /usr/bin/python3', 'NONZERO_EXIT:
     exit 1: --only: unknown test file(s): [''test-wiki-guard.py'']']
   - name: symbol-resolution
-    state: pending
+    state: running
+    implementer_session: a3842c6e-bdf8-442e-a02b-7a671b58e1cb
+    start_sha: 27fa3b621d37e5828f346588a5fbd7e3406ed231
     verify_baseline_failures: []
   - name: hook-install
     state: pending
