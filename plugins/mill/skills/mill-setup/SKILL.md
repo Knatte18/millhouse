@@ -442,6 +442,10 @@ This phase also merges the mill subagent's tool surface (`_claude_settings.MILL_
 It also reconciles `permissions.deny`: `_claude_settings.reconcile_destructive_denylist` retires target-blind `rm -rf` deny rules (`RETIRED_DENY`) and replaces them with a scoped set of catastrophic-target rules (`DESTRUCTIVE_DENY`) — see `_claude_settings.py`.
 Unlike the `MILL_PYTHON` env write, the permission-allowlist merge does **not** require a session restart to take effect — permission allowlist entries apply to new tool calls, not to already-active session state.
 
+This phase also installs the wiki-guard PreToolUse Bash hook via `_claude_settings.reconcile_wiki_guard_hook`, replacing the legacy inline grep hook.
+The hook command embeds the versioned plugin cache path, so the guard fails open until this phase is re-run after a plugin cache refresh.
+Like the allowlist and denylist, it takes effect immediately without a restart.
+
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
 import json, os, sys
@@ -466,11 +470,13 @@ _claude_settings.merge_permission_allowlist(settings_path, _claude_settings.MILL
 print(f'Permission allowlist merged: {_claude_settings.MILL_SUBAGENT_TOOLS}')
 _claude_settings.reconcile_destructive_denylist(settings_path)
 print('Destructive denylist reconciled')
+_claude_settings.reconcile_wiki_guard_hook(settings_path, _claude_settings.build_wiki_guard_command(plugin_root))
+print('Wiki-guard hook reconciled')
 "
 ```
 
-Log the result: both the `MILL_PYTHON set...`/`MILL_PYTHON already correct...` line, the permission-allowlist merge outcome, and the denylist-reconciliation outcome.
-After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up. Permission allowlist merged in ~/.claude/settings.json -- takes effect immediately, no restart needed. Destructive denylist reconciled in ~/.claude/settings.json -- takes effect immediately, no restart needed.`
+Log the result: both the `MILL_PYTHON set...`/`MILL_PYTHON already correct...` line, the permission-allowlist merge outcome, the denylist-reconciliation outcome, and the hook-reconciliation outcome.
+After writing, emit: `MILL_PYTHON set in ~/.claude/settings.json. Takes effect in the next CC session -- existing sessions must restart to pick it up. Permission allowlist merged in ~/.claude/settings.json -- takes effect immediately, no restart needed. Destructive denylist reconciled in ~/.claude/settings.json -- takes effect immediately, no restart needed. Wiki-guard hook reconciled in ~/.claude/settings.json -- takes effect immediately, no restart needed.`
 
 
 ### Phase 4.9 — Seed `hub_relative_path` in `config.local.yaml`
