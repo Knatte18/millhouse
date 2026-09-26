@@ -27,6 +27,7 @@ Consequences today: step 2 waits on a notification that adds nothing, step 3 cla
 - `plugins/mill/skills/mill-pause/SKILL.md`: the in-flight Agent-mode bullet that waits for the `<task-notification>`.
 - `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md`: the one sentence each that describes the notification payload as "carries only a one-line ack".
 - Error-message wording in `plugins/mill/scripts/_implementer_common.py` and `plugins/mill/scripts/millpy-merge-in-subagent.py` ("notification message" -> "subagent report message") and the comment beside each `html.unescape` call.
+- Comments in `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py`, `unit_tests/test-review-finalize.py` and `unit_tests/test-implementer-common.py` that contrast reviewer output with the implementer's `<task-notification>` payload being HTML-escaped: reword to "the implementer's report (notification payload or hand-back message)" so they stay true; no logic change.
 - A unit test pinning the new SKILL wording only if an existing SKILL-text test pattern fits (see Testing).
 
 **Out:**
@@ -53,6 +54,8 @@ Consequences today: step 2 waits on a notification that adds nothing, step 3 cla
   The orchestrator does not wait for the notification once a hand-back message carrying the report has arrived and no error signal is pending.
   Concretely: (1) hand-back message arrives with a report -> classify from it, capture it (step 4), run finalize; a notification arriving later for the same `agentId` is ignored unless its `<status>` is non-`completed`, in which case step 3's non-clean-terminal handling applies (probe first).
   (2) Notification arrives first with `<status>` `completed` and a result that only points to a hand-back message -> that is not a report; take no action this turn and wait for the hand-back message (it is already in flight or delivered).
+  Bound: if no hand-back message has been seen by the time the notification is processed and the payload is empty or only a pointer, treat the situation as step 3's existing empty/no-structured-report handling instead of waiting indefinitely: implementer -> Clean mid-work stop path (finalize with whatever `.out.md` exists; finalize's commit recount decides); reviewer -> finalize keyed on `output_path` presence; fixer/merge-in -> same finalize path.
+  A hand-back message is delivered by the harness before or together with the notification in the observed runs, so this bound is a safety net for older harnesses, not an expected path.
   (3) Notification arrives with a non-`completed` `<status>` or an API-error marker and no hand-back message -> existing step 3 paths unchanged.
 - Rationale: the issues' suggested fix is "document the hand-back message as the report source and define the order of the two events".
   Step 3's status-based classification needs a defined behaviour when the message arrives before any notification.
@@ -71,7 +74,8 @@ Consequences today: step 2 waits on a notification that adds nothing, step 3 cla
 
 - Decision: Step 4 writes the hand-back message text to `<brief_path>.out.md` verbatim (utf-8), same file naming.
   Keep `html.unescape` at the finalize read sites unchanged.
-  Assumption: the hand-back text is not HTML-escaped; `html.unescape` on unescaped text is a no-op except for literal entity-looking text, which the JSON status parse does not depend on.
+  Assumption: the hand-back text is not HTML-escaped; `html.unescape` on unescaped text is a no-op except for literal entity-looking text (e.g. a report quoting `&amp;`), which the JSON status parse does not depend on.
+  Nobody has confirmed the assumption against the harness; the residual risk (a quoted entity in report prose being altered before it lands in status.md) is accepted, since only the machine-read `status` JSON block drives behaviour.
   The code comments beside `html.unescape` are reworded to say the payload of a notification may be escaped, without claiming the hand-back message is.
 - Rationale: smallest safe change; behaviour verified unchanged for the escaped-notification fallback.
 - Rejected: removing unescape — would break the fallback path.
