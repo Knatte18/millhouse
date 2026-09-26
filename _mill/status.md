@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-script-wording
+phase: approved-test-comments
 slug: subagent-handback-report
 branch: hanf/subagent-handback-report
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-09-26T09:10:14Z'
 approved-agent-dispatch-core  '2026-09-26T09:13:42Z'
 approved-sibling-skill-wording  '2026-09-26T09:15:58Z'
 approved-script-wording  '2026-09-26T09:18:16Z'
+approved-test-comments  '2026-09-26T09:20:34Z'
 ```
 
 ## Batches
@@ -51,9 +52,10 @@ batches:
     commit_sha: ab3c1e386ae62efc75adc94dfff3d800751790a6
     verify_baseline_failures: []
   - name: test-comments
-    state: running
+    state: approved
     implementer_session: 014a9c2a-9440-41d7-b587-45519652f2cd
     start_sha: 980af3fcaf95e543d056c9f681f5cb70e00cdbb7
+    commit_sha: 113e15b3f7d3e8f1047b11f3e3c3f4412cd88b62
     verify_baseline_failures: []
 ```
 ## Inferred-success log
@@ -62,4 +64,5 @@ batches:
 '2026-09-26T09:13:36Z'  agent-dispatch-core  round 1
 '2026-09-26T09:15:58Z'  sibling-skill-wording  round 1
 '2026-09-26T09:18:16Z'  script-wording  round 1
+'2026-09-26T09:20:34Z'  test-comments  round 1
 ```
