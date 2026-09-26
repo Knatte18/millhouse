@@ -39,7 +39,8 @@ The hook itself blocked exploration during this very task's discussion phase (a 
 ### framework-types-never-resolve
 
 - Decision: add a curated frozenset `_FRAMEWORK_TYPE_NAMES` in `_plan_validate.py` (C#/.NET BCL: `InvalidOperationException`, `ArgumentException`, `ArgumentNullException`, `ArgumentOutOfRangeException`, `NotSupportedException`, `NotImplementedException`, `KeyNotFoundException`, `FormatException`, `Exception`, `Math`, `Path`, `File`, `Directory`, `String`, `Convert`, `Enumerable`, `List`, `Dictionary`, `HashSet`, `Task`, `Span`, `Guid`, `DateTime`, `TimeSpan`, `Console`, `Environment`, `Debug`, `Array`, `Object`, `Nullable`, plus TS/JS globals `Promise`, `Map`, `Set`, `Error`, `JSON`, `Object`, `Array`, `Math`, and Python builtin exception names `ValueError`, `TypeError`, `KeyError`, `RuntimeError`, `OSError`).
-  A symbol-shaped token is treated as a framework reference, and skipped, when its search key (bare token) or its qualifier (dotted token, e.g. `Path.Combine`, `Math.Max`) is in that set, UNLESS a cited candidate file type-declares that exact name (`class|struct|interface|enum|record <Name>` for `.cs`, `class`/`interface`/`enum`/`type` for `.ts`, `class` for `.py`) -- a repo that genuinely defines its own `Path` type keeps the current resolution.
+  The set is deduplicated (a frozenset literal must list each name once) and is deliberately cross-language: it is applied regardless of the resolving file's extension, and that over-reach is accepted (a Go or Python plan citing a repo symbol named `Map`, `Set`, `Error`, `List`, `Task`, `File` or `Path` is skipped unless a cited file type-declares it).
+  A symbol-shaped token is treated as a framework reference, and skipped, when its search key (bare token) or its qualifier (dotted token, e.g. `Path.Combine`, `Math.Max`) is in that set, UNLESS a cited candidate file type-declares that exact name (`class|struct|interface|enum|record <Name>` for `.cs`, `class`/`interface`/`enum`/`type` for `.ts`, `class` for `.py`, `type <Name>` for `.go`) -- a repo that genuinely defines its own `Path` type keeps the current resolution.
 - Rationale: the issue's expectation is categorical ("framework types are never resolved to repo files"); a name-set is the only language-agnostic signal available without a compiler.
   The repo-type-declaration override keeps the exemption from creating false negatives for repo-owned types that shadow a common name.
   Exact list contents are a judgment call; exhaustive coverage is not attempted (mill-plan should keep the set as a single module-level constant so it is easy to extend).
@@ -69,7 +70,12 @@ The hook itself blocked exploration during this very task's discussion phase (a 
 - Decision: the hook currently exists ONLY as an inline `grep -qE '\.wiki\b'` one-liner in the operator's global `~/.claude/settings.json` (searched the repo, plugin, cache, and marketplaces: no tracked source).
   Since a global settings file cannot be part of a task branch, ship the logic in the plugin: new `plugins/mill/scripts/_wiki_guard.py` exporting `command_touches_wiki(command: str) -> bool`, and a hook CLI `plugins/mill/scripts/millpy-wiki-guard.py` that reads the PreToolUse JSON from stdin and, when `command_touches_wiki` is true, prints the same `permissionDecision: deny` JSON (same reason text) as today; otherwise prints nothing.
   Add `_claude_settings.reconcile_wiki_guard_hook(settings_path, hook_command)` which (a) removes any legacy Bash-matcher PreToolUse hook whose command contains `daemon-owned` and `\.wiki\b`, (b) adds the new hook entry if absent, (c) leaves all other hooks/keys alone, (d) writes only when changed -- same idempotent pattern as `reconcile_destructive_denylist`.
-  Wire it into mill-setup Phase 4.8's inline script (hook command uses `"$MILL_PYTHON"` with the plugin `scripts/millpy-wiki-guard.py` absolute path resolved the same way that phase already resolves the venv).
+  Wire it into mill-setup Phase 4.8's inline script.
+  Exact hook command template, built by the Phase 4.8 script from `plugin_root = _config.resolve_plugin_root_from_syspath(sys.path)` (already computed there for the venv path): `PYTHONPATH="<plugin_root>/scripts" "$MILL_PYTHON" "<plugin_root>/scripts/millpy-wiki-guard.py"`.
+  `$MILL_PYTHON` is available to hooks because Phase 4.8 writes it into settings `env`.
+  `plugin_root` is the versioned plugin cache directory, so the path goes stale when the plugin cache is refreshed to a new version; the guard then fails open (script missing, non-zero exit, no deny JSON, command proceeds) and re-running mill-setup Phase 4.8 rewrites it.
+  This staleness is accepted; it is the same lifecycle as `MILL_PYTHON` itself, which is also written as a versioned cache path.
+  `reconcile_wiki_guard_hook`'s "already correct" comparison keys on exact string equality of the hook entry's `command` for a Bash-matcher PreToolUse entry; an existing Bash-matcher entry whose command contains either `millpy-wiki-guard.py` (an older versioned path) or the legacy markers (`daemon-owned` and the `\.wiki\b` grep) is replaced in place rather than duplicated.
 - Rationale: makes the fix testable and delivered by `mill-setup`, rather than an untracked one-line edit only the current operator has.
   Follows the existing `_claude_settings` reconcile pattern.
 - Rejected: only documenting a replacement one-liner (untestable, no delivery path); editing the operator's `~/.claude/settings.json` directly from this task (outside worktree isolation and not a repo change).
@@ -85,6 +91,13 @@ The hook itself blocked exploration during this very task's discussion phase (a 
      A token containing whitespace is prose (a `--body`/`-m`/`echo` argument), not a path, and is skipped -- except that for `bash|sh|zsh -c <arg>` and `eval <arg>` the argument is recursively passed to `command_touches_wiki`, and any `$(...)` / backtick substring inside a whitespace-containing token is likewise recursed into.
      `VAR=.wiki/x` style assignments and `--flag=.wiki/x` are handled by splitting a token on `=` once and testing the right-hand side too.
   4. `git -C .wiki ...`, `cd .wiki`, `cat .wiki/Home.md` all satisfy step 3 and are denied, as today.
+  5. Pattern/text arguments are not paths (this is the grep case from the Problem section, e.g. grep with the junction name as its search pattern).
+     Per simple command (segments split on `;`, `&&`, `||`, `|`): when the command word (basename, after skipping leading `VAR=value` assignments, `sudo`, `env`, and `command`) is `echo` or `printf`, no argument is tested (all are text).
+     When it is `grep`, `egrep`, `fgrep`, `rg`, `ag` or `awk`, the pattern/program argument is skipped and every other argument is still tested: the pattern is the first non-flag argument, or the value of `-e`/`--regexp`/`-f`/`--file` when given (in which case there is no positional pattern).
+     So a grep with `.wiki` as the pattern and `plugins` as the path is allowed, while `grep foo .wiki/Home.md` and `grep -r foo .wiki` are denied.
+     Non-flag detection: an argument starting with `-` is a flag; `--` ends flag parsing.
+     This is a heuristic, not a full option parser: flags that take a separate value argument (e.g. `-A 3`, `-m 5`) may cause the value to be taken as the pattern; accepted, since the resulting error mode is either a missed pattern skip (a false positive, as today) or skipping a non-path token.
+  Accepted conservative behavior (recorded so plan/tests do not treat these as bugs): a whitespace-free quoted argument that is a wiki path (`--body ".wiki/x"`, `cp x ".wiki/y"`) is denied, since it cannot be told from a real path argument; and `$(...)`/backtick recursion also fires inside single quotes although the shell would not execute it.
 - Rationale: the two reported false positives (quoted body text, heredoc text) and the `hub.wiki` suffix case are all eliminated; the true positives (junction used as a path argument) are preserved; fail-closed on parse errors preserves the guard's safety purpose.
 - Rejected: regex-only tweaks such as `(^|[\s/])\.wiki(/|$)` (still fires on quoted prose containing ` .wiki/` and on heredocs); dropping the Bash hook (removes the real protection the project's CLAUDE.md describes).
 - Assumption made autonomously: escaping the guard by building the path dynamically (`x=.w; cat ${x}iki/Home.md`) is out of scope -- the guard is a footgun-preventer, not a security boundary, exactly as today.
@@ -99,7 +112,8 @@ The hook itself blocked exploration during this very task's discussion phase (a 
 - `_claude_settings.py`: existing `merge_permission_allowlist` and `reconcile_destructive_denylist` are the pattern (load-or-{} , mutate, write only if changed).
   Hooks live under `data["hooks"]["PreToolUse"]`, a list of `{matcher, hooks: [{type, command}]}` entries.
 - mill-setup Phase 4.8 in `plugins/mill/skills/mill-setup/SKILL.md` holds the inline script that already calls the two `_claude_settings` helpers; add the third call and one log line, and extend the trailing "emit" sentence.
-- Script-naming: `millpy-*.py` CLIs + `_*.py` helpers, flat in `plugins/mill/scripts/`; a skill wrapper is not needed (hook CLI is not user-invocable; verify against `mill-skills-from-scripts` conventions and, if that skill enumerates every millpy script, keep the CLI out of its scope or add whatever the generator requires).
+- Script-naming: `millpy-*.py` CLIs + `_*.py` helpers, flat in `plugins/mill/scripts/`; no skill wrapper is created for the hook CLI (it is not user-invocable).
+  Decision: mill-plan verifies at plan time whether `mill-skills-from-scripts` / `SKILLS.md` generation or any unit test enumerates every `millpy-*.py` script; if so, the plan adds the minimal exclusion or entry needed to keep that check green, and otherwise touches nothing.
 - The hook CLI runs under `$MILL_PYTHON` with `PYTHONPATH` set to the plugin scripts dir; it must import only stdlib plus `_wiki_guard`.
 - Output of `print()` in scripts: ASCII only (CLAUDE.md).
 
@@ -127,10 +141,11 @@ context-completeness scenarios:
 - Lowercase Go qualifier (`reedengine.New`) still resolves through `_filter_matches_by_qualifier` (regression guard; existing tests already cover, keep passing).
 
 wiki-guard scenarios (`command_touches_wiki`):
-- True: `cat .wiki/Home.md`, `git -C .wiki status`, `cd .wiki && ls`, `ls ../.wiki/`, `bash -c "cat .wiki/x"`, `echo $(cat .wiki/x)`, unbalanced-quote fallback containing `.wiki`.
-- False: `echo "path/hub.wiki"`, `gh issue create --body "error at /x/hub.wiki"`, `gh issue create --body "see .wiki/Home.md for details"`, heredoc `cat > .scratch/x.md <<'EOF'\n...\n.wiki\nEOF`, `grep foo file.txt`.
+- True: `grep foo .wiki/Home.md`, `grep -r foo .wiki`, `cat .wiki/Home.md`, `git -C .wiki status`, `cd .wiki && ls`, `ls ../.wiki/`, `bash -c "cat .wiki/x"`, `echo $(cat .wiki/x)`, unbalanced-quote fallback containing `.wiki`.
+- False: grep with `.wiki` (bare, quoted, or backslash-escaped `\.wiki`) as its pattern and `plugins` as the path, `grep -e .wiki plugins`, `echo .wiki`, `echo "path/hub.wiki"`, `gh issue create --body "error at /x/hub.wiki"`, `gh issue create --body "see .wiki/Home.md for details"`, heredoc `cat > .scratch/x.md <<'EOF'\n...\n.wiki\nEOF`, `grep foo file.txt`.
+- Accepted-conservative (pin as True): `cp x ".wiki/y"`, and a single-quoted `$(cat .wiki/x)` argument to a non-echo command.
 - CLI: stdin JSON with a wiki-touching command prints deny JSON; benign command prints nothing; malformed stdin prints nothing (never crash the tool call).
-- `reconcile_wiki_guard_hook`: empty settings gets the entry; legacy inline entry is replaced; already-correct is a no-op (file mtime/content unchanged); unrelated hooks and keys untouched.
+- `reconcile_wiki_guard_hook`: an entry with an older versioned `millpy-wiki-guard.py` path is replaced, not duplicated; empty settings gets the entry; legacy inline entry is replaced; already-correct is a no-op (file mtime/content unchanged); unrelated hooks and keys untouched.
 
 ## Q&A log
 
