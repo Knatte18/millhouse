@@ -50,7 +50,9 @@ batches:
     commit_sha: 942ef51f02065dbed22010286808cf03b32dc76f
     verify_baseline_failures: []
   - name: ask-parent-skill
-    state: pending
+    state: running
+    implementer_session: a7bd68bf-b89a-4739-a568-891a899fb4b9
+    start_sha: 4c713422db0b5dae7481e464b24d45d078e39b75
     verify_baseline_failures: []
   - name: mill-go-base-wiring
     state: pending
