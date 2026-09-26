@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: planned
 slug: parent-thread-escalation
 branch: hanf/parent-thread-escalation
 plan: _mill/plan
@@ -27,4 +27,5 @@ discussion-fix-r8  '2026-09-26T07:02:30Z'
 discussed  '2026-09-26T07:02:30Z'
 planning  '2026-09-26T07:13:00Z'
 plan-review-r1  '2026-09-26T07:18:08Z'
+planned  '2026-09-26T07:18:19Z'
 ```
