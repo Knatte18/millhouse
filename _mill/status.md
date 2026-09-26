@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r1
+phase: planned
 slug: subagent-handback-report
 branch: hanf/subagent-handback-report
 plan: _mill/plan
@@ -22,4 +22,5 @@ discussed  '2026-09-26T09:06:55Z'
 planning  '2026-09-26T09:08:47Z'
 plan-review-r1  '2026-09-26T09:09:30Z'
 plan-fix-r1  '2026-09-26T09:09:30Z'
+planned  '2026-09-26T09:09:32Z'
 ```
