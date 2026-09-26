@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-ask-parent-skill
+phase: approved-mill-go-base-wiring
 slug: parent-thread-escalation
 branch: hanf/parent-thread-escalation
 plan: _mill/plan
@@ -32,6 +32,7 @@ implementing  '2026-09-26T07:18:33Z'
 approved-parent-escalation-helper  '2026-09-26T07:26:24Z'
 approved-fixer-parent-guidance  '2026-09-26T07:27:48Z'
 approved-ask-parent-skill  '2026-09-26T07:29:10Z'
+approved-mill-go-base-wiring  '2026-09-26T07:31:09Z'
 ```
 
 ## Batches
@@ -57,9 +58,10 @@ batches:
     commit_sha: 3d3dd964a3e422b1436b36c2c96b09c8e135625b
     verify_baseline_failures: []
   - name: mill-go-base-wiring
-    state: running
+    state: approved
     implementer_session: fa5824c4-c986-4a79-9181-2b4bdcea1a95
     start_sha: fe2413d4043dd3da571dc7169496b5454ccfa355
+    commit_sha: 300f5ce96b130c9c0dd0818d161a4c116262f630
     verify_baseline_failures: []
   - name: plan-start-quick-wiring
     state: pending
