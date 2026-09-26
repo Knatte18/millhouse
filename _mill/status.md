@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-symbol-resolution
+phase: approved-hook-install
 slug: tooling-false-positives
 branch: hanf/tooling-false-positives
 plan: _mill/plan
@@ -28,6 +28,7 @@ planned  '2026-09-26T08:58:38Z'
 implementing  '2026-09-26T08:59:18Z'
 approved-wiki-guard  '2026-09-26T09:53:35Z'
 approved-symbol-resolution  '2026-09-26T09:55:30Z'
+approved-hook-install  '2026-09-26T09:57:22Z'
 ```
 
 ## Batches
@@ -48,9 +49,10 @@ batches:
     commit_sha: 284c358abc66991868c50a49dcbc465fdcbe6718
     verify_baseline_failures: []
   - name: hook-install
-    state: running
+    state: approved
     implementer_session: eb9a8b0b-d83e-4b2c-bb2a-ed7d44233151
     start_sha: 27db6d3ac1ef8794904de0f9970483272eebced1
+    commit_sha: 32f1eb30cba547aa681970d36116bb59486295d5
     verify_baseline_failures: []
   - name: symbol-resolution-tests
     state: pending
