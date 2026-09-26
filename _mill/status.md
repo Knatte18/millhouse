@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-ask-thread-scripts
+phase: approved-ask-thread-skill-and-callers
 slug: ask-thread-skill
 branch: hanf/ask-thread-skill
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-26T08:45:04Z'
 planned  '2026-09-26T08:45:06Z'
 implementing  '2026-09-26T08:45:21Z'
 approved-ask-thread-scripts  '2026-09-26T08:48:04Z'
+approved-ask-thread-skill-and-callers  '2026-09-26T08:50:12Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ batches:
     commit_sha: cbce45fad97fe54015275a5dbf017f9bda17a2de
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-thread.py'', ''test-millpy-ask-thread.py'']']
   - name: ask-thread-skill-and-callers
-    state: running
+    state: approved
     implementer_session: bfcb26ab-7dc1-4c7e-805a-3684ef735307
     start_sha: 594102680f7c3a785d9e7698266c0199eb0a9ccc
+    commit_sha: bb36d27bb30c01116140b1bef77a5bffa06b5493
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-thread.py'', ''test-millpy-ask-thread.py'']']
 ```
 ## Inferred-success log
