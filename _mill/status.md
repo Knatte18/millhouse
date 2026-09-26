@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-agent-dispatch-core
+phase: approved-sibling-skill-wording
 slug: subagent-handback-report
 branch: hanf/subagent-handback-report
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r1  '2026-09-26T09:09:30Z'
 planned  '2026-09-26T09:09:32Z'
 implementing  '2026-09-26T09:10:14Z'
 approved-agent-dispatch-core  '2026-09-26T09:13:42Z'
+approved-sibling-skill-wording  '2026-09-26T09:15:58Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     commit_sha: cefe99686742ba6794535380fd7c7014ed32bb5a
     verify_baseline_failures: []
   - name: sibling-skill-wording
-    state: running
+    state: approved
     implementer_session: 83efabba-21d3-4101-8c4a-fad4f35f7f51
     start_sha: 2c8b3339e6a7a7d5a58570ccce72377f47f7c525
+    commit_sha: 76976025907f75709173dd363ca5bb09bea9732b
   - name: script-wording
     state: pending
     verify_baseline_failures: []
@@ -52,4 +54,5 @@ batches:
 
 ```text
 '2026-09-26T09:13:36Z'  agent-dispatch-core  round 1
+'2026-09-26T09:15:58Z'  sibling-skill-wording  round 1
 ```
