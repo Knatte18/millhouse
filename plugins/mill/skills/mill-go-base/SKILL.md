@@ -284,15 +284,20 @@ This three-step pattern applies at every dispatch point:
    nothing here, since reviewer cost visibility is this feature's whole scope.
    Immediately before this `Agent()` call, run `date +%s` in the Bash tool and hold the value in a
    local variable, e.g. `review_start_epoch`.
-   Once the terminal `<task-notification>` for this `agentId` is accepted (see step 4 below), run
+   Once the first terminal event (hand-back message or `<task-notification>`) for this `agentId` is accepted (see step 4 below), run
    `date +%s` again and hold the difference as `review_elapsed_s = <second reading> - review_start_epoch`.
 
-   The orchestrator must then **wait for the completion `<task-notification>`** from that background agent.
-   For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the notification payload — that text feeds both step 3's classification and step 4's capture, unchanged.
-   For a **reviewer** dispatch, step 4 is skipped (the reviewer already wrote its own output file — see step 4 below), so the payload feeds **step 3's classification only**.
+   The orchestrator must then **wait for the subagent's terminal event**: normally the SubagentHandback message, with the `<task-notification>` as fallback and as the only carrier of a non-completed `<status>`.
+   For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the hand-back message (falling back to the notification payload only when no hand-back message arrived and the payload is non-empty) — that text feeds both step 3's classification and step 4's capture.
+   For a **reviewer** dispatch, the hand-back message is only the one-line ack, and it feeds **step 3's classification only** (step 4 is skipped — the reviewer already wrote its own output file, see step 4 below).
+
+   Event-order rules:
+   - Proceed on a hand-back message without waiting for the notification.
+   - Act on a later notification only when its `<status>` is not `completed`.
+   - A `completed` notification whose result only points to a hand-back message, with none in context, falls through to step 3's empty/no-structured-report handling.
 
    A background agent is a **detached worker** that can be stopped or interrupted independently of the orchestrator.
-   If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 3's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
+   If the `<task-notification>` `<status>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 3's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
    a clean turn-exhaustion stop still routes straight to Clean mid-work stop, unprobed — see step 3(b)).
 
 3. **Recover from raw API errors and interruptions:** Classify the notification (or the inline tool return on immediate failure) into one of three cases:
