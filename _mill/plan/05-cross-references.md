@@ -5,7 +5,7 @@ task: 'mill-merge: run the deterministic path as one script'
 batch: cross-references
 number: 5
 cards: 2
-verify: PYTHONPATH= uv run --project plugins/mill python -m py_compile plugins/mill/integration_tests/test-merge.py
+verify: PYTHONPATH= uv run --project plugins/mill python -m py_compile plugins/mill/integration_tests/test-merge.py && ! grep -nE 'mill-merge[^-].{0,25}Step [0-9]|mill-merge/SKILL\.md.{0,40}Step [0-9]|Card 1 fix' plugins/mill/skills/mill-merge-in/SKILL.md plugins/mill/skills/mill-status/SKILL.md plugins/mill/skills/mill-go-base/SKILL.md CLAUDE.md
 depends-on: [4]
 ```
 
@@ -36,8 +36,8 @@ no behavior change.
     Entry step 3's "as of the Card 1 fix (`mill-merge/SKILL.md` Step 2)" sentence -> `mill-merge` calls this skill only from its `merge-in` callback (`## Callback: merge-in`), always passing its resolved parent branch;
     every reference in the "Liveness check (#817)" paragraph to `mill-merge/SKILL.md` Entry Step 4 (three today: "same call ... makes", "broader exemption than ... own precedent", "documented in ... paragraph") -> the dead-parent protocol and message texts implemented by `_merge.step_parent` (whose status-absent branch also skips the liveness check);
     the "#977 scenario" sentence -> `mill-merge` passes its status-absent `git.base_branch` fallback through the `merge-in` callback;
-    the "Caller propagation (#977 follow-up)" paragraph -> the caller is `mill-merge`'s `## Callback: merge-in`, which re-runs `millpy-merge.py` with `--parent <substituted>` on every later re-run;
-    the rebind-safety paragraph's reference to `mill-merge/SKILL.md` Entry Step 4's warning -> `_merge.step_parent`, which resolves `status_path` through the slug-driven active-hub lookup;
+    in the "Caller propagation (#977 follow-up)" paragraph, replace only the clauses naming `mill-merge`'s Step 2 / Step 5 ("When this skill is invoked as `mill-merge`'s own Step 2 ... its own Step 5 onward" and "before continuing past its Step 2") with: when invoked from `mill-merge`'s `## Callback: merge-in`, `mill-merge` reads `substituted_parent_branch` from the Report and passes `--parent <substituted>` on every later `millpy-merge.py` re-run — keep the `record substituted_parent_branch = resolved_branch` sentence, the "Step 6's Report below must surface this value" sentence, and the "this file cannot do that rebind on the caller's behalf" point verbatim;
+    the rebind-safety paragraph's reference to `mill-merge/SKILL.md` Entry Step 4's warning -> `mill-merge`'s script, where `_merge.step_entry` derives `status_path` through the slug-driven active-hub lookup and `_merge.step_parent` writes the rebind to that path;
     the "dispatched from `mill-merge`'s Step 2" / "`mill-merge`'s own Entry Step 4" sentence -> the `merge-in` callback / `millpy-merge.py`'s parent step;
     the Step 3.5 `millpy-bg` callout "first `millpy-bg` call site in `mill-merge-in/SKILL.md` or `mill-merge/SKILL.md`" -> drop the `mill-merge` half;
     the Step 6 report template line "If this skill was called from mill-merge Step 2, that caller must rebind ..." -> "If this skill was called from mill-merge's merge-in callback, mill-merge must pass --parent <substituted_parent_branch> on every later millpy-merge.py re-run."
@@ -47,7 +47,8 @@ no behavior change.
   - `plugins/mill/skills/mill-go-base/SKILL.md` line containing `mirrors mill-merge's own Step 5 fallback` -> `mirrors mill-merge's status-absent wiki fallback (_merge.step_phase_gate)`.
     Change nothing else in that file.
   - `CLAUDE.md` hard-constraints bullet: `mill-merge` Step 4's cleanup commit -> `mill-merge`'s cleanup commit (`_merge.step_cleanup_commit`).
-  Gate: after the edits, `grep -nE "mill-merge(/SKILL.md)?\`?'?s? (own )?(Entry )?Step [0-9]|Card 1 fix" plugins/mill/skills/mill-merge-in/SKILL.md plugins/mill/skills/mill-status/SKILL.md plugins/mill/skills/mill-go-base/SKILL.md CLAUDE.md` prints nothing.
+  Gate: after the edits, the `grep -nE` in batch 5's `verify:` (old-style `mill-merge ... Step N` and `Card 1 fix` references across the four edited files) prints nothing;
+  `verify:` enforces it.
 - **Commit:** `docs(mill): retarget old mill-merge step references to millpy-merge`
 
 ### Card 10: retarget integration-test comments
@@ -71,6 +72,5 @@ no behavior change.
 
 ## Batch Tests
 
-`verify:` byte-compiles `plugins/mill/integration_tests/test-merge.py` to prove card 10's comment edits left it syntactically valid.
-Card 9 edits markdown only;
-its grep gate runs inside the card.
+`verify:` byte-compiles `plugins/mill/integration_tests/test-merge.py` to prove card 10's comment edits left it syntactically valid, then runs card 9's grep gate (`! grep` succeeds only when no old-style step reference remains in the four card 9 files).
+The regex was checked against the pre-edit files: it matches exactly the lines card 9 retargets and no `mill-merge-in` self-references.

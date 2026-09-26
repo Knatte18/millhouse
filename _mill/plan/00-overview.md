@@ -42,7 +42,7 @@ batches:
     name: cross-references
     file: 05-cross-references.md
     depends-on: [4]
-    verify: PYTHONPATH= uv run --project plugins/mill python -m py_compile plugins/mill/integration_tests/test-merge.py
+    verify: PYTHONPATH= uv run --project plugins/mill python -m py_compile plugins/mill/integration_tests/test-merge.py && ! grep -nE 'mill-merge[^-].{0,25}Step [0-9]|mill-merge/SKILL\.md.{0,40}Step [0-9]|Card 1 fix' plugins/mill/skills/mill-merge-in/SKILL.md plugins/mill/skills/mill-status/SKILL.md plugins/mill/skills/mill-go-base/SKILL.md CLAUDE.md
 ```
 
 ## Shared Decisions

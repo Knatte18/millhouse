@@ -39,6 +39,7 @@ Batch-local decisions:
   - `plugins/mill/scripts/_archive_tag.py`
   - `plugins/mill/scripts/_notify.py`
   - `plugins/mill/scripts/_timestamp.py`
+  - `plugins/mill/scripts/_status.py`
   - `plugins/mill/scripts/wiki/_client.py`
   - `plugins/mill/unit_tests/test-inplace.py`
   - `plugins/mill/unit_tests/test-millpy-spawn.py`
@@ -101,7 +102,7 @@ Batch-local decisions:
       `report` = `ctx.report` lines, then the stop's own `report` lines (for a halt with no explicit report, the reason), then one line per timing entry `[mill-merge] <step>: <wall_s:.2f>s (git/net <subproc_s:.2f>s)`, then `[mill-merge] total: <sum:.2f>s`.
       Every string in `reason`, `report`, `warnings` goes through `_ascii`.
 
-  Create `plugins/mill/unit_tests/test-merge.py` in the plain-function style of `plugins/mill/unit_tests/test-inplace.py`: insert `plugins/mill/scripts` on `sys.path`, `import _merge`, define `test_*` functions, and a `main()` that runs every test, prints `PASS`/`FAIL` lines, and returns non-zero on any failure (same harness shape as the tail of `plugins/mill/unit_tests/test-millpy-spawn.py`).
+  Create `plugins/mill/unit_tests/test-merge.py` with the `sys.path` setup of `plugins/mill/unit_tests/test-inplace.py` (insert `plugins/mill/scripts`, `import _merge`), plain `test_*` functions (no leading underscore, as in `plugins/mill/unit_tests/test-millpy-spawn.py`), and a `main()` that runs every test, prints `PASS`/`FAIL` lines, and returns non-zero on any failure (same harness shape as the tail of `plugins/mill/unit_tests/test-millpy-spawn.py`).
   Add a `FakeOps(_merge.Ops)` helper class in the test file: constructor takes keyword overrides for the untimed/timed methods' return values and a list of `(tokens, CompletedProcess-or-callable)` git rules;
   `run` records `argv` into `self.calls`, returns the first rule whose tokens are all present in `argv` (a callable rule is invoked with `argv`, so it can raise), defaulting to returncode 0 with empty output.
   Also record `set_phase`/`notify`/`archive_tag` calls.
