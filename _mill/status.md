@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: implement-recovery-and-integration-tests
 branch: hanf/implement-recovery-and-integration-tests
 plan: _mill/plan
@@ -29,6 +29,7 @@ holistic-reviewing  '2026-09-26T09:45:31Z'
 holistic-fixing  '2026-09-26T09:46:18Z'
 nits-fixed-holistic  '2026-09-26T09:47:04Z'
 holistic-approved  '2026-09-26T09:47:09Z'
+done  '2026-09-26T09:47:18Z'
 ```
 
 ## Batches
