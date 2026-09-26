@@ -85,7 +85,7 @@ these skills are loaded defensively in case a future addition needs `mill:conver
    Use these variables for all subsequent path references.
    Exception: the cleanliness snapshot path `_mill/.cleanliness-snapshot-<batch_name>.txt` keeps its `_mill/` literal — `millpy-implement.py` writes it unconditionally to `_mill/` and is out of scope.
 5. **Entry phase gate.**
-   Before reading `status_path`, guard against the merge-interrupted state where `_mill/status.md` has been removed by mill-merge's cleanup commit but teardown did not complete -- mirrors mill-merge's own Step 5 fallback.
+   Before reading `status_path`, guard against the merge-interrupted state where `_mill/status.md` has been removed by mill-merge's cleanup commit but teardown did not complete -- mirrors mill-merge's status-absent wiki fallback (_merge.step_phase_gate).
    Wiki daemon errors are caught explicitly so a daemon outage surfaces a readable message instead of a raw traceback.
    ```python
    if not status_path.exists():

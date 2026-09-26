@@ -61,7 +61,7 @@ _mill/   ← status.md, discussion.md, plan/, reviews/
 - **Working state never goes to wiki.** `_mill/` lives on the task branch.
   Wiki holds only `Home.md`.
 - **Never cite `_mill/discussion.md` (or any other `_mill/`-rooted path) from a permanent doc.**
-  A permanent/roadmap doc (e.g. a wiki Done entry or a module doc) that links to `_mill/discussion.md` is unsafe: `_mill/` is deleted or restored-from-base at merge time (`mill-finalize` Step 3 / `mill-merge` Step 4's cleanup commit), so the file no longer exists on the parent branch once the task merges.
+  A permanent/roadmap doc (e.g. a wiki Done entry or a module doc) that links to `_mill/discussion.md` is unsafe: `_mill/` is deleted or restored-from-base at merge time (`mill-finalize` Step 3 / `mill-merge`'s cleanup commit, `_merge.step_cleanup_commit`), so the file no longer exists on the parent branch once the task merges.
 - **Fold only into unclaimed backlog tasks** (`status is None AND not deferred`).
   Claimed, terminal, blocked, or deferred tasks reject fold-ins — guard inlined in `millpy-fold.py` and the two fold SKILLs.
 
