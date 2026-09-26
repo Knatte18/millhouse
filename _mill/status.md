@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-core-squash
+phase: approved-merge-cli
 slug: mill-merge-script
 branch: hanf/mill-merge-script
 plan: _mill/plan
@@ -29,6 +29,7 @@ planned  '2026-09-26T14:30:24Z'
 implementing  '2026-09-26T14:30:43Z'
 approved-merge-core-entry  '2026-09-26T14:34:53Z'
 approved-merge-core-squash  '2026-09-26T14:38:48Z'
+approved-merge-cli  '2026-09-26T14:39:44Z'
 ```
 
 ## Batches
@@ -52,9 +53,10 @@ batches:
     can''t open file ''/home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/unit_tests/test-merge.py'':
     [Errno 2] N']
   - name: merge-cli
-    state: running
+    state: approved
     implementer_session: 6415dd67-a10a-4fbe-986c-87de5b7f91c9
     start_sha: d2170bd57336e1ca53c0d774c80b6aed34ef28f0
+    commit_sha: 4bd75ba7d8dfa125ece621f6afbecff77e73c770
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-merge.py'', ''test-millpy-merge.py'']']
   - name: skill-rewrite
     state: pending
@@ -62,7 +64,6 @@ batches:
   - name: cross-references
     state: pending
 ```
-
 ## Inferred-success log
 
 ```text
