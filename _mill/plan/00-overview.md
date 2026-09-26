@@ -3,7 +3,7 @@
 ```yaml
 task: "plan validator and wiki-guard hook false positives"
 slug: "tooling-false-positives"
-approved: false
+approved: true
 started: "20260926-085319"
 parent_branch: "main"
 discussion_sha: "68505c337c3a057f32a29d999506431cfaff1e60"
