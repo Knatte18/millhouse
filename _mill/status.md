@@ -55,7 +55,9 @@ batches:
     commit_sha: 32f1eb30cba547aa681970d36116bb59486295d5
     verify_baseline_failures: []
   - name: symbol-resolution-tests
-    state: pending
+    state: running
+    implementer_session: 4dfd3809-2e09-4563-ad18-8de0d42e57cc
+    start_sha: 5f12d2368a5df86e7c2b58bc82d1ec96db7db170
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-plan-validate-symbol-resolution.py'']']
 ```
 ## Inferred-success log
