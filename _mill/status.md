@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: tooling-false-positives
 branch: hanf/tooling-false-positives
 plan: _mill/plan
@@ -25,4 +25,19 @@ plan-fix-r1  '2026-09-26T08:57:18Z'
 plan-review-r2  '2026-09-26T08:58:32Z'
 plan-fix-r2  '2026-09-26T08:58:32Z'
 planned  '2026-09-26T08:58:38Z'
+implementing  '2026-09-26T08:59:18Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: wiki-guard
+    state: pending
+  - name: symbol-resolution
+    state: pending
+  - name: hook-install
+    state: pending
+  - name: symbol-resolution-tests
+    state: pending
 ```
