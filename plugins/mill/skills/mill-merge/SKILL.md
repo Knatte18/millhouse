@@ -262,8 +262,6 @@ Call the `mill-merge-in` skill, passing `<parent_branch>` — the value already 
 Passing the value explicitly is what lets `mill-merge-in` skip its own independent `status.md` read — see Card 2 in this same batch for the corresponding `mill-merge-in`-side change this depends on.
 This applies to Step 2 itself, not any one route — both the `done` fresh-merge route and the `closed` PR-state-gate route (the only two routes that reach Step 2 via `## Entry`'s "In-place mode bypass" / PR-state-gate routing) pass the argument.
 If it reports failure → release the merge lock and halt.
-Capture the checkpoint branch name it prints;
-you may need it on rollback.
 
 **Rebind on dead-parent substitution (#977):** if `mill-merge-in`'s Step 6 report (see `mill-merge-in/SKILL.md` Step 6, "Substituted parent branch" line) includes a `Substituted parent branch: <old> -> <new>` line, rebind `parent_branch` (this skill's own variable, bound at Entry Step 4) to `<new>` before continuing to Step 3. This is required because `mill-merge-in`'s own dead-parent liveness check (its Entry section's "Liveness check (#817)" paragraph) only ever resolves a successor for its own run — it has no mechanism to reach back into this caller's already-bound `parent_branch`, and Step 5 below reuses `parent_branch`/`<parent-path>` verbatim from here through push/rollback.
 If `mode == 'worktree'`, also re-derive `<parent-path>` for the new branch: re-run `git worktree list --porcelain` and locate the entry whose branch matches `<new>`, the same lookup Step 1 above used for the original `parent_branch`.
@@ -565,7 +563,6 @@ git -C <parent-path> reset --hard origin/<parent_branch>
 ```
 
 Release the merge lock.
-Preserve the checkpoint branch.
 Report the failure with the step name.
 
 **Why `origin/<parent_branch>`, not the checkpoint:** `mill-checkpoint-<name>` is created in the *child* worktree by `mill-merge-in` and points at the child's own pre-merge-in history — resetting the parent worktree to it checks the parent out to unrelated child commits, regardless of which Steps 1-5 failure triggered the rollback. `origin/<parent_branch>` is the correct rollback target for the parent worktree in every case.
