@@ -52,14 +52,14 @@ paths:
 roles:
   discussion-review:
     holistic:
-      rounds: 8
+      rounds: 5
       min_rounds: 1
       auto_approve_on_cap: true
       reviewer: sonnethigh
       blocking_classes: [design]
   plan-review:
     holistic:
-      rounds: 7
+      rounds: 5
       min_rounds: 1
       auto_approve_on_cap: true
       reviewer: sonnethigh
