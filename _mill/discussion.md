@@ -84,7 +84,8 @@ The operator wants the reply to be one message back, with a file as an optional 
 - Decision:
   - The asker passes its own session name as `--reply-to`.
     It takes it from `ListAgents`' first line, `This session is <name> [<id>] ...` (verified live on 2026-09-26: `This session is mh:ask-thread-skill:start [68784b]`), using the text between `This session is ` and ` [`.
-    If `ListAgents` is unavailable or has no such line, `--reply-to` is omitted.
+    `ListAgents` is a top-level tool in the verified session (called directly, no `ToolSearch`); when its schema is not loaded, the skill first runs `ToolSearch` with `select:ListAgents`.
+    If that `ToolSearch` returns no match, the call errors, or the output has no such line, `--reply-to` is omitted.
   - The rendered message tells the target: keep the answer short; write the complete reply (the `ask-id` line plus the answer) to the reply file (absolute path given) in one operation, AND send ONE `SendMessage` to `<reply-to>` with the same text (for a long answer the message may instead be the `ask-id` line plus "answered, see <path>").
     The file write is required for every reply, short or long, as long as message wake-up of a waiting asker is unverified: it is the channel the `Monitor` poll can see, so a message that never reaches the asker still ends the wait.
     The message is the reply channel whenever it arrives and ends the wait early.
@@ -168,7 +169,8 @@ The operator wants the reply to be one message back, with a file as an optional 
 - `_status.read_parent_thread(status_path)` returns the `parent_thread:` value or `None`.
 - `_paths.resolve_task_path(worktree_root, REPLY_REL_PATH)` resolves the reply file; keep using it.
 - The skill's Monitor poll script and re-arm rules reference `orch-wait/SKILL.md` Step 2 and `harness-tool-contracts.md`'s Monitor section; the `harness-tool-contracts.md` Monitor section cites `ask-parent/SKILL.md`'s Step 4 — update that citation to the new path and step name.
-- `SendMessage`, `TaskStop`, `ListAgents` are deferred or top-level tools; the skill loads `SendMessage`/`TaskStop` via `ToolSearch` (`select:SendMessage,TaskStop`) when their schemas are not loaded.
+- `SendMessage`, `TaskStop`, `ListAgents` may be deferred or top-level depending on the build; the skill loads any of them whose schema is not loaded via `ToolSearch` (`select:SendMessage,TaskStop,ListAgents`, listing only the missing ones) before first use.
+  `ListAgents` has no prior caller in any skill; its self-name line was verified live on 2026-09-26 (see Reply protocol).
 - New skill frontmatter: `name: ask-thread`, `argument-hint: "[thread-name]"`, a description stating both modes (drop "Internal machinery skill, not invocable directly").
 - Session names: `_vscode_tasks.session_prefix` lower-cases task-session names (`mh:<slug>:<phase>`); the hub orch session is `MH:orch`.
 
