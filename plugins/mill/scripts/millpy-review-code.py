@@ -225,7 +225,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         try:
             agent_output_path = Path(args.agent_output)
-            # Agent-mode output is a file the reviewer wrote itself via Write, never HTML-escaped -- unlike the implementer's <task-notification> payload, so no unescape happens here.
+            # Agent-mode output is a file the reviewer wrote itself via Write, never HTML-escaped -- unlike the implementer's report (a <task-notification> payload may be HTML-escaped; a hand-back message is treated the same way), so no unescape happens here.
             # Missing file (e.g.
             # the reviewer never wrote it) collapses to empty text rather than raising FileNotFoundError;
             # the backend's own finalize turns that into a verdict: ERROR result on a zero exit code.
