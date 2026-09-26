@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: implement-recovery-and-integration-tests
 branch: hanf/implement-recovery-and-integration-tests
 plan: _mill/plan
@@ -21,4 +21,17 @@ planning  '2026-09-26T09:32:36Z'
 plan-review-r1  '2026-09-26T09:34:23Z'
 plan-fix-r1  '2026-09-26T09:34:23Z'
 planned  '2026-09-26T09:34:23Z'
+implementing  '2026-09-26T09:35:08Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: implementer-fixes
+    state: pending
+  - name: integration-repairs
+    state: pending
+  - name: spawn-suite
+    state: pending
 ```
