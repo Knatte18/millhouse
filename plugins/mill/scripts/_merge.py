@@ -2,6 +2,12 @@
 Deterministic path of the ``mill-merge`` skill, called by ``millpy-merge.py``.
 
 Each step of the merge is a function ``step_*(ctx, ops)`` registered in ``STEPS``.
+Steps run in this order: ``entry``, ``parent``, ``phase-gate``, ``pr-state``, ``merge-in-check``,
+``cleanup-commit``, ``squash``, ``archive-tag``, ``wiki-done``, ``notify``.
+``entry`` through ``pr-state`` run on every route; ``merge-in-check`` runs on ``direct`` and
+``pr-closed`` in worktree mode unless ``--merged-in`` was passed; ``cleanup-commit``, ``archive-tag``,
+``wiki-done`` and ``notify`` run on ``direct``, ``pr-closed`` and ``pr-merged``; ``squash`` runs on
+``direct`` and ``pr-closed`` only, because a merged PR already landed the change.
 A step signals "stop here" by raising ``Stop`` (a halt for the operator, or a callback the calling
 model must answer before re-running with an extra flag).
 Every external effect goes through one ``Ops`` instance so unit tests can substitute a fake.
@@ -11,8 +17,10 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import json
 import os
 import signal
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -135,6 +143,7 @@ class Ctx:
     route: str | None = None
     parent_path: Path | None = None
     archive: dict = dataclasses.field(default_factory=dict)
+    success_data: dict = dataclasses.field(default_factory=dict)
     warnings: list[str] = dataclasses.field(default_factory=list)
     report: list[str] = dataclasses.field(default_factory=list)
     timings: list[dict] = dataclasses.field(default_factory=list)
@@ -321,7 +330,7 @@ def _result(ctx: Ctx, stop: Stop | None, step: str) -> dict:
         "reason": _ascii(stop.reason) if stop is not None else "",
         "action": stop.action if stop is not None else None,
         "resume": stop.resume if stop is not None else None,
-        "data": (stop.data or {}) if stop is not None else {},
+        "data": (stop.data or {}) if stop is not None else ctx.success_data,
         "warnings": [_ascii(w) for w in ctx.warnings],
         "timings": ctx.timings,
         "report": [_ascii(line) for line in report],
@@ -666,3 +675,443 @@ STEPS.append(
         lambda c: c.route in ("direct", "pr-closed") and c.mode == "worktree" and not c.opts.merged_in,
     )
 )
+
+
+_CITATION_PATTERN = r"\]\([./]*_mill/discussion\.md\)"
+
+
+def step_cleanup_commit(ctx: Ctx, ops: Ops) -> None:
+    """
+    Remove the task directory from the task branch in a ``chore: pre-merge cleanup`` commit.
+
+    Cleanup comes before the squash so the squash diff never carries transient task metadata, and
+    the cleanup commit stays reachable through the archive tag created later
+    (``git checkout archive/<slug>`` restores the task-branch state).
+    Before deleting, two read-only greps warn about permanent docs (worktree and wiki) that link to
+    ``_mill/discussion.md``, which is about to go dead (#930); they never halt.
+    Re-entry is idempotent: an absent task dir stages nothing, so no commit is made.
+    A failed commit resets the task branch to ``HEAD`` and halts.
+    """
+    root = str(ctx.git_root)
+    worktree_scan = ops.run(
+        [
+            "git", "-C", root, "grep", "-InE", _CITATION_PATTERN, "--", ".",
+            f":(exclude){ctx.task_dir_git_rel}",
+            ":(exclude)plugins/**/SKILL.md",
+            ":(exclude)plugins/**/unit_tests/**",
+            ":(exclude)plugins/**/integration_tests/**",
+        ]
+    )
+    wiki_scan = ops.run(["git", "-C", str(ctx.wiki_path), "grep", "-InE", _CITATION_PATTERN, "--", "."])
+    for prefix, scan in (("", worktree_scan), ("wiki:", wiki_scan)):
+        for line in scan.stdout.splitlines():
+            if line.strip():
+                ctx.warnings.append(
+                    f"permanent-doc citation of _mill/discussion.md is about to go dead: {prefix}{line.strip()}"
+                )
+
+    if ctx.task_dir.exists():
+        _git_ok(ctx, ops, ["git", "-C", root, "rm", "-r", "-q", ctx.task_dir_git_rel], what="git rm task dir")
+    staged = ops.run(["git", "-C", root, "diff", "--cached", "--quiet"]).returncode == 1
+    if not staged:
+        return
+    commit = ops.run(["git", "-C", root, "commit", "-m", "chore: pre-merge cleanup"])
+    if commit.returncode != 0:
+        ops.run(["git", "-C", root, "reset", "--hard", "HEAD"])
+        raise halt(
+            f"cleanup-commit failed: {_last_output_line(commit)}; task branch reset to HEAD. Re-run /mill-merge.",
+            resume=[],
+        )
+
+
+_LOCK_STALE_SECONDS = 300
+_LOCK_TIMESTAMP_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+_PROTECTED_PUSH_MARKERS = (
+    "Changes must be made through a pull request",
+    "repository rule violations",
+    "protected branch",
+    "GH006",
+)
+
+
+def _lock_is_stale(timestamp: str, now: datetime.datetime) -> bool:
+    """A lock is stale when its timestamp is unparseable or older than five minutes."""
+    try:
+        written = datetime.datetime.strptime(timestamp, _LOCK_TIMESTAMP_FORMAT).replace(
+            tzinfo=datetime.timezone.utc
+        )
+    except ValueError:
+        return True
+    return (now - written).total_seconds() > _LOCK_STALE_SECONDS
+
+
+def _acquire_lock(ctx: Ctx, ops: Ops) -> Path:
+    """
+    Take the parent worktree's merge lock, or halt when another branch holds a fresh one.
+
+    The lock file ``<parent>/.scratch/merge.lock`` has three lines: pid, UTC timestamp, branch.
+    A stale lock, or one already held by this child branch, is overwritten.
+    The halt reports ``step: "lock"`` so the caller can tell a busy parent from a squash failure.
+    """
+    lock = ctx.parent_path / ".scratch" / "merge.lock"
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    if lock.exists():
+        lines = (lock.read_text(encoding="utf-8").splitlines() + ["", "", ""])[:3]
+        pid, timestamp, branch = lines
+        if branch != ctx.child_branch and not _lock_is_stale(timestamp, ops.now()):
+            raise halt(
+                f"Merge lock held: {lock} -- pid={pid}, timestamp={timestamp}, branch={branch}. "
+                "Wait for it to clear, then re-run /mill-merge.",
+                resume=[],
+                data={"lock_path": str(lock), "pid": pid, "timestamp": timestamp, "branch": branch},
+                step="lock",
+            )
+    lock.write_text(
+        f"{ops.pid()}\n{ops.now().strftime(_LOCK_TIMESTAMP_FORMAT)}\n{ctx.child_branch}\n", encoding="utf-8"
+    )
+    return lock
+
+
+def _release_lock(lock: Path) -> None:
+    """Delete the merge lock; an already-missing file is fine."""
+    try:
+        lock.unlink()
+    except FileNotFoundError:
+        pass
+
+
+class _MutationWindow:
+    """
+    Tracks whether the parent has been mutated but not yet confirmed on origin.
+
+    ``is_open`` turns true just before the first parent mutation and false once the squash is
+    confirmed on origin; only while it is open does ``step_squash`` roll the parent back.
+    """
+
+    def __init__(self) -> None:
+        self.is_open = False
+
+
+def _resolve_parent_path(ctx: Ctx, ops: Ops) -> Path:
+    """Return the checkout that holds the parent branch (``git_root`` itself in in-place mode)."""
+    if ctx.mode == "inplace":
+        return ctx.git_root
+    porcelain = _git_ok(
+        ctx, ops, ["git", "-C", str(ctx.git_root), "worktree", "list", "--porcelain"], what="git worktree list"
+    ).stdout
+    expected = f"refs/heads/{ctx.parent_branch}"
+    entry = next((w for w in _parse_worktrees(porcelain) if w["branch"] == expected), None)
+    if entry is None:
+        raise halt(
+            f"Parent branch {ctx.parent_branch} is not checked out in any worktree; check it out in its own "
+            "worktree, then re-run /mill-merge.",
+            resume=[],
+        )
+    return entry["path"]
+
+
+def _rollback_parent(ctx: Ctx, ops: Ops) -> None:
+    """
+    Reset the parent checkout to ``origin/<parent>`` after a failure inside the mutation window.
+
+    ``origin/<parent>``, never a checkpoint, is the target: a checkpoint lives on the child's history.
+    In in-place mode the reset only runs when the checkout is on the parent branch.
+    A failing rollback is reported as a warning and never masks the original exception.
+    """
+    parent = ctx.parent_branch
+    path = str(ctx.parent_path)
+    try:
+        if ctx.mode == "inplace":
+            current = ops.run(["git", "-C", str(ctx.git_root), "branch", "--show-current"])
+            if current.stdout.strip() != parent:
+                return
+        reset = ops.run(["git", "-C", path, "reset", "--hard", f"origin/{parent}"])
+        failure = None if reset.returncode == 0 else _last_output_line(reset)
+    except Exception as exc:  # noqa: BLE001 -- rollback must not mask the original error
+        failure = str(exc)
+    if failure is not None:
+        message = f"rollback of {parent} to origin/{parent} failed: {failure}"
+        ctx.warnings.append(message)
+        print(f"[mill-merge] WARNING: {message}", file=sys.stderr)
+
+
+def _collect_conflicted_files(ctx: Ctx, ops: Ops) -> str:
+    """Return the comma-separated unmerged file names of the parent checkout."""
+    listing = ops.run(["git", "-C", str(ctx.parent_path), "diff", "--name-only", "--diff-filter=U"])
+    return ", ".join(line.strip() for line in listing.stdout.splitlines() if line.strip()) or "unknown"
+
+
+def _push_parent(ctx: Ctx, ops: Ops) -> str:
+    """
+    Push the parent branch; return ``"pushed"`` or ``"protected"`` (branch-protection rejection).
+
+    A plain non-fast-forward rejection is rebased onto ``origin/<parent>`` and pushed once more.
+    Every other failure raises a halt; the caller's ``finally`` rolls the parent back.
+    """
+    path = str(ctx.parent_path)
+    parent = ctx.parent_branch
+    push = ops.run(["git", "-C", path, "push"])
+    if push.returncode == 0:
+        return "pushed"
+    output = f"{push.stdout}\n{push.stderr}"
+    if any(marker in output for marker in _PROTECTED_PUSH_MARKERS):
+        return "protected"
+    non_fast_forward = "! [rejected]" in output and ("(fetch first)" in output or "(non-fast-forward)" in output)
+    if not non_fast_forward:
+        raise halt(f"git push failed: {_last_output_line(push)}; parent rolled back to origin/{parent}.", resume=[])
+    _git_ok(ctx, ops, ["git", "-C", path, "fetch", "origin", parent], what="git fetch")
+    rebase = ops.run(["git", "-C", path, "rebase", f"origin/{parent}"])
+    if rebase.returncode != 0:
+        files = _collect_conflicted_files(ctx, ops)
+        ops.run(["git", "-C", path, "rebase", "--abort"])
+        raise halt(
+            f"rebase of the squash onto origin/{parent} conflicted (files: {files}); "
+            f"parent rolled back to origin/{parent}.",
+            resume=[],
+        )
+    retry = ops.run(["git", "-C", path, "push"])
+    if retry.returncode != 0:
+        raise halt(f"git push retry failed: {_last_output_line(retry)}; parent rolled back to origin/{parent}.", resume=[])
+    return "pushed"
+
+
+def _detect_landed_squash(ctx: Ctx, ops: Ops, window: _MutationWindow) -> str:
+    """
+    Decide whether this task's squash already exists; return ``"unpushed"``, ``"landed"`` or ``"none"``.
+
+    Checks in order: (a) a local squash carrying ``Mill-Task: <slug>`` that origin lacks, which only
+    needs pushing (opens the mutation window); (b) such a commit already on origin; (c) legacy
+    squashes without the trailer, recognised by the child's non-task files matching origin's tree.
+    """
+    path = str(ctx.parent_path)
+    parent = ctx.parent_branch
+    grep = f"^Mill-Task: {ctx.slug}$"
+    unpushed = ops.run(
+        ["git", "-C", path, "log", f"origin/{parent}..{parent}", f"--grep={grep}", "--format=%H", "-n", "1"]
+    )
+    if unpushed.stdout.strip():
+        window.is_open = True
+        return "unpushed"
+    on_origin = ops.run(["git", "-C", path, "log", f"origin/{parent}", f"--grep={grep}", "--format=%H", "-n", "1"])
+    if on_origin.stdout.strip():
+        return "landed"
+    base = _git_ok(ctx, ops, ["git", "-C", path, "merge-base", f"origin/{parent}", ctx.child_branch], what="git merge-base")
+    listing = ops.run(["git", "-C", path, "diff", "--name-only", base.stdout.strip(), ctx.child_branch])
+    task_prefix = ctx.task_dir_rel + "/"
+    names = [
+        line.strip()
+        for line in listing.stdout.splitlines()
+        if line.strip() and line.strip() != ctx.task_dir_rel and not line.strip().startswith(task_prefix)
+    ]
+    if names:
+        same = ops.run(["git", "-C", path, "diff", "--quiet", f"origin/{parent}", ctx.child_branch, "--", *names])
+        if same.returncode == 0:
+            return "landed"
+    return "none"
+
+
+def _switch_to_pull_request(ctx: Ctx, ops: Ops, window: _MutationWindow) -> None:
+    """
+    Fall back to a PR after branch protection rejected the direct push; always raises ``Stop``.
+
+    The local squash is undone (closing the mutation window), an open PR for the child is reused (or created), the child branch
+    is pushed so the PR carries the cleanup commit, and the wiki phase becomes ``pr-pending``.
+    Re-running /mill-merge after the PR lands completes teardown.
+    """
+    parent = ctx.parent_branch
+    child = ctx.child_branch
+    root = str(ctx.git_root)
+    _git_ok(ctx, ops, ["git", "-C", str(ctx.parent_path), "reset", "--hard", f"origin/{parent}"], what="git reset --hard")
+    window.is_open = False
+    url = None
+    listing = ops.run(
+        ["gh", "pr", "list", "--head", child, "--state", "open", "--json", "number,url", "--jq", ".[0]"], ctx.git_root
+    )
+    if listing.stdout.strip():
+        try:
+            existing = json.loads(listing.stdout)
+        except json.JSONDecodeError:
+            existing = None
+        if isinstance(existing, dict):
+            url = existing.get("url")
+    if not url:
+        body = f"Auto-created: direct push was rejected by branch protection.\n\n{ctx.cached_task_description}"
+        created = _git_ok(
+            ctx,
+            ops,
+            ["gh", "pr", "create", "--base", parent, "--head", child, "--title", ctx.cached_task, "--body", body],
+            cwd=ctx.git_root,
+            what="gh pr create",
+        )
+        url = [line.strip() for line in created.stdout.splitlines() if line.strip()][-1]
+    _git_ok(ctx, ops, ["git", "-C", root, "push", "origin", child], what="git push origin child")
+    try:
+        ops.set_phase(ctx.wiki_path, ctx.slug, "pr-pending")
+    except Exception as exc:  # noqa: BLE001 -- surfaced to the operator as a halt
+        raise halt(f"wiki pr-pending failed after opening the PR: {exc}", resume=[])
+    ctx.route = "branch-protection-pr"
+    raise Stop(
+        "ok",
+        "Direct push rejected by branch protection; switched to the PR path.",
+        data={"pr_url": url, "slug": ctx.slug, "parent_branch": parent},
+        report=[
+            (
+                f"Direct push rejected by branch protection -- switched to PR path. PR: {url}. "
+                "Consider setting `git.require_pr_to_base: true` in mill-config.yaml."
+            )
+        ],
+    )
+
+
+def _squash_and_push(ctx: Ctx, ops: Ops, window: _MutationWindow) -> None:
+    """The body of ``step_squash``: checks, landed detection, squash, push (see ``step_squash``)."""
+    path = str(ctx.parent_path)
+    parent = ctx.parent_branch
+    if ctx.mode == "worktree":
+        if ops.run(["git", "-C", path, "status", "--porcelain", "--untracked-files=no"]).stdout.strip():
+            raise halt(
+                "The parent worktree is not clean -- either (a) this is independent uncommitted work in the "
+                "parent worktree: commit or stash it, then re-run `/mill-merge`; or (b) this is a "
+                "partially-applied squash left over from a squash that failed after `merge --squash`/`reset`/"
+                "`checkout` already staged changes but before `commit` landed: run "
+                f"`git -C {path} commit` to complete it, or `git -C {path} reset --hard` to discard it, "
+                "then re-run.",
+                resume=[],
+            )
+        fetch = ops.run(["git", "-C", path, "fetch", "origin", parent])
+        forward = ops.run(["git", "-C", path, "merge", "--ff-only", f"origin/{parent}"]) if fetch.returncode == 0 else fetch
+        if forward.returncode != 0:
+            raise halt(
+                f"The parent worktree's local branch has diverged from `origin/{parent}` -- it has local "
+                "commits not present on the remote. Reconcile manually (commit/push, or investigate the "
+                "divergence), then re-run `/mill-merge`.",
+                resume=[],
+            )
+    else:
+        fetch = ops.run(["git", "-C", str(ctx.git_root), "fetch", "origin", parent])
+        if fetch.returncode != 0:
+            raise halt(f"git fetch origin {parent} failed: {_last_output_line(fetch)}", resume=[])
+
+    landed = _detect_landed_squash(ctx, ops, window)
+    if landed == "landed":
+        ctx.report.append(f"Squash for {ctx.slug} already on origin/{parent}; skipping squash.")
+        return
+    if landed == "none":
+        window.is_open = True
+        squash = ops.run(["git", "-C", path, "merge", "--squash", ctx.child_branch])
+        if squash.returncode != 0:
+            files = _collect_conflicted_files(ctx, ops)
+            raise halt(
+                f"merge --squash of {ctx.child_branch} into {parent} failed (conflicts: {files}); "
+                f"parent rolled back to origin/{parent}.",
+                resume=[],
+            )
+        # The child's cleanup commit deletes the task dir, so the squash diff would delete a task dir
+        # the parent tracks at the same path (#497); restore it from the parent's HEAD. The relative
+        # pathspec resolves against the parent's repo root, not the child's (#648). Both commands
+        # fail harmlessly when the parent tracks nothing there, so their results are ignored.
+        ops.run(["git", "-C", path, "reset", "-q", "HEAD", "--", ctx.task_dir_rel])
+        ops.run(["git", "-C", path, "checkout", "--", ctx.task_dir_rel])
+        if ops.run(["git", "-C", path, "diff", "--cached", "--quiet"]).returncode == 0:
+            window.is_open = False
+            ctx.report.append(f"Nothing to squash for {ctx.slug}; the parent already has these changes.")
+            return
+        _git_ok(
+            ctx,
+            ops,
+            ["git", "-C", path, "commit", "-m", f"{ctx.cached_task}\n\nMill-Task: {ctx.slug}"],
+            what="git commit squash",
+        )
+
+    if _push_parent(ctx, ops) == "protected":
+        _switch_to_pull_request(ctx, ops, window)
+    window.is_open = False
+
+
+def step_squash(ctx: Ctx, ops: Ops) -> None:
+    """
+    Squash the task branch onto the parent under a merge lock and push it.
+
+    Worktree mode locks the parent worktree, refuses a dirty or diverged parent, and syncs it to
+    origin; in-place mode has no separate parent and takes no lock.
+    An already-landed squash (state-based, see ``_detect_landed_squash``) is skipped so re-entry after
+    a partial run is safe.
+    Any failure once the parent has been mutated and before origin confirms the push rolls the parent
+    back to ``origin/<parent>``; the dirty-parent and diverged-parent halts happen earlier and never
+    reset, since that would destroy the operator's own work.
+    Non-``Stop`` exceptions, including ``Terminated``, propagate after the rollback and lock release.
+    Branch protection rejecting the push switches to a PR and ends the run with an ``ok`` stop.
+    """
+    ctx.parent_path = _resolve_parent_path(ctx, ops)
+    lock = _acquire_lock(ctx, ops) if ctx.mode == "worktree" else None
+    window = _MutationWindow()
+    try:
+        _squash_and_push(ctx, ops, window)
+    finally:
+        try:
+            if window.is_open:
+                _rollback_parent(ctx, ops)
+        finally:
+            if lock is not None:
+                _release_lock(lock)
+
+
+def step_archive_tag(ctx: Ctx, ops: Ops) -> None:
+    """
+    Tag the cleanup-commit tip of the task branch as ``archive/<slug>``.
+
+    Idempotent through ``_archive_tag.create_or_resolve``.
+    A failure never rolls back the landed merge: re-running the script retries from here.
+    """
+    try:
+        result = ops.archive_tag(ctx.git_root, ctx.slug, ctx.child_branch)
+    except Exception as exc:  # noqa: BLE001 -- reported as a post-merge halt
+        raise halt(
+            f"Merge landed on {ctx.parent_branch} but archive-tag failed: {exc}. Re-run /mill-merge to retry.",
+            resume=[],
+        )
+    ctx.archive = result
+    ctx.report.append(f"archive-tag action: {result['action']} -- tag: {result['tag']}")
+    if result.get("moved_aside_to"):
+        ctx.report.append(f"prior tag preserved as {result['moved_aside_to']}")
+    if result.get("push_failed"):
+        ctx.warnings.append(
+            f"archive tag push failed -- reconcile {result['tag']} with remote manually: {result.get('push_error')}"
+        )
+
+
+def step_wiki_done(ctx: Ctx, ops: Ops) -> None:
+    """Flip the task to ``done`` in the wiki; a failure halts without touching the landed merge."""
+    try:
+        ops.set_phase(ctx.wiki_path, ctx.slug, "done")
+    except Exception as exc:  # noqa: BLE001 -- reported as a post-merge halt
+        raise halt(
+            f"Merge landed on {ctx.parent_branch} but wiki-done failed: {exc}. Re-run /mill-merge to retry.",
+            resume=[],
+        )
+
+
+def step_notify(ctx: Ctx, ops: Ops) -> None:
+    """Send the ``mill-merge.done`` notification, add the closing report line, and set the result data."""
+    ops.notify("mill-merge.done", f"task {ctx.slug} merged into {ctx.parent_branch}", slug=ctx.slug, parent=ctx.parent_branch)
+    ctx.report.append(
+        f"Merge complete for {ctx.slug}. Worktree intact -- run /mill-cleanup --apply to remove worktree, "
+        f"branch, portal, and legacy wiki active-dir. Archive tag archive/{ctx.slug} created. "
+        "Home.md updated to [done]."
+    )
+    ctx.success_data = {
+        "slug": ctx.slug,
+        "parent_branch": ctx.parent_branch,
+        "archive_tag": ctx.archive.get("tag"),
+        "archive_action": ctx.archive.get("action"),
+        "moved_aside_to": ctx.archive.get("moved_aside_to"),
+    }
+
+
+_MERGE_ROUTES = ("direct", "pr-closed", "pr-merged")
+
+STEPS.append(("cleanup-commit", step_cleanup_commit, lambda c: c.route in _MERGE_ROUTES))
+STEPS.append(("squash", step_squash, lambda c: c.route in ("direct", "pr-closed")))
+STEPS.append(("archive-tag", step_archive_tag, lambda c: c.route in _MERGE_ROUTES))
+STEPS.append(("wiki-done", step_wiki_done, lambda c: c.route in _MERGE_ROUTES))
+STEPS.append(("notify", step_notify, lambda c: c.route in _MERGE_ROUTES))

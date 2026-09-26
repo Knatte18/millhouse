@@ -1,6 +1,7 @@
 """Unit tests for plugins/mill/scripts/_merge.py (entry-side steps and framework)."""
 from __future__ import annotations
 
+import datetime
 import signal
 import subprocess
 import sys
@@ -13,11 +14,12 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 SCRIPTS = HUB / "plugins" / "mill" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-import _marker  # noqa: E402
-import _merge  # noqa: E402
-import _parent_branch  # noqa: E402
-import _status  # noqa: E402
+import _marker
+import _merge
+import _parent_branch
+import _status
 
+NOW = datetime.datetime(2026, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
 SLUG = "my-task"
 BRANCH = f"hanf/{SLUG}"
 
@@ -38,6 +40,7 @@ class FakeOps(_merge.Ops):
         self.notify_calls: list[tuple] = []
         self.archive_calls: list[tuple] = []
         self.liveness_calls: list[str] = []
+        self.cwds: list = []
 
     def _ret(self, name, default=None):
         value = self.returns.get(name, default)
@@ -47,6 +50,7 @@ class FakeOps(_merge.Ops):
 
     def run(self, argv, cwd=None):
         self.calls.append(list(argv))
+        self.cwds.append(cwd)
         for tokens, outcome in self.git_rules:
             if all(token in argv for token in tokens):
                 return outcome(argv) if callable(outcome) else outcome
@@ -107,6 +111,12 @@ class FakeOps(_merge.Ops):
 
     def now_iso(self):
         return "2026-01-01T00:00:00Z"
+
+    def now(self):
+        return self.returns.get("now", NOW)
+
+    def pid(self):
+        return 4242
 
 
 def write_status(path: Path, *, phase="done", slug=SLUG, parent="main", task="My task", drop=()):
@@ -723,6 +733,495 @@ def test_merge_in_check_skipped_by_runner_when_merged_in():
 
 def test_registered_step_order():
     assert [s[0] for s in _merge.STEPS][:5] == ["entry", "parent", "phase-gate", "pr-state", "merge-in-check"]
+
+
+# ---------------------------------------------------------------------------
+# Cleanup commit
+# ---------------------------------------------------------------------------
+
+
+def cleanup_ctx(tmp: Path, *, task_dir_exists: bool) -> _merge.Ctx:
+    ctx = make_ctx(tmp)
+    ctx.task_dir = ctx.git_root / "_mill"
+    if task_dir_exists:
+        ctx.task_dir.mkdir(exist_ok=True)
+    ctx.task_dir_git_rel = "_mill"
+    return ctx
+
+
+def commands(ops: FakeOps, verb: str) -> list[list[str]]:
+    return [argv for argv in ops.calls if verb in argv]
+
+
+def test_cleanup_no_hits_no_warnings():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        ctx = cleanup_ctx(tmp, task_dir_exists=False)
+        ops = make_ops(tmp, git_rules=[(["grep"], completed(1))])
+        _merge.step_cleanup_commit(ctx, ops)
+        assert ctx.warnings == []
+        assert commands(ops, "rm") == []
+        assert commands(ops, "commit") == []
+
+
+def test_cleanup_worktree_and_wiki_hits_warn_and_continue():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        ctx = cleanup_ctx(tmp, task_dir_exists=False)
+        wiki = str(ctx.wiki_path)
+
+        def grep(argv):
+            return completed(0, "Home.md:3:[x](_mill/discussion.md)\n") if wiki in argv else completed(0, "docs/a.md:1:[y](../_mill/discussion.md)\n")
+
+        ops = make_ops(tmp, git_rules=[(["grep"], grep)])
+        _merge.step_cleanup_commit(ctx, ops)
+        assert ctx.warnings == [
+            "permanent-doc citation of _mill/discussion.md is about to go dead: docs/a.md:1:[y](../_mill/discussion.md)",
+            "permanent-doc citation of _mill/discussion.md is about to go dead: wiki:Home.md:3:[x](_mill/discussion.md)",
+        ]
+        wiki_grep = [argv for argv in ops.calls if wiki in argv and "grep" in argv]
+        assert len(wiki_grep) == 1 and wiki_grep[0][:3] == ["git", "-C", wiki]
+        assert all(cwd != ctx.wiki_path for cwd in ops.cwds)
+
+
+def test_cleanup_task_dir_present_removes_then_commits():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        ctx = cleanup_ctx(tmp, task_dir_exists=True)
+        ops = make_ops(tmp, git_rules=[(["diff", "--cached"], completed(1))])
+        _merge.step_cleanup_commit(ctx, ops)
+        root = str(ctx.git_root)
+        verbs = [argv[3] for argv in ops.calls if argv[3] in ("rm", "commit")]
+        assert verbs == ["rm", "commit"]
+        assert ["git", "-C", root, "commit", "-m", "chore: pre-merge cleanup"] in ops.calls
+
+
+def test_cleanup_commit_failure_resets_and_halts():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        ctx = cleanup_ctx(tmp, task_dir_exists=True)
+        ops = make_ops(
+            tmp, git_rules=[(["diff", "--cached"], completed(1)), (["commit"], completed(1, "", "hook failed"))]
+        )
+        stop = expect_stop(_merge.step_cleanup_commit, ctx, ops)
+        assert ["git", "-C", str(ctx.git_root), "reset", "--hard", "HEAD"] in ops.calls
+        assert stop.reason == "cleanup-commit failed: hook failed; task branch reset to HEAD. Re-run /mill-merge."
+
+
+# ---------------------------------------------------------------------------
+# Squash
+# ---------------------------------------------------------------------------
+
+PARENT = "main"
+CHILD = BRANCH
+
+
+def squash_setup(tmp: Path, *, mode="worktree", rules=None, **returns):
+    """Build ctx/ops for step_squash with the parent worktree in ``tmp / "parent"``."""
+    parent_dir = tmp / "parent"
+    parent_dir.mkdir(exist_ok=True)
+    ctx = make_ctx(tmp)
+    ctx.mode = mode
+    ctx.parent_branch = PARENT
+    ctx.child_branch = CHILD
+    ctx.cached_task = "My task"
+    ctx.cached_task_description = "Description"
+    ctx.task_dir_rel = "_mill"
+    listing = f"worktree {parent_dir}\nHEAD abc\nbranch refs/heads/{PARENT}\n"
+    all_rules = list(rules or []) + [(["worktree", "list"], completed(0, listing))]
+    ops = make_ops(tmp, git_rules=all_rules, **returns)
+    return ctx, ops, parent_dir
+
+
+def lock_path(parent_dir: Path) -> Path:
+    return parent_dir / ".scratch" / "merge.lock"
+
+
+STAGED = (["diff", "--cached", "--quiet"], completed(1))
+
+
+def resets(ops: FakeOps) -> list[list[str]]:
+    return [argv for argv in ops.calls if "reset" in argv and "--hard" in argv]
+
+
+def test_squash_lock_acquired_and_released():
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, parent_dir = squash_setup(Path(td), rules=[STAGED])
+        seen = {}
+
+        def push(argv):
+            seen["lock"] = lock_path(parent_dir).read_text(encoding="utf-8")
+            return completed()
+
+        ops.git_rules.insert(0, (["push"], push))
+        _merge.step_squash(ctx, ops)
+        assert seen["lock"] == f"4242\n2026-01-01T12:00:00Z\n{CHILD}\n"
+        assert not lock_path(parent_dir).exists()
+
+
+def test_squash_stale_lock_overwritten():
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, parent_dir = squash_setup(Path(td), rules=[STAGED])
+        lock_path(parent_dir).parent.mkdir()
+        lock_path(parent_dir).write_text("1\n2026-01-01T11:54:00Z\nother/branch\n", encoding="utf-8")
+        _merge.step_squash(ctx, ops)
+        assert commands(ops, "merge") != []
+
+
+def test_squash_fresh_foreign_lock_halts_with_lock_step():
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, parent_dir = squash_setup(Path(td))
+        lock_path(parent_dir).parent.mkdir()
+        lock_path(parent_dir).write_text("77\n2026-01-01T11:58:00Z\nother/branch\n", encoding="utf-8")
+        stop = expect_stop(_merge.step_squash, ctx, ops)
+        assert stop.step == "lock"
+        assert stop.resume == []
+        assert stop.data == {
+            "lock_path": str(lock_path(parent_dir)),
+            "pid": "77",
+            "timestamp": "2026-01-01T11:58:00Z",
+            "branch": "other/branch",
+        }
+        assert len(ops.calls) == 1 and "worktree" in ops.calls[0]
+        assert lock_path(parent_dir).exists()
+
+
+def test_squash_lock_released_on_dirty_halt_push_failure_and_exception():
+    scenarios = [
+        [(["status", "--porcelain"], completed(0, " M a.py\n"))],
+        [STAGED, (["push"], completed(1, "", "fatal: unable to access"))],
+        [STAGED, (["merge", "--squash"], RuntimeError("boom"))],
+    ]
+    for rules in scenarios:
+        rules = [
+            (tokens, (lambda argv, o=outcome: (_ for _ in ()).throw(o)) if isinstance(outcome, BaseException) else outcome)
+            for tokens, outcome in rules
+        ]
+        with tempfile.TemporaryDirectory() as td:
+            ctx, ops, parent_dir = squash_setup(Path(td), rules=rules)
+            try:
+                _merge.step_squash(ctx, ops)
+            except (_merge.Stop, RuntimeError):
+                pass
+            else:
+                raise AssertionError("expected failure")
+            assert not lock_path(parent_dir).exists()
+
+
+def test_squash_dirty_parent_and_diverged_parent_halt_without_reset():
+    for rule in (
+        (["status", "--porcelain"], completed(0, " M a.py\n")),
+        (["merge", "--ff-only"], completed(1, "", "not possible")),
+    ):
+        with tempfile.TemporaryDirectory() as td:
+            ctx, ops, _ = squash_setup(Path(td), rules=[rule])
+            stop = expect_stop(_merge.step_squash, ctx, ops)
+            assert stop.resume == []
+            assert resets(ops) == []
+            assert commands(ops, "--squash") == []
+
+
+def test_squash_landed_unpushed_pushes_without_new_squash():
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, _ = squash_setup(Path(td), rules=[(["origin/main..main"], completed(0, "abc\n"))])
+        _merge.step_squash(ctx, ops)
+        assert commands(ops, "--squash") == []
+        assert len(commands(ops, "push")) == 1
+
+
+def test_squash_landed_on_origin_skips_squash_and_push():
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, _ = squash_setup(Path(td), rules=[(["origin/main", "--grep=^Mill-Task: my-task$"], completed(0, "abc\n"))])
+        _merge.step_squash(ctx, ops)
+        assert commands(ops, "--squash") == []
+        assert commands(ops, "push") == []
+        assert ctx.report == ["Squash for my-task already on origin/main; skipping squash."]
+
+
+def test_squash_legacy_landed_by_tree_match():
+    with tempfile.TemporaryDirectory() as td:
+        rules = [
+            (["merge-base"], completed(0, "base1\n")),
+            (["--name-only", "base1"], completed(0, "src/a.py\n_mill/status.md\n")),
+        ]
+        ctx, ops, _ = squash_setup(Path(td), rules=rules)
+        _merge.step_squash(ctx, ops)
+        assert ["git", "-C", str(Path(td) / "parent"), "diff", "--quiet", "origin/main", CHILD, "--", "src/a.py"] in ops.calls
+        assert commands(ops, "--squash") == []
+        assert commands(ops, "push") == []
+
+
+def test_squash_fresh_commit_message_and_no_reset_on_success():
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, parent_dir = squash_setup(Path(td), rules=[STAGED])
+        _merge.step_squash(ctx, ops)
+        assert ["git", "-C", str(parent_dir), "commit", "-m", f"My task\n\nMill-Task: {SLUG}"] in ops.calls
+        assert resets(ops) == []
+
+
+def test_squash_nothing_staged_skips_commit_push_reset():
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, _ = squash_setup(Path(td))
+        _merge.step_squash(ctx, ops)
+        assert commands(ops, "commit") == []
+        assert commands(ops, "push") == []
+        assert resets(ops) == []
+
+
+def test_squash_merge_conflict_halts_and_rolls_back():
+    with tempfile.TemporaryDirectory() as td:
+        rules = [
+            (["merge", "--squash"], completed(1, "", "conflict")),
+            (["--diff-filter=U"], completed(0, "a.py\nb.py\n")),
+        ]
+        ctx, ops, _ = squash_setup(Path(td), rules=rules)
+        stop = expect_stop(_merge.step_squash, ctx, ops)
+        assert "conflicts: a.py, b.py" in stop.reason
+        assert len(resets(ops)) == 1
+
+
+NON_FF = completed(1, "", " ! [rejected] main -> main (fetch first)\n")
+
+
+def test_squash_non_fast_forward_rebases_and_retries():
+    with tempfile.TemporaryDirectory() as td:
+        pushes = iter([NON_FF, completed()])
+        ctx, ops, _ = squash_setup(Path(td), rules=[STAGED, (["push"], lambda argv: next(pushes))])
+        _merge.step_squash(ctx, ops)
+        assert len(commands(ops, "push")) == 2
+        assert len(commands(ops, "rebase")) == 1
+        assert resets(ops) == []
+
+
+def test_squash_rebase_conflict_aborts_and_rolls_back():
+    with tempfile.TemporaryDirectory() as td:
+        rules = [
+            STAGED,
+            (["push"], NON_FF),
+            (["rebase", "origin/main"], completed(1)),
+            (["--diff-filter=U"], completed(0, "x.py\n")),
+        ]
+        ctx, ops, parent_dir = squash_setup(Path(td), rules=rules)
+        stop = expect_stop(_merge.step_squash, ctx, ops)
+        assert "x.py" in stop.reason
+        assert ["git", "-C", str(parent_dir), "rebase", "--abort"] in ops.calls
+        assert ["git", "-C", str(parent_dir), "reset", "--hard", "origin/main"] in ops.calls
+
+
+def test_squash_retry_failure_and_other_failure_roll_back():
+    for rules in (
+        [STAGED, (["push"], completed(1, "", "fatal: network"))],
+        [STAGED, (["push"], NON_FF)],
+    ):
+        with tempfile.TemporaryDirectory() as td:
+            ctx, ops, parent_dir = squash_setup(Path(td), rules=rules)
+            stop = expect_stop(_merge.step_squash, ctx, ops)
+            assert "rolled back to origin/main" in stop.reason
+            assert ["git", "-C", str(parent_dir), "reset", "--hard", "origin/main"] in ops.calls
+
+
+PROTECTED = completed(1, "", "remote: error: GH006: Protected branch update failed")
+
+
+def test_squash_branch_protection_reuses_existing_pr():
+    with tempfile.TemporaryDirectory() as td:
+        rules = [STAGED, (["push"], lambda argv: PROTECTED if argv[2] != str(Path(td) / "git") else completed()),
+                 (["gh", "pr", "list"], completed(0, '{"number": 5, "url": "https://x/pr/5"}\n'))]
+        ctx, ops, parent_dir = squash_setup(Path(td), rules=rules)
+        stop = expect_stop(_merge.step_squash, ctx, ops)
+        assert stop.status == "ok"
+        assert ctx.route == "branch-protection-pr"
+        assert stop.data == {"pr_url": "https://x/pr/5", "slug": SLUG, "parent_branch": "main"}
+        assert ["git", "-C", str(parent_dir), "reset", "--hard", "origin/main"] in ops.calls
+        assert commands(ops, "create") == []
+        assert ["git", "-C", str(ctx.git_root), "push", "origin", CHILD] in ops.calls
+        assert ops.phase_calls == [(SLUG, "pr-pending")]
+        assert len(resets(ops)) == 1
+
+
+def test_squash_branch_protection_creates_pr_with_parent_base():
+    with tempfile.TemporaryDirectory() as td:
+        rules = [STAGED, (["push"], lambda argv: PROTECTED if argv[2] != str(Path(td) / "git") else completed()),
+                 (["gh", "pr", "create"], completed(0, "Creating PR\nhttps://x/pr/9\n"))]
+        ctx, ops, _ = squash_setup(Path(td), rules=rules)
+        stop = expect_stop(_merge.step_squash, ctx, ops)
+        create = commands(ops, "create")[0]
+        assert create[create.index("--base") + 1] == "main"
+        assert stop.data["pr_url"] == "https://x/pr/9"
+
+
+def test_squash_terminated_during_push_rolls_back_and_propagates():
+    with tempfile.TemporaryDirectory() as td:
+        def push(argv):
+            raise _merge.Terminated()
+
+        ctx, ops, parent_dir = squash_setup(Path(td), rules=[STAGED, (["push"], push)])
+        try:
+            _merge.step_squash(ctx, ops)
+        except _merge.Terminated:
+            pass
+        else:
+            raise AssertionError("Terminated should propagate")
+        assert ["git", "-C", str(parent_dir), "reset", "--hard", "origin/main"] in ops.calls
+        assert not lock_path(parent_dir).exists()
+
+
+def test_terminated_after_push_does_not_roll_back():
+    with tempfile.TemporaryDirectory() as td:
+        ops = route_setup(Path(td), route="direct", mode="worktree", archive_tag=_merge.Terminated())
+        try:
+            _merge.run_merge(_merge.MergeOptions(), ops)
+        except _merge.Terminated:
+            pass
+        else:
+            raise AssertionError("Terminated should propagate")
+        assert resets(ops) == []
+        assert not lock_path(Path(td) / "parent").exists()
+
+
+def test_squash_inplace_no_lock_no_dirty_check_and_fetch_failure_halts():
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, parent_dir = squash_setup(Path(td), mode="inplace", rules=[STAGED])
+        _merge.step_squash(ctx, ops)
+        assert not lock_path(parent_dir).exists()
+        assert not lock_path(ctx.git_root).exists()
+        assert commands(ops, "status") == []
+        assert ["git", "-C", str(ctx.git_root), "fetch", "origin", "main"] in ops.calls
+    with tempfile.TemporaryDirectory() as td:
+        ctx, ops, _ = squash_setup(Path(td), mode="inplace", rules=[(["fetch"], completed(1, "", "no remote"))])
+        stop = expect_stop(_merge.step_squash, ctx, ops)
+        assert stop.reason == "git fetch origin main failed: no remote"
+
+
+# ---------------------------------------------------------------------------
+# Archive tag, wiki done, notify, and full routes
+# ---------------------------------------------------------------------------
+
+
+def route_setup(tmp: Path, *, route: str, mode: str, extra_rules=None, **returns):
+    """Build a full-run setup: entry/parent/phase-gate/pr-state driven by real steps and fakes."""
+    git_root = tmp / "git"
+    git_root.mkdir(exist_ok=True)
+    (tmp / "parent").mkdir(exist_ok=True)
+    write_status(git_root / "_mill" / "status.md")
+    pr = {"merged": {"state": "merged", "number": 1, "error": None},
+          "closed": {"state": "closed", "number": 1, "error": None}}.get(route, {"state": "none", "number": None, "error": None})
+    listing = (
+        f"worktree {tmp / 'parent'}\nHEAD b\nbranch refs/heads/main\n\n"
+        f"worktree {git_root}\nHEAD a\nbranch refs/heads/{BRANCH}\n"
+    )
+    rules = list(extra_rules or []) + [
+        (["branch", "--show-current"], completed(0, BRANCH + "\n")),
+        (["worktree", "list"], completed(0, listing)),
+        (["diff", "--cached", "--quiet"], completed(1)),
+    ]
+    ops = make_ops(tmp, git_rules=rules, is_inplace=(mode == "inplace"), pr_state=pr, **returns)
+    return ops
+
+
+def run_route(tmp: Path, route: str, mode: str, opts=None, **kwargs):
+    ops = route_setup(tmp, route=route, mode=mode, **kwargs)
+    result = _merge.run_merge(opts or _merge.MergeOptions(), ops)
+    return result, ops
+
+
+FULL = ["entry", "parent", "phase-gate", "pr-state", "merge-in-check", "cleanup-commit", "squash",
+        "archive-tag", "wiki-done", "notify"]
+
+
+def step_names(result) -> list[str]:
+    return [t["step"] for t in result["timings"]]
+
+
+def test_route_direct_worktree_runs_every_step():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        result, ops = run_route(tmp, "direct", "worktree")
+        assert result["status"] == "ok", result
+        assert step_names(result) == FULL
+        assert ops.phase_calls == [(SLUG, "done")]
+        assert result["data"]["archive_tag"] == f"archive/{SLUG}"
+        assert not lock_path(tmp / "parent").exists()
+
+
+def test_route_direct_inplace_omits_merge_in_and_lock():
+    with tempfile.TemporaryDirectory() as td:
+        result, _ops = run_route(Path(td), "direct", "inplace")
+        assert result["status"] == "ok", result
+        assert step_names(result) == [n for n in FULL if n != "merge-in-check"]
+        assert not lock_path(Path(td) / "parent").exists()
+
+
+def test_route_pr_merged_skips_squash_and_merge_in():
+    with tempfile.TemporaryDirectory() as td:
+        result, ops = run_route(Path(td), "merged", "worktree")
+        assert result["status"] == "ok", result
+        assert step_names(result) == [n for n in FULL if n not in ("merge-in-check", "squash")]
+        assert ops.phase_calls == [(SLUG, "done")]
+
+
+def test_route_pr_closed_matches_direct():
+    with tempfile.TemporaryDirectory() as td:
+        result, ops = run_route(Path(td), "closed", "worktree")
+        assert result["status"] == "ok", result
+        assert step_names(result) == FULL
+        assert ops.phase_calls == [(SLUG, "done")]
+
+
+def test_route_branch_protection_ends_at_squash():
+    with tempfile.TemporaryDirectory() as td:
+        protected = [(["push"], lambda argv: PROTECTED if argv[2] == str(Path(td) / "parent") else completed()),
+                     (["gh", "pr", "create"], completed(0, "https://x/pr/3\n"))]
+        result, ops = run_route(Path(td), "direct", "worktree", extra_rules=protected)
+        assert result["status"] == "ok"
+        assert result["route"] == "branch-protection-pr"
+        assert step_names(result)[-1] == "squash"
+        assert result["data"]["pr_url"] == "https://x/pr/3"
+        assert ops.phase_calls == [(SLUG, "pr-pending")]
+        assert ops.archive_calls == []
+
+
+def test_route_post_merge_failures_halt_without_rollback():
+    for key, value in (("archive_tag", RuntimeError("tag boom")),):
+        with tempfile.TemporaryDirectory() as td:
+            result, ops = run_route(Path(td), "direct", "worktree", **{key: value})
+            assert result["status"] == "halt"
+            assert result["reason"].startswith("Merge landed on main")
+            assert resets(ops) == []
+            assert not lock_path(Path(td) / "parent").exists()
+    with tempfile.TemporaryDirectory() as td:
+        ops = route_setup(Path(td), route="direct", mode="worktree")
+
+        def failing_set_phase(wiki_path, slug, phase):
+            raise RuntimeError("wiki down")
+
+        ops.set_phase = failing_set_phase
+        result = _merge.run_merge(_merge.MergeOptions(), ops)
+        assert result["reason"].startswith("Merge landed on main")
+        assert resets(ops) == []
+        assert not lock_path(Path(td) / "parent").exists()
+
+
+def test_route_archive_push_failure_warns():
+    with tempfile.TemporaryDirectory() as td:
+        tag = {"action": "created", "tag": f"archive/{SLUG}", "push_failed": True, "push_error": "denied"}
+        result, _ = run_route(Path(td), "direct", "worktree", archive_tag=tag)
+        assert result["warnings"] == [
+            f"archive tag push failed -- reconcile archive/{SLUG} with remote manually: denied"
+        ]
+
+
+def test_route_results_are_ascii():
+    for route, mode in (("direct", "worktree"), ("merged", "worktree"), ("closed", "worktree"), ("direct", "inplace")):
+        with tempfile.TemporaryDirectory() as td:
+            tag = {"action": "moved", "tag": f"archive/{SLUG}", "moved_aside_to": "archive/x-old", "push_failed": True, "push_error": "d"}
+            result, _ = run_route(Path(td), route, mode, archive_tag=tag)
+            strings = [result["reason"], *result["report"], *result["warnings"]]
+            assert all(s.isascii() for s in strings), strings
+
+
+def test_registered_step_order_full():
+    assert [s[0] for s in _merge.STEPS] == FULL
 
 
 def main() -> int:
