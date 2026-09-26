@@ -33,7 +33,9 @@ One branch accumulates per finished task (25 seen in one hub), cluttering `git b
 **Out:**
 
 - Changing where plan cards write PR notes (mill-plan is untouched; `_mill/pr-notes.md` stays the convention).
-- The direct-merge path (`mill-merge`): no PR exists there, so no PR body to fold notes into.
+- The direct-merge path (`mill-merge`) for pr-notes: no PR exists there, so no PR body to fold notes into.
+  Exception, wording only: `mill-merge` Step 2's "Capture the checkpoint branch name it prints; you may need it on rollback" is removed (merge-in no longer prints a checkpoint name, and mill-merge's rollback already targets `origin/<parent_branch>`, per its own "Why `origin/<parent_branch>`, not the checkpoint" note), and its rollback line "Preserve the checkpoint branch." is dropped as moot once merge-in succeeded.
+  No behaviour change in mill-merge.
 - Remote checkpoint branches: checkpoints are local-only (`git branch -f`, never pushed).
 - Any change to rollback semantics (`mill-merge` already rolls back to `origin/<parent_branch>`, not the checkpoint).
 
@@ -61,6 +63,10 @@ One branch accumulates per finished task (25 seen in one hub), cluttering `git b
 - Decision: `mill-merge-in` deletes `$CHK` (`git branch -D "$CHK"`) as the last action after Step 4 verify passes and Step 5 dispatch-brief commit, on the success path only.
   Every failure path (conflict-stuck, verify-fix stuck) already says "preserve the checkpoint" and stays unchanged.
   Deletion failure is non-fatal (log and continue).
+  Placement: the delete block sits between Step 5 (brief commit) and Step 6 (Report).
+  Step 6's `Checkpoint: <CHK> (delete manually ...)` report line is removed, as is the trailing paragraph "Leave the checkpoint branch in place on success. The user decides when to delete it ..." (replaced by one sentence stating the checkpoint is deleted on success and preserved only on the Rollback path).
+  The "Substituted parent branch" append instruction that says "after the `Checkpoint:` line" is reworded to "after the `Verify:` line".
+  The Rollback section's "Do **not** delete the checkpoint" stays as is (failure path).
   The no-op fast path (Step 1 exits before creating a checkpoint) is unchanged.
 - Rationale: a checkpoint is only needed while a rollback is possible; once merge and verify pass it is dead weight.
 - Rejected: leaving it for cleanup only -- a task that is never cleaned still accumulates, and long-lived tasks re-running merge-in would keep it around.
@@ -70,6 +76,7 @@ One branch accumulates per finished task (25 seen in one hub), cluttering `git b
 - Decision: add `checkpoint_branch_name(branch: str) -> str` to `_finalize_cleanup.py` (`"mill-checkpoint-" + branch.replace("/", "-")`, matching the merge-in skill's `tr '/' '-'`) and `delete_checkpoint_branch(hub_root, branch)` (runs `git -C <hub_root> branch -D <name>`; a missing branch is success, other failures are logged non-fatally like the existing `branch -D` handling).
   Call it from `_apply_worktree_record`, `_apply_inplace_record`, right after each one's task-branch deletion.
   `_apply_pr_reap_record` needs no separate call: it delegates its teardown to `_apply_inplace_record` / `_apply_worktree_record` (the final dispatch in that function), so those two call sites cover it and nothing is deleted twice.
+  Checkpoint deletion is tied to task-branch deletion: on `_apply_inplace_record`'s early-return paths (no parent branch, checkout failed) and when `task_branch` is empty, no branch is deleted and the checkpoint is likewise left alone.
   This covers leftovers from failed/stuck merge-ins and pre-fix accumulation for tasks that get cleaned from now on.
 - Rationale: both fixes together are what the issue asked for ("either or both"); the cleanup half catches the halted-checkpoint case, which is the only time one survives after the merge-in fix.
 - Rejected: a one-off sweep of all existing `mill-checkpoint-*` branches -- not requested, and would risk deleting a checkpoint of a live task.
