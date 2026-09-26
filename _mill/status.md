@@ -43,7 +43,9 @@ batches:
     can''t open file ''/home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/unit_tests/test-merge.py'':
     [Errno 2] N']
   - name: merge-core-squash
-    state: pending
+    state: running
+    implementer_session: 89bc3804-ba78-45d9-b31b-0b26a33196f8
+    start_sha: f971c521a7d7e64d770605780d465be33d081a2f
     verify_baseline_failures: ['NONZERO_EXIT: exit 2: /home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/.venv/bin/python3:
     can''t open file ''/home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/unit_tests/test-merge.py'':
     [Errno 2] N']
