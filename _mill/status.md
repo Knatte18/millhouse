@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-rewrite
+phase: approved-cross-references
 slug: mill-merge-script
 branch: hanf/mill-merge-script
 plan: _mill/plan
@@ -31,6 +31,7 @@ approved-merge-core-entry  '2026-09-26T14:34:53Z'
 approved-merge-core-squash  '2026-09-26T14:38:48Z'
 approved-merge-cli  '2026-09-26T14:39:44Z'
 approved-skill-rewrite  '2026-09-26T14:40:55Z'
+approved-cross-references  '2026-09-26T14:42:21Z'
 ```
 
 ## Batches
@@ -66,9 +67,10 @@ batches:
     commit_sha: f2f5ee9fcd68f6f6247c9b21333b6d0bc7061fe0
     verify_baseline_failures: []
   - name: cross-references
-    state: running
+    state: approved
     implementer_session: e984682e-2fd1-4a28-9422-7efb84492440
     start_sha: 025783d2b9d1d4984b2bd46e9df6331a11f05624
+    commit_sha: eb31b27877243b1057608dcaddca80fa6950c16c
 ```
 ## Inferred-success log
 
