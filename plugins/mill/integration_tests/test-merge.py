@@ -1220,6 +1220,9 @@ def main() -> int:
         # Dead by construction -- never pushed to origin.
 
         _run(["git", "-C", str(repo_dead), "checkout", "main"], cwd=container_dead)
+        # Mirrors what mill-cleanup does to a torn-down parent: check_liveness treats a local
+        # refs/heads/<branch> as live, so the archived branch must be deleted to be dead.
+        _run(["git", "-C", str(repo_dead), "branch", "-D", "test/task-c"], cwd=container_dead)
         _run(["git", "-C", str(repo_dead), "checkout", "-b", "test/task-b"], cwd=container_dead)
         # main tracks no _mill/ (checkout removed the now-empty directory) -- recreate it.
         chain_mill.mkdir(exist_ok=True)
