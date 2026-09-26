@@ -17,6 +17,7 @@ from pathlib import Path
 
 import yaml
 
+import _finalize_cleanup
 import _inplace
 import _junction
 import _marker
@@ -525,6 +526,7 @@ def _apply_inplace_record(
                 f"(may already be gone): {result.stderr.strip()!r}",
                 file=sys.stderr,
             )
+        _finalize_cleanup.delete_checkpoint_branch(hub_root, task_branch)
         # Delete the remote branch after the local branch is gone so that re-spawning the same slug starts clean (idempotent per Shared Decision).
         _delete_remote_branch(hub_root, task_branch)
     else:
@@ -580,6 +582,7 @@ def _apply_worktree_record(
                     f"{result.stderr.strip()!r}",
                     file=sys.stderr,
                 )
+            _finalize_cleanup.delete_checkpoint_branch(hub_root, record.branch)
             # Delete the remote branch so re-spawning the same slug starts clean.
             # A missing remote ref is treated as success (idempotent teardown per Shared Decision "Remote-branch delete tolerates a missing ref").
             if record.branch:
