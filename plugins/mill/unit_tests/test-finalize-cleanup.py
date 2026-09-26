@@ -18,7 +18,12 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _safe_rmtree  # noqa: E402, F401
-from _finalize_cleanup import base_tracks_task_dir  # noqa: E402
+from _finalize_cleanup import (  # noqa: E402
+    base_tracks_task_dir,
+    checkpoint_branch_name,
+    delete_checkpoint_branch,
+    stash_pr_notes,
+)
 
 
 def _run_quiet(args: list[str], cwd: Path) -> int:
@@ -233,6 +238,67 @@ def main() -> int:
                 "and restores status.md to main's version",
                 exc,
             )
+
+        # --- checkpoint_branch_name ---
+        try:
+            assert checkpoint_branch_name("hanf/my-task") == "mill-checkpoint-hanf-my-task"
+            assert checkpoint_branch_name("plain") == "mill-checkpoint-plain"
+            ok("checkpoint_branch_name maps slashes to dashes")
+        except Exception as exc:
+            fail("checkpoint_branch_name maps slashes to dashes", exc)
+
+        # --- delete_checkpoint_branch ---
+        try:
+            def _branch_exists(name: str) -> bool:
+                return _run_quiet(
+                    ["git", "-C", str(clone), "rev-parse", "--verify", "--quiet", f"refs/heads/{name}"],
+                    clone,
+                ) == 0
+
+            subprocess.run(
+                ["git", "-C", str(clone), "branch", "mill-checkpoint-hanf-my-task"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(clone), "branch", "unrelated-branch"],
+                check=True, capture_output=True,
+            )
+            assert delete_checkpoint_branch(clone, "hanf/my-task") is True
+            assert not _branch_exists("mill-checkpoint-hanf-my-task")
+            assert _branch_exists("unrelated-branch")
+            assert delete_checkpoint_branch(clone, "hanf/my-task") is True
+            assert _branch_exists("unrelated-branch")
+            ok("delete_checkpoint_branch removes checkpoint, tolerates missing, spares others")
+        except Exception as exc:
+            fail("delete_checkpoint_branch removes checkpoint, tolerates missing, spares others", exc)
+
+        # --- stash_pr_notes ---
+        try:
+            worktree = tmp / "stash-worktree"
+            task_dir = worktree / "_mill"
+            task_dir.mkdir(parents=True)
+            scratch_copy = worktree / ".scratch" / "pr-notes-my-slug.md"
+            source = task_dir / "pr-notes.md"
+
+            assert stash_pr_notes(worktree, task_dir, "my-slug") is False
+            source.write_text("   \n", encoding="utf-8")
+            assert stash_pr_notes(worktree, task_dir, "my-slug") is False
+            assert not scratch_copy.exists()
+
+            source.write_text("first notes\n", encoding="utf-8")
+            assert stash_pr_notes(worktree, task_dir, "my-slug") is True
+            assert scratch_copy.read_text(encoding="utf-8") == "first notes\n"
+
+            source.write_text("second notes\n", encoding="utf-8")
+            assert stash_pr_notes(worktree, task_dir, "my-slug") is True
+            assert scratch_copy.read_text(encoding="utf-8") == "second notes\n"
+
+            source.unlink()
+            assert stash_pr_notes(worktree, task_dir, "my-slug") is True
+            assert scratch_copy.read_text(encoding="utf-8") == "second notes\n"
+            ok("stash_pr_notes copies, overwrites, and keeps scratch copy when source is gone")
+        except Exception as exc:
+            fail("stash_pr_notes copies, overwrites, and keeps scratch copy when source is gone", exc)
 
     finally:
         _safe_rmtree.safe_rmtree(tmp, allowed_root=tmp, ignore_errors=True)
