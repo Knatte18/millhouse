@@ -170,7 +170,7 @@ def porcelain(*entries: str) -> str:
 
 
 def test_ascii_mapping():
-    assert _merge._ascii("a—b→cé") == "a -- b -> c?"
+    assert _merge._ascii("a\u2014b\u2192c\u00e9") == "a -- b -> c?"
     assert _merge._ascii("plain") == "plain"
 
 
