@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: merge-teardown-hygiene
 branch: hanf/merge-teardown-hygiene
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-09-26T08:56:10Z'
 approved-helpers-and-cleanup  '2026-09-26T08:58:12Z'
 approved-skill-text  '2026-09-26T08:59:26Z'
 holistic-reviewing  '2026-09-26T08:59:36Z'
+holistic-fixing  '2026-09-26T09:00:15Z'
 ```
 
 ## Batches
