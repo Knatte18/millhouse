@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: subagent-handback-report
 branch: hanf/subagent-handback-report
 plan: _mill/plan
@@ -32,6 +32,7 @@ holistic-reviewing  '2026-09-26T09:20:39Z'
 holistic-fixing  '2026-09-26T09:21:21Z'
 nits-fixed-holistic  '2026-09-26T09:23:38Z'
 holistic-approved  '2026-09-26T09:23:42Z'
+done  '2026-09-26T09:23:52Z'
 ```
 
 ## Batches
