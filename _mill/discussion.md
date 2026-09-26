@@ -45,6 +45,8 @@ One branch accumulates per finished task (25 seen in one hub), cluttering `git b
 
 - Decision: in `mill-finalize` Step 3, before either cleanup branch runs, if `<task_dir>/pr-notes.md` exists and is non-empty, copy it to `<worktree>/.scratch/pr-notes-<slug>.md` (gitignored, so it survives `git rm -r` and is never committed).
   In Step 5, `git-pr` is invoked with the extra flag; `git-pr` Step 9 gains: when `--pr-notes <path>` is given and the file exists, append its contents to the generated body under a `## Reviewer notes` heading, then delete the scratch file after `gh pr create` succeeds (also after the REST fallback).
+  Argument parsing: `git-pr`'s Usage/argument handling (which treats the first remaining non-flag token as the base branch, and already strips `--skip-task-branch-guard`) must strip `--pr-notes` and its following value before base-branch selection, so the path is never read as the base branch.
+  The Usage section documents the new flag.
   `git-pr` reads notes only when `--pr-notes` is passed, so non-task and non-finalize uses are unaffected.
 - Helper: the stash is a script helper, not inline SKILL prose: `_finalize_cleanup.stash_pr_notes(worktree: Path, task_dir: Path) -> bool` (returns True when a scratch copy exists after the call).
   Scratch file name is task-specific to avoid collisions in the shared `.scratch/`: `.scratch/pr-notes-<slug>.md`, so the helper takes `slug` too: `stash_pr_notes(worktree, task_dir, slug)`.
