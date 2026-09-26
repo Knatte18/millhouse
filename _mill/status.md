@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: merge-teardown-hygiene
 branch: hanf/merge-teardown-hygiene
 plan: _mill/plan
@@ -22,4 +22,5 @@ plan-review-r1  '2026-09-26T08:54:11Z'
 plan-fix-r1  '2026-09-26T08:54:11Z'
 plan-review-r2  '2026-09-26T08:55:08Z'
 plan-fix-r2  '2026-09-26T08:55:08Z'
+planned  '2026-09-26T08:55:15Z'
 ```
