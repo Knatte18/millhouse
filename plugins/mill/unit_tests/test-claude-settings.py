@@ -17,6 +17,14 @@ Covers:
   additionalDirectories, and env block survive the reconciliation unchanged
   - reconcile_destructive_denylist: calling twice in a row is idempotent -- same deny list both
   times, second call skips the write entirely
+  - build_wiki_guard_command: output equals the exact command template
+  - reconcile_wiki_guard_hook: absent file gets one Bash entry with the command
+  - reconcile_wiki_guard_hook: legacy inline hook replaced in place, other matcher entry survives
+  - reconcile_wiki_guard_hook: older versioned script path replaced, not duplicated
+  - reconcile_wiki_guard_hook: second identical call is a write no-op
+  - reconcile_wiki_guard_hook: unrelated hook sharing the entry's hooks list survives
+  - reconcile_wiki_guard_hook: entry whose only hook was the legacy one is not left empty
+  - reconcile_wiki_guard_hook: unrelated keys and hook events survive unchanged
 """
 from __future__ import annotations
 
@@ -239,6 +247,128 @@ def test_reconcile_idempotent_second_call_skips_write() -> None:
 
 
 # ---------------------------------------------------------------------------
+# reconcile_wiki_guard_hook
+# ---------------------------------------------------------------------------
+
+NEW_COMMAND = _claude_settings.build_wiki_guard_command(Path("/plug/2.0.1"))
+LEGACY_COMMAND = "grep -qE 'daemon-owned|\\.wiki\\b' && echo blocked"
+OTHER_MATCHER_ENTRY = {
+    "matcher": "Read|Edit|Write|Grep|Glob",
+    "hooks": [{"type": "command", "command": "echo other"}],
+}
+
+
+def _write_and_reconcile(initial: dict | None) -> tuple[dict, str]:
+    """Write initial settings (or none), reconcile, and return (result, file text)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_path = Path(tmp) / "settings.json"
+        if initial is not None:
+            settings_path.write_text(json.dumps(initial, indent=2), encoding="utf-8")
+        result = _claude_settings.reconcile_wiki_guard_hook(settings_path, NEW_COMMAND)
+        return result, settings_path.read_text(encoding="utf-8")
+
+
+def test_build_wiki_guard_command_exact_template() -> None:
+    """The command matches the documented template exactly."""
+    expected = (
+        'PYTHONPATH="/plug/2.0.1/scripts" "$MILL_PYTHON" "/plug/2.0.1/scripts/millpy-wiki-guard.py"'
+    )
+    assert NEW_COMMAND == expected, f"Got {NEW_COMMAND!r}"
+    print("PASS build_wiki_guard_command -- exact template")
+
+
+def test_wiki_guard_absent_file_gets_bash_entry() -> None:
+    """A missing settings file is created with one Bash entry carrying the command."""
+    result, _ = _write_and_reconcile(None)
+    assert result["hooks"]["PreToolUse"] == [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": NEW_COMMAND}]}
+    ], f"Got {result!r}"
+    print("PASS reconcile_wiki_guard_hook -- absent file gets Bash entry")
+
+
+def test_wiki_guard_replaces_legacy_in_place() -> None:
+    """The legacy inline hook is replaced in place; the other matcher entry is untouched."""
+    initial = {"hooks": {"PreToolUse": [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": LEGACY_COMMAND}]},
+        OTHER_MATCHER_ENTRY,
+    ]}}
+    result, _ = _write_and_reconcile(initial)
+    assert result["hooks"]["PreToolUse"] == [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": NEW_COMMAND}]},
+        OTHER_MATCHER_ENTRY,
+    ], f"Got {result!r}"
+    print("PASS reconcile_wiki_guard_hook -- legacy hook replaced in place")
+
+
+def test_wiki_guard_replaces_older_versioned_path() -> None:
+    """An older installed script path is replaced, not duplicated."""
+    old_command = _claude_settings.build_wiki_guard_command(Path("/plug/1.0.0"))
+    initial = {"hooks": {"PreToolUse": [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": old_command}]},
+    ]}}
+    result, _ = _write_and_reconcile(initial)
+    assert result["hooks"]["PreToolUse"] == [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": NEW_COMMAND}]}
+    ], f"Got {result!r}"
+    print("PASS reconcile_wiki_guard_hook -- older versioned path replaced")
+
+
+def test_wiki_guard_second_call_is_noop() -> None:
+    """A second identical call leaves the file bytes unchanged."""
+    with tempfile.TemporaryDirectory() as tmp:
+        settings_path = Path(tmp) / "settings.json"
+        _claude_settings.reconcile_wiki_guard_hook(settings_path, NEW_COMMAND)
+        before_mtime = settings_path.stat().st_mtime_ns
+        before_text = settings_path.read_text(encoding="utf-8")
+        _claude_settings.reconcile_wiki_guard_hook(settings_path, NEW_COMMAND)
+        assert settings_path.stat().st_mtime_ns == before_mtime, "Second call must skip the write"
+        assert settings_path.read_text(encoding="utf-8") == before_text
+    print("PASS reconcile_wiki_guard_hook -- idempotent write no-op")
+
+
+def test_wiki_guard_keeps_unrelated_hook_in_shared_entry() -> None:
+    """An unrelated hook in the same entry survives while the matching hook is replaced."""
+    unrelated = {"type": "command", "command": "echo unrelated"}
+    initial = {"hooks": {"PreToolUse": [
+        {"matcher": "Bash", "hooks": [
+            unrelated, {"type": "command", "command": LEGACY_COMMAND},
+        ]},
+    ]}}
+    result, _ = _write_and_reconcile(initial)
+    assert result["hooks"]["PreToolUse"] == [
+        {"matcher": "Bash", "hooks": [unrelated, {"type": "command", "command": NEW_COMMAND}]}
+    ], f"Got {result!r}"
+    print("PASS reconcile_wiki_guard_hook -- unrelated hook in shared entry survives")
+
+
+def test_wiki_guard_duplicate_matches_leave_no_empty_entry() -> None:
+    """A second matching entry is removed entirely, not left with an empty hooks list."""
+    initial = {"hooks": {"PreToolUse": [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": LEGACY_COMMAND}]},
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": LEGACY_COMMAND}]},
+    ]}}
+    result, _ = _write_and_reconcile(initial)
+    assert result["hooks"]["PreToolUse"] == [
+        {"matcher": "Bash", "hooks": [{"type": "command", "command": NEW_COMMAND}]}
+    ], f"Got {result!r}"
+    print("PASS reconcile_wiki_guard_hook -- no empty entry left behind")
+
+
+def test_wiki_guard_preserves_unrelated_keys() -> None:
+    """permissions, env, and other hook events survive unchanged."""
+    initial = {
+        "permissions": {"allow": ["Read"]},
+        "env": {"MILL_PYTHON": "/py"},
+        "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo stop"}]}]},
+    }
+    result, _ = _write_and_reconcile(initial)
+    assert result["permissions"] == initial["permissions"]
+    assert result["env"] == initial["env"]
+    assert result["hooks"]["Stop"] == initial["hooks"]["Stop"]
+    print("PASS reconcile_wiki_guard_hook -- unrelated keys survive")
+
+
+# ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
 
@@ -253,6 +383,14 @@ def main() -> int:
         test_reconcile_preserves_unrelated_deny_and_other_keys,
         test_reconcile_idempotent_second_call_skips_write,
         test_mill_subagent_tools_matches_agent_frontmatter,
+        test_build_wiki_guard_command_exact_template,
+        test_wiki_guard_absent_file_gets_bash_entry,
+        test_wiki_guard_replaces_legacy_in_place,
+        test_wiki_guard_replaces_older_versioned_path,
+        test_wiki_guard_second_call_is_noop,
+        test_wiki_guard_keeps_unrelated_hook_in_shared_entry,
+        test_wiki_guard_duplicate_matches_leave_no_empty_entry,
+        test_wiki_guard_preserves_unrelated_keys,
     ]
     failures: list[str] = []
     for fn in tests:
