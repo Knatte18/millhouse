@@ -18,6 +18,8 @@ Run from hub root:
 """
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -112,9 +114,18 @@ def test_review_code_end_to_end(scratch: Path) -> None:
     Plants a stub ``_reviewer_dummy`` module on the path so load_reviewer finds it;
     asserts the resulting review file exists and its verdict is what the stub emitted.
     """
-    # --- wiki/active/<slug>/plan ---
-    wiki_root = scratch / "wiki"
+    # --- task worktree in container form: <scratch>/wts/<slug> is a real git repo on branch <slug>,
+    # which is what resolve_path's active-hub lookup requires.
     slug = "demo"
+    wiki_root = scratch / "wts" / slug
+    wiki_root.mkdir(parents=True)
+    for git_args in (
+        ["init", "-q", "-b", slug],
+        ["-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "init"],
+    ):
+        subprocess.run(["git", "-C", str(wiki_root), *git_args], check=True)
+
+    # --- <worktree>/active/<slug>/plan ---
     plan_dir = wiki_root / "active" / slug / "plan"
     plan_dir.mkdir(parents=True)
     reviews_dir = wiki_root / "active" / slug / "reviews"
@@ -185,24 +196,20 @@ def test_review_code_end_to_end(scratch: Path) -> None:
         encoding="utf-8",
     )
 
-    # --- Stub reviewer on the import path ---
-    stub_src = (
-        'MODE = "bulk"\n'
-        'def run(prompt_text):\n'
-        "    return (\n"
-        "        '# Review: Demo -- foundation\\n\\n'\n"
-        "        '```yaml\\n'\n"
-        "        'verdict: APPROVE\\n'\n"
-        "        'reviewer_model: dummy\\n'\n"
-        "        'reviewed_file: foundation\\n'\n"
-        "        'date: 2026-04-22\\n'\n"
-        "        '```\\n\\n'\n"
-        "        '## Verdict\\n\\nAPPROVE\\nStub ok.\\n'\n"
-        "    )\n"
-    )
-    stub_path = scratch / "_reviewer_dummy.py"
-    stub_path.write_text(stub_src, encoding="utf-8")
-    sys.path.insert(0, str(scratch))
+    # --- Stub reviewer: the registry's synthetic "test_stub" provider pops seeded responses ---
+    import _reviewer_test_stub
+
+    _reviewer_test_stub.seed([(
+        "# Review: Demo -- foundation\n\n"
+        "```yaml\n"
+        "verdict: APPROVE\n"
+        "reviewer_model: dummy\n"
+        "reviewed_file: foundation\n"
+        "date: 2026-04-22\n"
+        "```\n\n"
+        "## Verdict\n\nAPPROVE\nStub ok.\n",
+        "stub-session",
+    )])
 
     # --- Config ---
     cfg = {
@@ -210,24 +217,26 @@ def test_review_code_end_to_end(scratch: Path) -> None:
             "plan_dir": f"active/{slug}/plan/",
             "reviews_dir": f"active/{slug}/reviews/",
         },
-        "review": {"code": {"rounds": 3, "reviewer": "dummy"}},
+        "roles": {"code-review": {"holistic": {"rounds": 3, "reviewer": "test_stub"}}},
+        "llm": {"holistic_timeout": 60},
     }
 
     import _review_code
 
-    # Reload sys.path-affected modules to pick up the stub reviewer.
-    import importlib
-    import _review_common
-    importlib.reload(_review_common)
-    importlib.reload(_review_code)
-
-    result = _review_code.run(
-        cfg,
-        slug,
-        mill_dir,
-        wiki_root,
-        project_root,
-    )
+    # resolve_path derives the git root and hub from the process cwd.
+    original_cwd = Path.cwd()
+    os.chdir(wiki_root)
+    try:
+        result = _review_code.run(
+            cfg,
+            slug,
+            mill_dir,
+            wiki_root,
+            project_root,
+            git_root=wiki_root,
+        )
+    finally:
+        os.chdir(original_cwd)
     _assert(result.verdict == "APPROVE", f"unexpected verdict: {result.verdict}")
     _assert(result.type == "code", f"unexpected type: {result.type}")
     review_files = list(reviews_dir.glob("*-code-review-r1.md"))
