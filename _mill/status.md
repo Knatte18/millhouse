@@ -70,4 +70,5 @@ batches:
 
 ```text
 '2026-09-26T14:39:44Z'  merge-cli  round 1
+'2026-09-26T14:40:54Z'  skill-rewrite  round 1
 ```
