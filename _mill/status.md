@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-helpers-and-cleanup
 slug: merge-teardown-hygiene
 branch: hanf/merge-teardown-hygiene
 plan: _mill/plan
@@ -24,6 +24,7 @@ plan-review-r2  '2026-09-26T08:55:08Z'
 plan-fix-r2  '2026-09-26T08:55:08Z'
 planned  '2026-09-26T08:55:15Z'
 implementing  '2026-09-26T08:56:10Z'
+approved-helpers-and-cleanup  '2026-09-26T08:58:12Z'
 ```
 
 ## Batches
@@ -31,11 +32,17 @@ implementing  '2026-09-26T08:56:10Z'
 ```yaml
 batches:
   - name: helpers-and-cleanup
-    state: running
+    state: approved
     implementer_session: e89e3f6d-8161-466b-a1c2-b67e7da910dd
     start_sha: 78403623509b6aa6b83be2f33308f10034565027
+    commit_sha: 19f60ed1e0bd2fc924bd0d1f4327827b7c2d7911
     verify_baseline_failures: []
   - name: skill-text
     state: pending
     verify_baseline_failures: []
+```
+## Inferred-success log
+
+```text
+'2026-09-26T08:58:06Z'  helpers-and-cleanup  round 1
 ```
