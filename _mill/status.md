@@ -48,7 +48,9 @@ batches:
     commit_sha: 284c358abc66991868c50a49dcbc465fdcbe6718
     verify_baseline_failures: []
   - name: hook-install
-    state: pending
+    state: running
+    implementer_session: eb9a8b0b-d83e-4b2c-bb2a-ed7d44233151
+    start_sha: 27db6d3ac1ef8794904de0f9970483272eebced1
     verify_baseline_failures: []
   - name: symbol-resolution-tests
     state: pending
