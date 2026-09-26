@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: parent-thread-escalation
 branch: hanf/parent-thread-escalation
-plan: null
+plan: _mill/plan
 parent_branch: main
 parent_thread: MH:orch
 task: Ask the parent session when stuck (parent_thread)
@@ -25,4 +25,5 @@ discussion-fix-r6  '2026-09-25T05:58:47Z'
 discussion-fix-r7  '2026-09-26T06:56:46Z'
 discussion-fix-r8  '2026-09-26T07:02:30Z'
 discussed  '2026-09-26T07:02:30Z'
+planning  '2026-09-26T07:13:00Z'
 ```
