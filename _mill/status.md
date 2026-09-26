@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-symbol-resolution-tests
+phase: holistic-reviewing
 slug: tooling-false-positives
 branch: hanf/tooling-false-positives
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-wiki-guard  '2026-09-26T09:53:35Z'
 approved-symbol-resolution  '2026-09-26T09:55:30Z'
 approved-hook-install  '2026-09-26T09:57:22Z'
 approved-symbol-resolution-tests  '2026-09-26T09:59:02Z'
+holistic-reviewing  '2026-09-26T09:59:12Z'
 ```
 
 ## Batches
