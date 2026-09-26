@@ -19,10 +19,10 @@ Batch-local decision: tests live in batch 4 (a separate batch, so the large vali
 
 ### Card 7: framework-type exclusion and type-qualified member resolution
 
-- **Context:** none
+- **Context:**
+  - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
-  - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
