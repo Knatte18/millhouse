@@ -30,6 +30,7 @@ from _status import (
     read_fixer_fork_fallback_log,
     read_full,
     read_parent_branch,
+    read_parent_thread,
     read_slug,
     read_status,
     remove_batch,
@@ -1720,6 +1721,29 @@ def main() -> int:
             except ValueError as exc:
                 assert "parent_branch: key missing" in str(exc)
             print("PASS: set_parent_branch raises ValueError with neither key")
+
+        # --- read_parent_thread ---
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            thread_cases = [
+                ("parent_thread: mh:orch\n", "mh:orch"),
+                ("", None),
+                ('parent_thread: ""\n', None),
+                ('parent_thread: "   "\n', None),
+            ]
+            for rows, expected in thread_cases:
+                sp.write_text(_yaml_status(rows), encoding="utf-8")
+                assert read_parent_thread(sp) == expected, (
+                    f"read_parent_thread({rows!r}) = {read_parent_thread(sp)!r}, expected {expected!r}"
+                )
+            print("PASS: read_parent_thread returns the stripped value or None")
+
+            sp.write_text("# Status\n\n```yaml\nphase: [unclosed\n```\n", encoding="utf-8")
+            assert read_parent_thread(sp) is None
+            print("PASS: read_parent_thread returns None on unparseable yaml")
+
+            assert read_parent_thread(Path(tmp) / "missing.md") is None
+            print("PASS: read_parent_thread returns None for a missing file")
 
         # --- baseline row anchoring ---
         anchor_cases = [
