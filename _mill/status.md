@@ -31,7 +31,11 @@ implementing  '2026-09-26T08:56:10Z'
 ```yaml
 batches:
   - name: helpers-and-cleanup
-    state: pending
+    state: running
+    implementer_session: e89e3f6d-8161-466b-a1c2-b67e7da910dd
+    start_sha: 78403623509b6aa6b83be2f33308f10034565027
+    verify_baseline_failures: []
   - name: skill-text
     state: pending
+    verify_baseline_failures: []
 ```
