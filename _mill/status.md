@@ -38,7 +38,9 @@ batches:
     commit_sha: 19f60ed1e0bd2fc924bd0d1f4327827b7c2d7911
     verify_baseline_failures: []
   - name: skill-text
-    state: pending
+    state: running
+    implementer_session: 6cca88ec-0cb8-4bb8-82ef-a9ec57aadbb8
+    start_sha: 14efd9881dfc8a6d4410728cfd21d18d3f03effe
     verify_baseline_failures: []
 ```
 ## Inferred-success log
