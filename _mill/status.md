@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: parent-thread-escalation
 branch: hanf/parent-thread-escalation
 plan: _mill/plan
@@ -28,4 +28,21 @@ discussed  '2026-09-26T07:02:30Z'
 planning  '2026-09-26T07:13:00Z'
 plan-review-r1  '2026-09-26T07:18:08Z'
 planned  '2026-09-26T07:18:19Z'
+implementing  '2026-09-26T07:18:33Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: parent-escalation-helper
+    state: pending
+  - name: fixer-parent-guidance
+    state: pending
+  - name: ask-parent-skill
+    state: pending
+  - name: mill-go-base-wiring
+    state: pending
+  - name: plan-start-quick-wiring
+    state: pending
 ```
