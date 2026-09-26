@@ -140,7 +140,7 @@ Whatever model the operator started this session with is the model that does the
 
 4. **Failure path:**
 
-   - When `parent_escalated_quick_gate` is not yet set (session-local, initially false), set it and load the `ask-parent` skill with site `quick-gate`, reason `f"done gate failed: {result['reason']}"`, actions `retry,halt`.
+   - When `parent_escalated_quick_gate` is not yet set (session-local, initially false), set it and load the `ask-thread` skill with site `quick-gate`, reason `f"done gate failed: {result['reason']}"`, actions `retry,halt`.
      The builder lock stays held during the wait; the release bullet below runs only when the halt proceeds.
      On `retry`: apply the guidance as a fix (same rules as `## Fix`: this session edits, then commits via the `git-commit` skill), then re-run step 1 (the done gate) once and branch per step 2; a second failure takes this failure path again, where the spent escalation means the halt proceeds.
      On `halt`: continue with the bullets below, with `halt_suffix` appended to the `_status.set_blocked` reason and to the `BLOCKED:` message.

@@ -459,7 +459,7 @@ converged = (round >= min_review_rounds)
 
 2. **Waiting is never a decision point.**
    Waiting on this dispatch — either branch — is never a decision point: state in one sentence what you're waiting for, then wait. `AskUserQuestion` (or any equivalent free-text operator prompt) is banned here unconditionally — both the max-rounds escape (step 6) and the non-progress check (step 5) resolve by halting via `_status.set_blocked`, never by prompting.
-   Step 6 may first ask the parent session via the `ask-parent` skill — a wait bounded by `pipeline.parent_escalation_timeout_minutes`, not a prompt — and still halts via `_status.set_blocked` when the parent does not unblock it.
+   Step 6 may first ask the parent session via the `ask-thread` skill — a wait bounded by `pipeline.parent_escalation_timeout_minutes`, not a prompt — and still halts via `_status.set_blocked` when the parent does not unblock it.
    **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
    Run the discussion drift guard (see 'Discussion drift guard' above) now, before this checkpoint.
    Tree-guard checkpoint (Agent-mode only, pre-dispatch): call _treeguard.check_and_restore(worktree_root, "_mill", git_root=git_root) — and, on trigger, _status.append_recovery_log(status_path, result["timestamp"], result["restored_paths"]) — immediately before the Agent-mode dispatch below.
@@ -651,7 +651,7 @@ If not `converged` and `round < max_review_rounds`: commit the NIT fixes and the
 
 6. **Max-rounds escape** (only when round counter exhausts without APPROVE, BLOCKINGs still remain, non-progress did not fire, the operator has not given a live step-6-waiver instruction, AND `auto_approve_on_cap` is not `True` — see "Live operator waiver of step 6" above; when either the live waiver or `auto_approve_on_cap: true` applies, the implicit-approve-at-cap path documented there fires instead of this halt):
    first, parent escalation.
-   When `parent_escalated_plan_cap` is false, set it true and load the `ask-parent` skill with site `plan-cap`, reason `f"max-rounds exhausted after {N} rounds, {M} BLOCKINGs remain"`, actions `approve,retry,halt`.
+   When `parent_escalated_plan_cap` is false, set it true and load the `ask-thread` skill with site `plan-cap`, reason `f"max-rounds exhausted after {N} rounds, {M} BLOCKINGs remain"`, actions `approve,retry,halt`.
    - On `approve`: run the "Live operator waiver of step 6" implicit-approve-at-cap terminal actions (direct-`Edit` `approved: true` in the plan overview, commit, push, Handoff) with commit message `mill-plan: approve plan for {slug} (parent waived remaining BLOCKINGs at round cap)`.
      This does not go through Entry step 4's `--approve` pre-check, whose `phase == "blocked"` / `"max-rounds exhausted"` conditions do not hold because the block is not recorded yet.
    - On `retry`: apply the guidance to files under `<plan_dir>` only (the Plan Review guardrail still holds), run the same DAG re-validation and full-validate gate step 4d runs after its fixes, then commit `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "mill-plan: parent-guided retry for {slug}"` and push, with no `_status.append_phase` call.
@@ -696,7 +696,7 @@ Never hand-write or guess a date.
 - **Follow `mill-receiving-review`'s decision tree** — never dismiss a finding with "low risk", "out of scope", "pre-existing".
 - **Autonomous** — mill-plan never waits for an operator reply.
   The max-rounds escape and non-progress check resolve by halting via `_status.set_blocked` instead of prompting.
-  Step 6 may first ask the parent session via the `ask-parent` skill, a wait bounded by `pipeline.parent_escalation_timeout_minutes` and not a prompt, and still halts via `_status.set_blocked` when the parent does not unblock it.
+  Step 6 may first ask the parent session via the `ask-thread` skill, a wait bounded by `pipeline.parent_escalation_timeout_minutes` and not a prompt, and still halts via `_status.set_blocked` when the parent does not unblock it.
 - **Card `Context:` is an allowlist** — list every file the implementer needs to read WITHOUT editing.
   An empty or terse `Context:` is a review-blocker.
   The implementer reads ONLY listed files;
