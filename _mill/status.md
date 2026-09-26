@@ -46,26 +46,21 @@ batches:
     implementer_session: bc72cbc1-ede0-40a4-825f-2e90460c2fa7
     start_sha: 3cc10d6b7e0444a0ce05c110bf6f9e61d6cf7c8c
     commit_sha: 9298a9e831ca4510a7ff5bdb34d0bfa669999a59
-    verify_baseline_failures: ['NONZERO_EXIT: exit 1: Using CPython 3.14.4 interpreter at: /usr/bin/python3', 'NONZERO_EXIT:
-    exit 1: --only: unknown test file(s): [''test-wiki-guard.py'']']
   - name: symbol-resolution
     state: approved
     implementer_session: a3842c6e-bdf8-442e-a02b-7a671b58e1cb
     start_sha: 27fa3b621d37e5828f346588a5fbd7e3406ed231
     commit_sha: 284c358abc66991868c50a49dcbc465fdcbe6718
-    verify_baseline_failures: []
   - name: hook-install
     state: approved
     implementer_session: eb9a8b0b-d83e-4b2c-bb2a-ed7d44233151
     start_sha: 27db6d3ac1ef8794904de0f9970483272eebced1
     commit_sha: 32f1eb30cba547aa681970d36116bb59486295d5
-    verify_baseline_failures: []
   - name: symbol-resolution-tests
     state: approved
     implementer_session: 4dfd3809-2e09-4563-ad18-8de0d42e57cc
     start_sha: 5f12d2368a5df86e7c2b58bc82d1ec96db7db170
     commit_sha: 31a432aced636f3865de882d17a162bf877768fe
-    verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-plan-validate-symbol-resolution.py'']']
 ```
 ## Inferred-success log
 
