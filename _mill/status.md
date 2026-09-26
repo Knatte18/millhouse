@@ -66,4 +66,5 @@ batches:
 '2026-09-26T09:53:27Z'  wiki-guard  round 1
 '2026-09-26T09:55:29Z'  symbol-resolution  round 1
 '2026-09-26T09:57:21Z'  hook-install  round 1
+'2026-09-26T09:59:01Z'  symbol-resolution-tests  round 1
 ```
