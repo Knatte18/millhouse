@@ -10,6 +10,10 @@ Companion to `mill-start`'s `--orch` flag. A worker running `/mill-start --orch`
 
 **The `discussion.md` wait runs in this session, not in a fork.** A fork that arms a `Monitor` wait and then produces no further output is treated as finished and torn down — the monitor trigger has nothing left to wake up, so a fork left waiting on one never resumes. Only this top-level session reliably survives an armed `Monitor` wait and gets woken back up when it fires. So: **this session owns every `Monitor` wait, one per slug; a fork is only launched per slug after that slug's `discussion.md` is already confirmed to exist** — the fork only ever does the (non-blocking) read/review/write work, which is what still needs to stay out of this session's own context.
 
+**Trigger.** A worker whose `status.md` records this session as `parent_thread` sends one message when its `discussion.md` is ready (`... -- run /orch-review <slug>`), so this skill can be run on that message instead of being armed in advance.
+`discussion.md` then already exists, so Step 2's wait returns `READY` on its first poll.
+Arming it ahead of time still works and is the fallback when no message arrives.
+
 This skill (neither the top-level turn nor any fork it spawns) ever dispatches a non-fork agent, touches `_mill/reviews/`, or commits/pushes anything — its entire footprint is writing one ephemeral file per slug. Each waiting worker consumes its own file and is solely responsible for turning it into the canonical, committed review artifact.
 
 ## Orchestrator-side steps (run here, in this session)

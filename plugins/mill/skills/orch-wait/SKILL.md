@@ -10,9 +10,21 @@ Loaded by `mill-start`'s `## Orch mode (--orch)` section, only for discussion-re
 
 This skill assumes `mill-start`'s Entry and Path Setup have already run — `slug`, `cfg`, `git_root`, `worktree_root`, `status_path`, `reviews_dir` are already bound. It performs one round's worth of work, then hands back to `mill-start`'s own Phase: Discussion Review at step 3.
 
-## Step 1 — Announce the wait
+## Step 1 — Announce the wait and notify the orchestrator
 
 Report to the log/status: `"Waiting for orchestrator review -- write _mill/orch-review.md next to discussion.md to resume."` No operator is present in this worker's own conversation to prompt.
+
+Then send the orchestrator one notification, so it need not have armed `/orch-review <slug>` beforehand.
+`discussion.md` is already written and committed at this point.
+
+1. Read `parent_thread = _status.read_parent_thread(status_path)`.
+   When it is `None`, skip the notification.
+2. Load `SendMessage` with `ToolSearch` (`select:SendMessage`) if its schema is not loaded.
+3. Call `SendMessage(to: <parent_thread>, message: "discussion.md for <slug> is ready for your review at <worktree_root>/_mill/discussion.md -- run /orch-review <slug>")`, with `parent_thread` verbatim (never case-folded) and the message plain ASCII.
+
+This is a one-way notification: no `ask-id`, no reply parsing, no retry.
+A missing `parent_thread`, a `ToolSearch` miss, or a `SendMessage` error (session not listed in `ListAgents`, renamed, closed) is logged as `"orch-wait: parent notify skipped -- <reason>"` and never aborts the run.
+Continue to Step 2 in every case; if nobody acts on the message, the orchestrator can still arm `/orch-review <slug>` by hand before the timeout.
 
 ## Step 2 — Blocking wait for the file
 
