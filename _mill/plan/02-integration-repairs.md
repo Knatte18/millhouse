@@ -4,10 +4,14 @@
 task: "millpy-implement finalize/resume fixes and the red integration suites"
 batch: "integration-repairs"
 number: 2
-cards: 4
+cards: 5
 verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-plan-assets.py && PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-go-assets.py && PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-merge.py && PYTHONPATH= uv run --project plugins/mill python plugins/mill/integration_tests/test-agent-mode-commit-target.py
 depends-on: [1]
 ```
+
+## Prior failure
+
+- r1 finalize: stuck verify; test-merge.py failed at the #817 cycle scenario: `expected a 10-hop cycle outcome, got {'outcome': 'resolved', 'branch': 'test/cycle-y', 'hops': ['cycle-x']}` -- the cycle fixture leaves `test/cycle-x`/`test/cycle-y` as live local branches (same cause as Card 7).
 
 ## Batch Scope
 
@@ -82,6 +86,21 @@ Batch-local decision: no product code is changed here.
   Refresh the assertions so the recorded `commit_sha` is compared with the task worktree HEAD after the content commit, and keep the assertion that the recorded SHA is not an ancestor of the hub's `main`.
   `_forward_output` also emits a `scope_violations` list for untracked scratch files; the test must not assert its absence.
 - **Commit:** `test(agent-mode-commit-target): add a content commit so the no-content-commit gate passes`
+
+### Card 9: test-merge cycle fixture deletes the local cycle branches
+
+- **Context:**
+  - `plugins/mill/scripts/_parent_branch.py`
+- **Edits:**
+  - `plugins/mill/integration_tests/test-merge.py`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** The "#817 cycle" scenario leaves `test/cycle-x` and `test/cycle-y` as local branches, which `check_liveness` treats as live, so the walk resolves instead of hitting the 10-hop cap.
+  After both `archive/cycle-*` tags exist and before calling `resolve_dead_parent`, check out `main` and delete both local branches with `git branch -D` (same rationale as Card 7).
+  Run the whole `test-merge.py` and fix any further scenario that fails for the same local-branch reason; do not change `_parent_branch.py`.
+  Run the full batch `verify:` chain as one command and confirm every suite exits 0.
+- **Commit:** `test(merge): delete local cycle branches so the 10-hop cap scenario is reachable`
 
 ## Batch Tests
 

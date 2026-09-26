@@ -17,7 +17,7 @@ Batch-local decision: fixture-first, product fix only for a proven spawn bug.
 
 ## Cards
 
-### Card 9: test-spawn fixture resolves its wiki and matches current spawn behaviour
+### Card 10: test-spawn fixture resolves its wiki and matches current spawn behaviour
 
 - **Context:**
   - `plugins/mill/scripts/_paths.py`
