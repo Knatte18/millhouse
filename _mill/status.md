@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-core-entry
+phase: approved-merge-core-squash
 slug: mill-merge-script
 branch: hanf/mill-merge-script
 plan: _mill/plan
@@ -28,6 +28,7 @@ plan-review-r3  '2026-09-26T14:30:14Z'
 planned  '2026-09-26T14:30:24Z'
 implementing  '2026-09-26T14:30:43Z'
 approved-merge-core-entry  '2026-09-26T14:34:53Z'
+approved-merge-core-squash  '2026-09-26T14:38:48Z'
 ```
 
 ## Batches
@@ -43,9 +44,10 @@ batches:
     can''t open file ''/home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/unit_tests/test-merge.py'':
     [Errno 2] N']
   - name: merge-core-squash
-    state: running
+    state: approved
     implementer_session: 89bc3804-ba78-45d9-b31b-0b26a33196f8
     start_sha: f971c521a7d7e64d770605780d465be33d081a2f
+    commit_sha: 6801fabc6f216d63db9a26fbad18c1d0b85ed877
     verify_baseline_failures: ['NONZERO_EXIT: exit 2: /home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/.venv/bin/python3:
     can''t open file ''/home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/unit_tests/test-merge.py'':
     [Errno 2] N']
