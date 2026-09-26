@@ -84,7 +84,7 @@ Touches the contract doc and the shared dispatch section in one batch because ev
   Change "Write the notification's message to `<brief_path>.out.md`" to write the report message (hand-back text, notification payload as fallback).
   In sub-item 2's defensive re-check, replace "wait for the agent's own next `<task-notification>` for the same `agentId`" the same way.
   In `**Agent-mode properties:**`, change the first bullet so the orchestrator waits for the background agent's terminal event (hand-back message, with the notification as fallback) instead of polling a log file, and change the second bullet's "produces a notification indicating it did not complete normally" to say the notification's `<status>` tag indicates it.
-  Finally grep the whole `## Agent-mode dispatch` section for the string "notification" and confirm every remaining hit is one of: the status/fallback role, the Monitor-wait sentence pointing at the contract doc, or a reference to the `<status>` tag.
+  Finally run `grep -n -i notification` over the file and inspect the hits inside the `## Agent-mode dispatch` section (grep is the check, not a test); confirm every remaining hit is one of: the status/fallback role, the Monitor-wait sentence pointing at the contract doc, or a reference to the `<status>` tag.
 - **Commit:** `docs(mill-go-base): hand-back message wording in step 5.5 and Agent-mode properties`
 
 ## Batch Tests
