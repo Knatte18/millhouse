@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-cli
+phase: approved-skill-rewrite
 slug: mill-merge-script
 branch: hanf/mill-merge-script
 plan: _mill/plan
@@ -30,6 +30,7 @@ implementing  '2026-09-26T14:30:43Z'
 approved-merge-core-entry  '2026-09-26T14:34:53Z'
 approved-merge-core-squash  '2026-09-26T14:38:48Z'
 approved-merge-cli  '2026-09-26T14:39:44Z'
+approved-skill-rewrite  '2026-09-26T14:40:55Z'
 ```
 
 ## Batches
@@ -59,9 +60,10 @@ batches:
     commit_sha: 4bd75ba7d8dfa125ece621f6afbecff77e73c770
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-merge.py'', ''test-millpy-merge.py'']']
   - name: skill-rewrite
-    state: running
+    state: approved
     implementer_session: d11069dd-b580-468c-b8d4-7cbfec841311
     start_sha: 166e297e5b03fe15e08fbb61ff53afb9e103907d
+    commit_sha: f2f5ee9fcd68f6f6247c9b21333b6d0bc7061fe0
     verify_baseline_failures: []
   - name: cross-references
     state: pending
