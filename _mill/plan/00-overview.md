@@ -29,6 +29,11 @@ batches:
     name: symbol-resolution
     file: 03-symbol-resolution.md
     depends-on: []
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-plan-validate-cross-batch-build-break.py test-plan-validate-indent-drift-line.py
+  - number: 4
+    name: symbol-resolution-tests
+    file: 04-symbol-resolution-tests.md
+    depends-on: [3]
     verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-plan-validate-symbol-resolution.py
 ```
 
@@ -44,7 +49,7 @@ batches:
 
 - **Decision:** validator tests go in a NEW file `test-plan-validate-symbol-resolution.py`, modelled on the sibling standalone `test-plan-validate-indent-drift-line.py`; `test-plan-validate.py` is far too large to cite as Context and is run only as a regression check inside batch 3's verify.
 - **Rationale:** keeps the batch under the context cap.
-- **Applies to:** symbol-resolution
+- **Applies to:** symbol-resolution, symbol-resolution-tests
 
 ### Decision: hook fails open when its script path is stale
 
