@@ -367,7 +367,7 @@ If the returned dict's `"triggered"` field is `True`, call `_status.append_recov
 it never halts the phase. mill-plan runs a structurally identical review-loop architecture to mill-start and mill-go and had no equivalent safeguard before this task (see `_mill/discussion.md`'s "Wiring point: all three review loops, not just mill-start" Decision).
 
 Load the `mill-receiving-review` skill now, unconditionally, before round 1's dispatch below — this is what makes step 3's "before evaluating or acting on findings" rule structurally satisfiable.
-Under Agent-mode dispatch the reviewer's findings arrive only in the review file it writes, not embedded in the `<task-notification>` payload (which now carries only a one-line ack);
+Under Agent-mode dispatch the reviewer's findings arrive only in the review file it writes, and the reviewer's hand-back message carries only a one-line ack;
 the orchestrator must read that review file to present BLOCKING findings or NITs to the user, so the skill must already be active in context before that file is ever read.
 Loading it this early is still correct, it is just no longer motivated by the payload containing the findings.
 
