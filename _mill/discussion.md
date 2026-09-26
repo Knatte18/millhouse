@@ -25,7 +25,8 @@ Consequences today: step 2 waits on a notification that adds nothing, step 3 cla
 - `plugins/mill/skills/mill-go-base/holistic-review.md`: the NIT-fixer paragraph that says "After the dispatch's `<task-notification>` is accepted: capture the notification to `<brief_path>.out.md`".
 - `plugins/mill/docs/harness-tool-contracts.md`, "## Agent tool": the contract bullet that says the notification payload carries the final message text.
 - `plugins/mill/skills/mill-pause/SKILL.md`: the in-flight Agent-mode bullet that waits for the `<task-notification>`.
-- `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md`: the one sentence each that describes the notification payload as "carries only a one-line ack".
+- `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md`: the sentence each that describes the notification payload as "carries only a one-line ack".
+  The plan writer greps both files for `notification` and classifies every hit: Monitor-wait sentences stay, Agent-payload sentences are reworded.
 - Error-message wording in `plugins/mill/scripts/_implementer_common.py` and `plugins/mill/scripts/millpy-merge-in-subagent.py` ("notification message" -> "subagent report message") and the comment beside each `html.unescape` call.
 - Comments in `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py`, `unit_tests/test-review-finalize.py` and `unit_tests/test-implementer-common.py` that contrast reviewer output with the implementer's `<task-notification>` payload being HTML-escaped: reword to "the implementer's report (notification payload or hand-back message)" so they stay true; no logic change.
 
@@ -53,6 +54,7 @@ Consequences today: step 2 waits on a notification that adds nothing, step 3 cla
   The orchestrator does not wait for the notification once a hand-back message carrying the report has arrived and no error signal is pending.
   Concretely: (1) hand-back message arrives with a report -> classify from it, capture it (step 4), run finalize; a notification arriving later for the same `agentId` is ignored unless its `<status>` is non-`completed`, in which case step 3's non-clean-terminal handling applies (probe first).
   (2) Notification with `<status>` `completed` whose result only points to a hand-back message, and no hand-back message in context -> the pointer says the report was already delivered, so none is coming; fall through immediately to step 3's existing empty/no-structured-report handling, no waiting: implementer -> Clean mid-work stop path (finalize with whatever `.out.md` exists; finalize's commit recount decides); reviewer -> finalize keyed on `output_path` presence; fixer/merge-in -> same finalize path.
+  A hand-back message that holds no structured `status` block (implementer) gets the same step 3 empty/no-structured-report handling as case (2).
   (3) Notification with a non-`completed` `<status>` or an API-error marker and no hand-back message -> existing step 3 paths unchanged.
   Observed order: the hand-back message arrives before the notification in every reported run (Problem section); case (2) is a safety net for a harness that reorders or drops the message, not an expected path.
 - Rationale: the issues' suggested fix is "document the hand-back message as the report source and define the order of the two events".
