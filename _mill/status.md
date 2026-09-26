@@ -40,7 +40,9 @@ batches:
     implementer_session: ba129d33-d563-42d0-9099-5ae8edb46047
     start_sha: 557d9e263b8b52b9f2bc4e67705508638a753f09
   - name: spawn-suite
-    state: pending
+    state: running
+    implementer_session: 721a4ecb-ec04-4eac-a144-370b8d927170
+    start_sha: 126d0494c69db1664bfe6336dcbc0f87d7632899
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-31f5e19d',
   'NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-32649cd0']
 ```
