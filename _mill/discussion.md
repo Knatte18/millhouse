@@ -12,7 +12,7 @@ parent_branch: main
 `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" tells the orchestrator to wait for the `<task-notification>` of a background subagent and read the subagent's final message from its payload.
 The harness now delivers the report as a separate `SubagentHandback` message (an agent-message from the `agentId`).
 The `<task-notification>`'s `<result>` only says the report "was delivered to you as a message from <agentId>" and carries no report text.
-The hand-back message can arrive before the notification.
+The hand-back message arrives before the notification in the observed runs.
 Observed on every implementer and reviewer dispatch in three runs (GitHub issues #1153, #1155, #1157, all already closed and folded into this task).
 
 Consequences today: step 2 waits on a notification that adds nothing, step 3 classifies on a payload that is empty, and step 4 tells the orchestrator to write "the message captured from the `<task-notification>`" to `<brief_path>.out.md`, which is the wrong source.
@@ -28,7 +28,6 @@ Consequences today: step 2 waits on a notification that adds nothing, step 3 cla
 - `plugins/mill/skills/mill-start/SKILL.md` and `plugins/mill/skills/mill-plan/SKILL.md`: the one sentence each that describes the notification payload as "carries only a one-line ack".
 - Error-message wording in `plugins/mill/scripts/_implementer_common.py` and `plugins/mill/scripts/millpy-merge-in-subagent.py` ("notification message" -> "subagent report message") and the comment beside each `html.unescape` call.
 - Comments in `millpy-review-discussion.py`, `millpy-review-plan.py`, `millpy-review-code.py`, `unit_tests/test-review-finalize.py` and `unit_tests/test-implementer-common.py` that contrast reviewer output with the implementer's `<task-notification>` payload being HTML-escaped: reword to "the implementer's report (notification payload or hand-back message)" so they stay true; no logic change.
-- A unit test pinning the new SKILL wording only if an existing SKILL-text test pattern fits (see Testing).
 
 **Out:**
 
@@ -50,13 +49,12 @@ Consequences today: step 2 waits on a notification that adds nothing, step 3 cla
 ### event-order-and-what-to-wait-for
 
 - Decision: Define the two events explicitly.
-  The hand-back message and the `<task-notification>` are separate events and either may arrive first; the hand-back message normally arrives first.
+  The hand-back message and the `<task-notification>` are separate events; the hand-back message arrives first in every observed run.
   The orchestrator does not wait for the notification once a hand-back message carrying the report has arrived and no error signal is pending.
   Concretely: (1) hand-back message arrives with a report -> classify from it, capture it (step 4), run finalize; a notification arriving later for the same `agentId` is ignored unless its `<status>` is non-`completed`, in which case step 3's non-clean-terminal handling applies (probe first).
-  (2) Notification arrives first with `<status>` `completed` and a result that only points to a hand-back message -> that is not a report; take no action this turn and wait for the hand-back message (it is already in flight or delivered).
-  Bound: if no hand-back message has been seen by the time the notification is processed and the payload is empty or only a pointer, treat the situation as step 3's existing empty/no-structured-report handling instead of waiting indefinitely: implementer -> Clean mid-work stop path (finalize with whatever `.out.md` exists; finalize's commit recount decides); reviewer -> finalize keyed on `output_path` presence; fixer/merge-in -> same finalize path.
-  A hand-back message is delivered by the harness before or together with the notification in the observed runs, so this bound is a safety net for older harnesses, not an expected path.
-  (3) Notification arrives with a non-`completed` `<status>` or an API-error marker and no hand-back message -> existing step 3 paths unchanged.
+  (2) Notification with `<status>` `completed` whose result only points to a hand-back message, and no hand-back message in context -> the pointer says the report was already delivered, so none is coming; fall through immediately to step 3's existing empty/no-structured-report handling, no waiting: implementer -> Clean mid-work stop path (finalize with whatever `.out.md` exists; finalize's commit recount decides); reviewer -> finalize keyed on `output_path` presence; fixer/merge-in -> same finalize path.
+  (3) Notification with a non-`completed` `<status>` or an API-error marker and no hand-back message -> existing step 3 paths unchanged.
+  Observed order: the hand-back message arrives before the notification in every reported run (Problem section); case (2) is a safety net for a harness that reorders or drops the message, not an expected path.
 - Rationale: the issues' suggested fix is "document the hand-back message as the report source and define the order of the two events".
   Step 3's status-based classification needs a defined behaviour when the message arrives before any notification.
 - Rejected: always wait for both events — reintroduces the wasted wait the issues complain about.
@@ -107,7 +105,7 @@ Consequences today: step 2 waits on a notification that adds nothing, step 3 cla
 
 - No behaviour change in Python beyond message wording; existing unit tests must still pass: run `PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py` (or the repo's documented equivalent).
 - `plugins/mill/unit_tests/test-mill-go-variants.py` pins the presence of `## Agent-mode dispatch`; it must keep passing.
-- Add or extend a small SKILL-text test only if an existing test already greps SKILL text for required phrases (mirror it); otherwise verify with `grep` that no remaining sentence tells the orchestrator to read the report solely from the `<task-notification>` payload.
+- No new unit test: SKILL prose is verified with `grep` only — confirm that no remaining sentence tells the orchestrator to read the report solely from the `<task-notification>` payload.
 - Manual checklist for the plan's verify step: grep `mill-go-base/SKILL.md`, `holistic-review.md`, `mill-pause/SKILL.md` for `notification` and confirm every hit is either the status/fallback role or a Monitor-wait sentence.
 
 ## Q&A log
