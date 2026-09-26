@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-parent-escalation-helper
+phase: approved-fixer-parent-guidance
 slug: parent-thread-escalation
 branch: hanf/parent-thread-escalation
 plan: _mill/plan
@@ -30,6 +30,7 @@ plan-review-r1  '2026-09-26T07:18:08Z'
 planned  '2026-09-26T07:18:19Z'
 implementing  '2026-09-26T07:18:33Z'
 approved-parent-escalation-helper  '2026-09-26T07:26:24Z'
+approved-fixer-parent-guidance  '2026-09-26T07:27:48Z'
 ```
 
 ## Batches
@@ -43,9 +44,10 @@ batches:
     commit_sha: 738ea812d8c43ee988ba06edb6208c989b4c8e41
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-parent.py'', ''test-millpy-ask-parent.py'']']
   - name: fixer-parent-guidance
-    state: running
+    state: approved
     implementer_session: c8024833-c7c7-405a-8fe0-213ec584aff6
     start_sha: 54b1bdc2c0279c73e28838054d7192bc5e02e1bf
+    commit_sha: 942ef51f02065dbed22010286808cf03b32dc76f
     verify_baseline_failures: []
   - name: ask-parent-skill
     state: pending
@@ -57,7 +59,6 @@ batches:
     state: pending
     verify_baseline_failures: []
 ```
-
 ## Inferred-success log
 
 ```text
