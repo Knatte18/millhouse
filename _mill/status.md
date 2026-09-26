@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-review-r1
+phase: plan-fix-r1
 slug: ask-thread-skill
 branch: hanf/ask-thread-skill
 plan: _mill/plan
@@ -19,4 +19,5 @@ discussing  '2026-09-26T07:59:00Z'
 discussed  '2026-09-26T08:36:18Z'
 planning  '2026-09-26T08:40:05Z'
 plan-review-r1  '2026-09-26T08:44:33Z'
+plan-fix-r1  '2026-09-26T08:45:04Z'
 ```

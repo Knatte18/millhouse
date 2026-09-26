@@ -3,7 +3,7 @@
 ```yaml
 task: 'Unify ask-parent into ask-thread: ask any named session, default parent'
 slug: "ask-thread-skill"
-approved: false
+approved: true
 started: "20260926-083801"
 parent_branch: "main"
 root: ""

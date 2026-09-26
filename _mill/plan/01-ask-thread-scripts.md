@@ -121,6 +121,7 @@ The skill file still names the old CLI until batch 2 lands; nothing executes it 
   - Tests in `test-millpy-ask-thread.py` (keep existing cases, adapted: `data["target"]`, `consume` now passes `--ask-id` and writes the `ask-id:` line into the reply fixture):
     - `prepare --questions-file <tmp file>` happy path (escalates, message contains the questions, JSON has `ask_id`) and with `--to other` (`target == "other"`).
     - `--to` with `--site` -> exit 1, empty stdout.
+    - `--questions-file` naming a nonexistent file -> exit 1, empty stdout (the `OSError` branch).
     - neither the `--site` set nor `--questions-file` -> exit 1.
     - `consume --ask-id <id> --open` returns the reply text and deletes the file.
     - `consume` without `--ask-id` -> exit 1; with both `--actions` and `--open` -> exit 1.
