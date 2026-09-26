@@ -36,7 +36,9 @@ batches:
     commit_sha: cbce45fad97fe54015275a5dbf017f9bda17a2de
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-thread.py'', ''test-millpy-ask-thread.py'']']
   - name: ask-thread-skill-and-callers
-    state: pending
+    state: running
+    implementer_session: bfcb26ab-7dc1-4c7e-805a-3684ef735307
+    start_sha: 594102680f7c3a785d9e7698266c0199eb0a9ccc
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-thread.py'', ''test-millpy-ask-thread.py'']']
 ```
 ## Inferred-success log
