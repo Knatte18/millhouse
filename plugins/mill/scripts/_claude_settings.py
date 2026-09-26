@@ -25,10 +25,23 @@ Public API:
     catastrophic-target rules (DESTRUCTIVE_DENY), write back only if the
     list actually changed, and return the resulting dict.
 
-Module-level constant:
+    build_wiki_guard_command(plugin_root)
+    Return the PreToolUse hook command line that runs the wiki-guard script
+    from plugin_root.
+
+    reconcile_wiki_guard_hook(settings_path, hook_command)
+    Read settings_path (or start from {} if absent), install hook_command as the
+    single wiki-guard PreToolUse hook under the "Bash" matcher, replacing any
+    older installed path or the legacy inline grep hook in place, write back
+    only if something changed, and return the resulting dict.
+
+Module-level constants:
     MILL_SUBAGENT_TOOLS The union of mill-implementer.md's and mill-reviewer.md's `tools:`
     frontmatter -- the single source of truth Phase 4.8 passes as tool_names, so the allowlist and
     the two agent definitions cannot silently drift apart.
+
+    WIKI_GUARD_SCRIPT_NAME File name of the wiki-guard hook script, used both to build the hook
+    command and to recognise a previously installed hook.
 """
 from __future__ import annotations
 
@@ -54,6 +67,83 @@ DESTRUCTIVE_DENY = [
     "Bash(rm -rf /boot:*)", "Bash(rm -rf /opt:*)", "Bash(rm -rf /bin:*)",
     "Bash(rm -rf /lib:*)",
 ]
+
+WIKI_GUARD_SCRIPT_NAME = "millpy-wiki-guard.py"
+
+
+def build_wiki_guard_command(plugin_root: Path) -> str:
+    """
+    Build the PreToolUse hook command that runs the wiki-guard script from plugin_root.
+
+    The command embeds the versioned plugin cache path, so it goes stale (and the guard fails
+    open) after a plugin cache refresh until mill-setup Phase 4.8 is re-run.
+
+    Args:
+        plugin_root: The plugin root directory containing scripts/.
+
+    Returns:
+        The shell command string, with PYTHONPATH pointing at the scripts directory.
+    """
+    scripts_dir = f"{plugin_root.as_posix()}/scripts"
+    return f'PYTHONPATH="{scripts_dir}" "$MILL_PYTHON" "{scripts_dir}/{WIKI_GUARD_SCRIPT_NAME}"'
+
+
+def _is_wiki_guard_hook(hook: dict) -> bool:
+    """Return True for a current/older installed wiki-guard hook or the legacy inline grep hook."""
+    command = hook.get("command", "")
+    if WIKI_GUARD_SCRIPT_NAME in command:
+        return True
+    return "daemon-owned" in command and "\\.wiki\\b" in command
+
+
+def reconcile_wiki_guard_hook(settings_path: Path, hook_command: str) -> dict:
+    """
+    Ensure settings_path's PreToolUse "Bash" matcher carries exactly one wiki-guard hook, hook_command.
+
+    Loads the existing settings.json (or starts from an empty dict), then finds every hook object
+    under Bash-matcher entries that is either an installed wiki-guard script command (any path) or
+    the legacy inline grep hook.
+    The first match is replaced in place with hook_command and any further matches are removed;
+    unrelated hooks sharing an entry survive, and an entry is dropped only when its hooks list
+    becomes empty.
+    When no match exists a new Bash entry is appended.
+    The file is only rewritten when something changed.
+
+    Args:
+        settings_path: Path to the global ~/.claude/settings.json file.
+        hook_command: The command from build_wiki_guard_command.
+
+    Returns:
+        The resulting settings dict (same shape as the file's JSON).
+    """
+    data = json.loads(settings_path.read_text(encoding="utf-8")) if settings_path.exists() else {}
+    entries = data.setdefault("hooks", {}).setdefault("PreToolUse", [])
+    new_hook = {"type": "command", "command": hook_command}
+
+    matches = [
+        (entry, hook)
+        for entry in entries
+        if entry.get("matcher") == "Bash"
+        for hook in entry.get("hooks", [])
+        if _is_wiki_guard_hook(hook)
+    ]
+
+    if len(matches) == 1 and matches[0][1].get("command") == hook_command:
+        return data
+
+    if not matches:
+        entries.append({"matcher": "Bash", "hooks": [new_hook]})
+    else:
+        first_entry, first_hook = matches[0]
+        first_entry["hooks"][first_entry["hooks"].index(first_hook)] = new_hook
+        for entry, hook in matches[1:]:
+            entry["hooks"] = [candidate for candidate in entry["hooks"] if candidate is not hook]
+        data["hooks"]["PreToolUse"] = [
+            entry for entry in entries if entry.get("hooks") != [] or "hooks" not in entry
+        ]
+
+    settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return data
 
 
 def reconcile_destructive_denylist(settings_path: Path) -> dict:
