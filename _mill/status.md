@@ -36,13 +36,20 @@ implementing  '2026-09-26T07:18:33Z'
 ```yaml
 batches:
   - name: parent-escalation-helper
-    state: pending
+    state: running
+    implementer_session: 36c9a503-d017-4c72-bc4e-d2c9509fa5be
+    start_sha: 665e3c6d52d362cedfe0227d1111b4bd45356705
+    verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-parent.py'', ''test-millpy-ask-parent.py'']']
   - name: fixer-parent-guidance
     state: pending
+    verify_baseline_failures: []
   - name: ask-parent-skill
     state: pending
+    verify_baseline_failures: []
   - name: mill-go-base-wiring
     state: pending
+    verify_baseline_failures: []
   - name: plan-start-quick-wiring
     state: pending
+    verify_baseline_failures: []
 ```
