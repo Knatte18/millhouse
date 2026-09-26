@@ -300,10 +300,10 @@ This three-step pattern applies at every dispatch point:
    If the `<task-notification>` `<status>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 3's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
    a clean turn-exhaustion stop still routes straight to Clean mid-work stop, unprobed — see step 3(b)).
 
-3. **Recover from raw API errors and interruptions:** Classify the notification (or the inline tool return on immediate failure) into one of three cases:
+3. **Recover from raw API errors and interruptions:** Classify the subagent's terminal event(s) — the hand-back message text plus the notification's `<status>` (or the inline tool return on immediate failure) — into one of three cases:
 
    **(a) Raw API/infrastructure errors — key on the error marker alone.**
-   If the notification message contains a raw API/infrastructure error marker (text like `API Error` / `Internal server error`), classify it as `stuck_type: transient` and re-dispatch once immediately using a fresh brief and session (no `--resume`).
+   If the hand-back message text or the notification message, whichever carries it, contains a raw API/infrastructure error marker (text like `API Error` / `Internal server error`), classify it as `stuck_type: transient` and re-dispatch once immediately using a fresh brief and session (no `--resume`).
    Key on that marker **alone** — the old heuristic's other negative signals ("roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON") no longer discriminate anything: under the reviewer-skipped-capture contract (step 4 below), a **successful** reviewer payload is now *also* exactly ~0 tokens with no `MILL_REVIEW` block, since the reviewer's chat reply is just a one-line ack.
    This applies to implementer, reviewer, and fixer Agent dispatches.
    On a second consecutive raw API error: implementer, fixer, and reviewer dispatches all escalate per the "Stuck escalation" section.
@@ -321,13 +321,15 @@ This three-step pattern applies at every dispatch point:
    The ack exists so a human reading the transcript can confirm the reviewer finished;
    it must not become a branch condition here.
 
-   **(b) Notification for an implementer dispatch — split by trigger.**
+   **(b) Terminal event for an implementer dispatch — split by trigger.**
    Two distinct triggers both land on an implementer dispatch that didn't cleanly report success,
-   and they are no longer handled identically:
-   - **Clean turn-exhaustion** (the notification is a non-error, non-JSON message — the payload contains neither an `API Error` / `Internal server error` marker nor a valid `status` JSON block — AND carries no non-clean-terminal `<status>` signal: the implementer voluntarily ran out of turn budget before emitting the required JSON report) — **unchanged**, routes straight to Clean mid-work stop below, never through the liveness probe in (c).
+   and they are no longer handled identically.
+   A hand-back message with a valid JSON `status` block needs no `<status>` tag to be treated as clean;
+   a hand-back message holding no structured `status` block takes the clean turn-exhaustion route.
+   - **Clean turn-exhaustion** (the report is a non-error, non-JSON message — the payload contains neither an `API Error` / `Internal server error` marker nor a valid `status` JSON block — AND carries no non-clean-terminal `<status>` signal: the implementer voluntarily ran out of turn budget before emitting the required JSON report) — **unchanged**, routes straight to Clean mid-work stop below, never through the liveness probe in (c).
      The redundancy rationale still holds here: `--stage finalize`'s own completeness recount disambiguates partial-vs-dead by inspecting the actual commit count against the batch's card count, which is conclusive when the implementer had a full turn to make commits before stopping.
    - **Non-clean terminal notification** (the `<task-notification>`'s `<status>` tag is present and its value is not `completed` — observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>` — AND the message does not contain (a)'s literal API-error marker text) — **NEW liveness probe**, mirroring (c) exactly: before invoking `--stage finalize`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 2. This call is for its status field only — the subagent's raw JSONL transcript in its return value must never be read, logged, or otherwise acted on.
-     If it reports the agent is still running: take no action this turn — no finalize call, no escalation — and wait for the agent's own next `<task-notification>` for the same `agentId`, exactly as (c) already does for reviewer/fixer.
+     If it reports the agent is still running: take no action this turn — no finalize call, no escalation — and wait for the next terminal event for that `agentId` (a hand-back message or a `<task-notification>`), exactly as (c) already does for reviewer/fixer.
      If it reports the agent is no longer running,
      or the probe call itself errors: proceed to Clean mid-work stop below exactly as documented.
      This includes the case where `TaskOutput` is not a callable tool in this host at all (confirmed via `ToolSearch("select:TaskOutput")` returning no match, or an immediate "unknown tool" failure on the call itself) — treat that identically to a runtime probe error and proceed to the same branch; do not attempt to invent a replacement liveness check.
@@ -335,7 +337,7 @@ This three-step pattern applies at every dispatch point:
 
    **Clean mid-work stop (implementer only):** Reached either directly (clean turn-exhaustion, per (b) above) or after (b)'s stopped/interrupted probe branch determines the agent is no longer running.
    Do NOT re-dispatch fresh immediately.
-   Instead, write the notification to the `.out.md` file as normal and invoke the `--stage finalize` step (step 5).
+   Instead, write the subagent's report message (hand-back text, or notification payload as fallback) to the `.out.md` file as normal and invoke the `--stage finalize` step (step 5).
    Finalize inspects the commit count against the batch's card count and returns one of:
    - **`status: success`** (all cards committed and the tree is clean) — proceed to step 6, whose inferred-success rule logs the audit row when `inferred` is `true`.
    - **`stuck_type: incomplete`** (some-but-not-all cards committed — the partial clean stop) — route to the **`incomplete` recovery defined in step 5 below** (warm-`SendMessage` first, then the `--resume-incomplete` fallback).
@@ -358,7 +360,7 @@ This three-step pattern applies at every dispatch point:
    Branch on the result:
    - **If it reports the agent is still running:** take no dispatch action this turn.
      Do not re-dispatch, do not classify as `stuck_type: transient`.
-     The harness will deliver the agent's own next `<task-notification>` for the same `agentId` when it actually finishes (matches the observed `#595` behavior — the "killed" agent later delivered a real `completed` notification unprompted).
+     The harness will deliver the next terminal event for that `agentId` (a hand-back message or a `<task-notification>`) when it actually finishes (matches the observed `#595` behavior — the "killed" agent later delivered a real `completed` notification unprompted).
      This wait is unbounded by design, matching every other Agent-mode dispatch's existing "no log-polling or liveness check required" contract (see "Agent-mode properties" below) — no bounded re-check loop is added for this probe.
      For a **reviewer** dispatch: this is one continuous `Agent()` call and one continuous measurement — do NOT restart or reset `review_start_epoch`;
      there is nothing to sum yet.
@@ -370,11 +372,12 @@ This three-step pattern applies at every dispatch point:
    This probe exists because both `#587` and `#595` were live incidents where a "killed"/"stopped by user" notification was stale for an agent that was, in fact, still running to completion — see `_mill/discussion.md`'s `stopped/interrupted-notification liveness probe (#587, #595)` Decision for the full incident writeups and rationale.
 
 4. **Capture output — reviewer-skipped.**
-   For an **implementer, fixer, or merge-in** dispatch, write **the message captured from the `<task-notification>`** to `<brief_path>.out.md` (utf-8), unchanged.
+   For an **implementer, fixer, or merge-in** dispatch, write **the subagent's report message**, taken from the SubagentHandback message (notification payload only as fallback), verbatim to `<brief_path>.out.md` (utf-8).
+   The `html.unescape` at the finalize read sites is unchanged and applies to whichever source was captured.
    The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
    For a **reviewer** dispatch, skip this step entirely — the reviewer holds its own `Write` grant and already wrote `.out.md` itself;
    the orchestrator does not write it a second time.
-   The old behaviour made the orchestrator read the reviewer's entire final message and write that whole thing back out to disk, so a full findings dump landed in the Builder's context twice — once in the notification payload it had to read to classify the round, and again in the file it wrote — even though "Builder reads only the JSON envelope verdict, never the findings" and "Implementer owns receive-review" (see Principles) already forbid the Builder from acting on those findings.
+   The old behaviour made the orchestrator read the reviewer's entire final message and write that whole thing back out to disk, so a full findings dump landed in the Builder's context twice — once in the final message it had to read to classify the round, and again in the file it wrote — even though "Builder reads only the JSON envelope verdict, never the findings" and "Implementer owns receive-review" (see Principles) already forbid the Builder from acting on those findings.
 
 5. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <path>`.
    For the three **review** CLIs, `<path>` is the `output_path` field read verbatim from step 1's prepare envelope — do not re-derive it by string-replacing the brief path's trailing `.md` with `.out.md`;
