@@ -40,3 +40,9 @@ batches:
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-31f5e19d',
   'NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-32649cd0']
 ```
+
+## Inferred-success log
+
+```text
+'2026-09-26T09:39:52Z'  implementer-fixes  round 1
+```
