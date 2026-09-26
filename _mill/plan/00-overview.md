@@ -3,7 +3,7 @@
 ```yaml
 task: 'mill-merge: run the deterministic path as one script'
 slug: mill-merge-script
-approved: false
+approved: true
 started: 20260926-140331
 parent_branch: main
 root: ""
