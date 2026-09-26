@@ -41,7 +41,6 @@ batches:
     implementer_session: cb38b6c5-5b75-4d7d-b056-b08660ac0f74
     start_sha: 437406cb93a9cb60a3ddfab955d1aba59eb669fd
     commit_sha: db7ae7ecbfa8977ed9bf0883e41ffeaad451bb1c
-    verify_baseline_failures: []
   - name: integration-repairs
     state: approved
     implementer_session: ba129d33-d563-42d0-9099-5ae8edb46047
@@ -52,8 +51,6 @@ batches:
     implementer_session: 721a4ecb-ec04-4eac-a144-370b8d927170
     start_sha: 126d0494c69db1664bfe6336dcbc0f87d7632899
     commit_sha: ba66f00c29c2f3494d38f744e7ddde5a8c294d1a
-    verify_baseline_failures: ['NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-31f5e19d',
-  'NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-32649cd0']
 ```
 ## Inferred-success log
 
