@@ -44,7 +44,9 @@ batches:
     start_sha: 2c8b3339e6a7a7d5a58570ccce72377f47f7c525
     commit_sha: 76976025907f75709173dd363ca5bb09bea9732b
   - name: script-wording
-    state: pending
+    state: running
+    implementer_session: c2686db3-42f3-4611-b2ee-ea66021ffc40
+    start_sha: e31ceb0e33bba5033b50fd35ba26632bb7d42153
     verify_baseline_failures: []
   - name: test-comments
     state: pending
