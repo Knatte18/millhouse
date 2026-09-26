@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-test-comments
+phase: holistic-reviewing
 slug: subagent-handback-report
 branch: hanf/subagent-handback-report
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-agent-dispatch-core  '2026-09-26T09:13:42Z'
 approved-sibling-skill-wording  '2026-09-26T09:15:58Z'
 approved-script-wording  '2026-09-26T09:18:16Z'
 approved-test-comments  '2026-09-26T09:20:34Z'
+holistic-reviewing  '2026-09-26T09:20:39Z'
 ```
 
 ## Batches
