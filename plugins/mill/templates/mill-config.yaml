@@ -148,7 +148,7 @@ pipeline:
 roles:
   discussion-review:
     holistic:
-      rounds: 4
+      rounds: 5
       # min_rounds -- floor: the review loop may not terminate on APPROVE before this round, regardless of verdict. Optional; defaults to 1 (today's unfloored behavior) when absent.
       min_rounds: 1
       auto_approve_on_cap: false  # true: under --auto/--orch, treat round-cap exhaustion with BLOCKING findings still unresolved as an implicit approval instead of halting. Interactive mode ignores this key -- an operator is already present to decide.
@@ -164,7 +164,7 @@ roles:
 
   plan-review:
     holistic:
-      rounds: 4
+      rounds: 5
       min_rounds: 1
       auto_approve_on_cap: false  # true: treat round-cap exhaustion with REQUEST_CHANGES still outstanding as an implicit approval instead of halting
       reviewer: sonnetmax
@@ -176,7 +176,7 @@ roles:
 
   code-review:
     holistic:
-      rounds: 4
+      rounds: 5
       min_rounds: 1
       auto_approve_on_cap: false  # true: treat round-cap exhaustion with REQUEST_CHANGES still outstanding as an implicit approval instead of halting
       reviewer: sonnethigh

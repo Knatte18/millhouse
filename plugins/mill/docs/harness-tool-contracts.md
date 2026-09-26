@@ -44,7 +44,9 @@ See `mill-go-base/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" secti
 
 - Verified: `ListAgents` in a live session lists peer local Claude sessions by name (the orchestrator session appeared as `MH:orch`), so a named peer is addressable for an outbound `SendMessage(to: <name>, message: ...)`.
 - Verified: on 2026-09-26 `ListAgents`' first output line was `This session is <name> [<id>] ...` (e.g. `This session is mh:ask-thread-skill:start [68784b]`), which is how `ask-thread` learns its own name for `--reply-to`.
-- Unverified: whether a message wakes an idle peer session or a waiting asker promptly, and whether a woken session can be held open with a timeout.
+- Verified (user report, 2026-09-26): a `SendMessage` to an idle peer session is delivered and wakes it, as long as the peer is listed by `ListAgents`.
+  `orch-wait` Step 1 relies on this for its one-way "discussion.md is ready" notification to `parent_thread`.
+- Unverified: whether a woken session can be held open with a timeout.
 - Unverified: whether name lookup is case-sensitive.
   `_vscode_tasks.session_prefix` lower-cases the names it assembles (e.g. `mh:orch`) while `ListAgents` listed `MH:orch`, so a spawner passing a differently-cased `--parent` value can surface as the unreachable fallback.
 - Design consequence: `ask-thread` asks the target to reply with one `SendMessage` and always to write the reply file too.

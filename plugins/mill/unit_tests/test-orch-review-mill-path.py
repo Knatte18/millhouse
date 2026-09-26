@@ -2,6 +2,7 @@
 
 orch-review writes the --orch hand-off file to _mill/orch-review.md
 orch-wait reads the --orch hand-off file from _mill/orch-review.md
+orch-wait notifies parent_thread via SendMessage before it waits
 """
 from __future__ import annotations
 
@@ -49,6 +50,27 @@ def test_mill_path() -> list[str]:
     return failures
 
 
+def test_parent_notify() -> list[str]:
+    """
+    Assert orch-wait/SKILL.md notifies parent_thread via SendMessage before
+    its Step 2 wait.
+
+    Returns list of failure messages (empty list = all passed).
+    """
+    path = SKILLS / "orch-wait" / "SKILL.md"
+    text = path.read_text(encoding="utf-8")
+    wait_at = text.find("## Step 2")
+    if wait_at < 0:
+        return [f"FAIL: {path}: no '## Step 2' heading"]
+
+    failures: list[str] = []
+    for needle in ("read_parent_thread", "select:SendMessage", "SendMessage(to: <parent_thread>", "run /orch-review <slug>"):
+        at = text.find(needle)
+        if at < 0 or at > wait_at:
+            failures.append(f"FAIL: {path}: expected {needle!r} before '## Step 2'")
+    return failures
+
+
 def main() -> int:
     """
     Run the hand-off path regression lock.
@@ -59,7 +81,7 @@ def main() -> int:
         print("--- orch-review _mill/ path regression lock ---")
 
         print("Testing orch-review/orch-wait _mill/orch-review.md path...")
-        failures = test_mill_path()
+        failures = test_mill_path() + test_parent_notify()
         if failures:
             for msg in failures:
                 print(msg, file=sys.stderr)
