@@ -28,9 +28,9 @@ Only stop after every `## Cards` entry is committed, `## Verify` has run (or was
 and the JSON report has been emitted.
 Ending a turn mid-batch -- even after a successful commit -- is a protocol violation that causes the orchestrator to classify the batch as stuck.**
 
-**Resume-after-incomplete:** When `` is non-empty, you are being re-dispatched to finish a partially-completed batch.
-Before implementing any cards, identify which cards are already committed: run `git -C /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests log ..HEAD --oneline` and match each commit subject against the cards' `Commit:` messages.
-When `` is empty, derive the range start via `git -C /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests log --grep="^mill-go: start batch" -n 1 --format=%H`.
+**Resume-after-incomplete:** When `557d9e263b8b52b9f2bc4e67705508638a753f09` is non-empty, you are being re-dispatched to finish a partially-completed batch.
+Before implementing any cards, identify which cards are already committed: run `git -C /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests log 557d9e263b8b52b9f2bc4e67705508638a753f09..HEAD --oneline` and match each commit subject against the cards' `Commit:` messages.
+When `557d9e263b8b52b9f2bc4e67705508638a753f09` is empty, derive the range start via `git -C /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests log --grep="^mill-go: start batch" -n 1 --format=%H`.
 Implement only the remaining cards — do not re-edit or re-commit cards whose `Commit:` message already appears in the log.
 A card whose Commit: is "none" never appears in this log by definition -- exclude it from this matching scan entirely.
 Treat a Commit: none card as complete once its Requirements are satisfied:
@@ -38,7 +38,7 @@ re-run pure verification steps freely, but re-perform an external action only af
 it needs no log entry to be considered done.
 
 **External side effects in Commit: none cards.**
-This applies on every dispatch: fresh, re-fired, resumed, or warm-resumed, whatever `` holds.
+This applies on every dispatch: fresh, re-fired, resumed, or warm-resumed, whatever `557d9e263b8b52b9f2bc4e67705508638a753f09` holds.
 A prior session may already have performed the action, and the git log cannot show that.
 Before performing any external or hard-to-reverse side effect, query the current external state first.
 Such effects include network/API calls (`gh issue comment`, `gh issue close`, `gh pr ...`), pushes to other remotes, messages, and wiki or tracker mutations.
@@ -118,7 +118,7 @@ If it shows ANY tracked in-scope modification, commit it via the `git-commit` sk
 The finalize gate now mechanically rejects a success report when in-scope files are dirty, so an uncommitted change will demote your report to stuck regardless.
 
 **Card-count self-check (mandatory before writing your free-text turn summary):** Before stating anything about completion in your prose summary to the Builder/operator, count how many cards you actually committed versus how many the batch file declares.
-Determine the range start exactly as in "Resume-after-incomplete" above: use `` when non-empty, else `git -C /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests log --grep="^mill-go: start batch" -n 1 --format=%H`.
+Determine the range start exactly as in "Resume-after-incomplete" above: use `557d9e263b8b52b9f2bc4e67705508638a753f09` when non-empty, else `git -C /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests log --grep="^mill-go: start batch" -n 1 --format=%H`.
 Run `git -C /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests log <range-start>..HEAD --oneline` and match commit subjects against the batch file's `## Cards` `Commit:` messages to get an exact count -- Commit: none cards are never expected to appear in this log;
 do not count them as part of the expected total when comparing your committed-card count against the batch's declared card count, and do not report an unqualified "all complete" claim as false just because Commit: none cards produced no matching log entries.
 Your free-text summary MUST state the real count honestly (e.g. "4 of 9 cards committed") — never write an unqualified "all complete"/"all done" claim without having actually verified the count this way.
@@ -152,7 +152,7 @@ This exception does not apply if ANY card in cards_done this turn has a real Com
 Include every card you completed this turn, whether it got its own commit or was folded into a combined commit per the "one combined commit" allowance above.
 This self-report lets finalize recognize a legitimately-complete batch even when the raw commit count is lower than the declared card count (e.g. two cards combined into one commit) — the raw count alone cannot make that distinction.
 
-**On a `--resume-incomplete` re-dispatch specifically:** if you independently re-verify that every card's requirements are already satisfied by the existing commit(s) since `` and you make no new commit this turn, report `status: success` with `"already_complete": true` in the envelope, **in addition to** (not instead of) a `cards_done` array covering every card declared in this batch:
+**On a `--resume-incomplete` re-dispatch specifically:** if you independently re-verify that every card's requirements are already satisfied by the existing commit(s) since `557d9e263b8b52b9f2bc4e67705508638a753f09` and you make no new commit this turn, report `status: success` with `"already_complete": true` in the envelope, **in addition to** (not instead of) a `cards_done` array covering every card declared in this batch:
 
 ```json
 {"status":"success","commit_sha":"<HEAD-sha, unchanged from before this turn>","session_id":"ba129d33-d563-42d0-9099-5ae8edb46047","cards_done":[<every card number declared in this batch>],"already_complete":true}
