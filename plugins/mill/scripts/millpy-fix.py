@@ -7,6 +7,7 @@ Flags:
     --scope {holistic} (required) fix scope; the only supported value
     --review-file PATH (required) absolute or relative path to the code review output file --round N
     fix-cycle round number (int, default 1)
+    --parent-guidance PATH (optional) file with operator guidance from the parent session
 
 Exit codes:
     0 — fixer ran;
@@ -264,6 +265,15 @@ def main(argv=None) -> int:
             "reintroduce an earlier BLOCKING problem. Omit if none available."
         ),
     )
+    parser.add_argument(
+        "--parent-guidance",
+        default=None,
+        help=(
+            "Path to a file holding operator-level guidance from the task's parent "
+            "session (written by mill-go after a parent escalation); rendered into "
+            "the fixer brief. Omit when there is none."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.review_file is None:
@@ -371,6 +381,7 @@ def main(argv=None) -> int:
         print(f"review file not found: {review_file}", file=sys.stderr)
         return 1
     prior_blocking_path = Path(args.prior_blocking) if args.prior_blocking else None
+    parent_guidance_path = Path(args.parent_guidance) if args.parent_guidance else None
 
     plan_base = _paths.resolve_task_path(project_root, "_mill/plan/")
     overview_path = plan_base / "00-overview.md"
@@ -480,6 +491,16 @@ def main(argv=None) -> int:
     else:
         prior_blocking_text = "(none)"
 
+    # Same rule as the prior-BLOCKING digest: missing, absent, or blank file reads as "(none)".
+    if (
+        parent_guidance_path is not None
+        and parent_guidance_path.is_file()
+        and parent_guidance_path.read_text(encoding="utf-8").strip()
+    ):
+        parent_guidance_text = parent_guidance_path.read_text(encoding="utf-8")
+    else:
+        parent_guidance_text = "(none)"
+
     # Holistic fixer dispatch: derive the concatenated verify_cmd from all batch verify commands in DAG order.
     batch_verifies = _plan_dag.iter_batch_verifies(
         plan_base, project_root, git_root, status_path=status_path
@@ -541,6 +562,7 @@ def main(argv=None) -> int:
             "BATCH_FILES": batch_files_text,
             "NITS_ONLY_CARVEOUT": nits_only_carveout,
             "PRIOR_BLOCKING": prior_blocking_text,
+            "PARENT_GUIDANCE": parent_guidance_text,
         },
     )
 

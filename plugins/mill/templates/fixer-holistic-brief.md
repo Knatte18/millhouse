@@ -15,6 +15,7 @@ Rendered by millpy-fix.py via `_render.render` with these tokens:
   <BATCH_FILES>        — newline-separated absolute paths to every batch plan file
   <NITS_ONLY_CARVEOUT> — trailing clause after the zero-commit rules; empty-punctuation "." for a normal pass, or a --nits-only exception clause
   <PRIOR_BLOCKING>     — digest of prior rounds' BLOCKING findings visible to this scope; "(none)" when there is none
+  <PARENT_GUIDANCE>    — operator-level guidance from the parent session; "(none)" when there is none
 
 NOTE: <BATCH_SESSION_IDS> is deliberately NOT included.
 Cold-start dispatch never reuses warm sessions.
@@ -51,6 +52,12 @@ This is non-negotiable.
 The following BLOCKING findings were fixed in earlier rounds of this task. Do not reintroduce the problems they describe.
 
 <PRIOR_BLOCKING>
+
+## Parent guidance
+
+This is operator-level direction from the session that spawned this task. Where it conflicts with your own judgment or a finding, follow it.
+
+<PARENT_GUIDANCE>
 
 ## Fix discipline
 
