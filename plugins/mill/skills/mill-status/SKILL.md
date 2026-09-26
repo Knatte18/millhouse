@@ -26,8 +26,8 @@ Sorts by `slug` (default) or `phase`.
 | `[s]` | n/a | — spawn-ready fast-path | run `/mill-spawn` to claim |
 | `[active]` | `discussing`/`discussed`/`planning`/`planned`/`implementing`/`reviewing`/`fixing`/`blocked` | mill-spawn / mill-claim | continue work via mill-start, mill-plan, mill-go |
 | `[ready-to-merge]` | `done` | mill-go Handoff step 2 | run `/mill-merge` to squash to parent |
-| `[pr-pending]` | `pr-pending` | mill-merge Step 5 (both PR-creation paths) | wait for GitHub PR to merge, then `/mill-cleanup --apply` |
-| `[done]` | `done` | mill-merge Step 7 (post-squash) | run `/mill-cleanup --apply` for worktree/branch/portal teardown |
+| `[pr-pending]` | `pr-pending` | mill-merge branch-protection fallback (_merge.step_squash) | wait for GitHub PR to merge, then `/mill-cleanup --apply` |
+| `[done]` | `done` | mill-merge after the squash (_merge.step_wiki_done) | run `/mill-cleanup --apply` for worktree/branch/portal teardown |
 | `[abandoned]` | `abandoned` | mill-abandon | run `/mill-cleanup --apply` for teardown |
 
 Lifecycle: `active → ready-to-merge → done` for the common path;
