@@ -70,4 +70,5 @@ batches:
 ```text
 '2026-09-26T07:27:41Z'  fixer-parent-guidance  round 1
 '2026-09-26T07:29:10Z'  ask-parent-skill  round 1
+'2026-09-26T07:31:09Z'  mill-go-base-wiring  round 1
 ```
