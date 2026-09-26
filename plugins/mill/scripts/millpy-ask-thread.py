@@ -1,6 +1,6 @@
-"""millpy-ask-parent.py — parent-escalation CLI (prepare / consume).
+"""millpy-ask-thread.py — parent-escalation CLI (prepare / consume).
 
-Wraps the _ask_parent.py API so the ask-parent skill can call it without inline Python.
+Wraps the _ask_thread.py API so the ask-thread skill can call it without inline Python.
 Each subcommand prints one JSON line on stdout.
 
 Subcommands:
@@ -18,7 +18,7 @@ import argparse
 import json
 import sys
 
-import _ask_parent
+import _ask_thread
 import _config
 import _paths
 import _status
@@ -47,8 +47,8 @@ def main(argv=None) -> int:
             cfg = _config.load_config(worktree_root, git_root)
             status_path = _paths.status_path(worktree_root, cfg)
             slug = _status.read_slug(status_path)
-            actions = _ask_parent.parse_actions(args.actions, args.site)
-            result = _ask_parent.prepare(
+            actions = _ask_thread.parse_actions(args.actions, args.site)
+            result = _ask_thread.prepare(
                 status_path=status_path,
                 worktree_root=worktree_root,
                 cfg=cfg,
@@ -59,10 +59,10 @@ def main(argv=None) -> int:
             )
         else:
             worktree_root = _paths.resolve_hub_path()
-            actions = _ask_parent.parse_actions(args.actions)
-            result = _ask_parent.consume(_ask_parent.reply_path(worktree_root), actions)
+            actions = _ask_thread.parse_actions(args.actions)
+            result = _ask_thread.consume(_ask_thread.reply_path(worktree_root), actions)
     except (ValueError, KeyError) as exc:
-        print(_ask_parent.to_ascii(f"[ask-parent] {exc}"), file=sys.stderr)
+        print(_ask_thread.to_ascii(f"[ask-thread] {exc}"), file=sys.stderr)
         return 1
 
     print(json.dumps(result))

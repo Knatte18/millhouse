@@ -3,7 +3,7 @@ Deterministic helpers for escalating a stuck autonomous run to its parent sessio
 
 Renders the message sent to the parent, computes the give-up deadline,
 and parses the parent's reply file into an action plus guidance.
-Nothing here talks to the harness; the ``ask-parent`` skill does the sending and waiting.
+Nothing here talks to the harness; the ``ask-thread`` skill does the sending and waiting.
 
 Public API:
     REPLY_REL_PATH, DEFAULT_TIMEOUT_MINUTES, ACTIONS, GUIDANCE_SUFFIX_MAX, SITES
@@ -28,7 +28,7 @@ import yaml
 import _paths
 import _status
 
-REPLY_REL_PATH = "_mill/parent-reply.md"
+REPLY_REL_PATH = "_mill/ask-reply.md"
 DEFAULT_TIMEOUT_MINUTES = 60
 ACTIONS = ("retry", "approve", "halt")
 GUIDANCE_SUFFIX_MAX = 200

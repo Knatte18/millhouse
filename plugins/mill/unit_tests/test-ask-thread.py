@@ -1,4 +1,4 @@
-"""Unit tests for plugins/mill/scripts/_ask_parent.py."""
+"""Unit tests for plugins/mill/scripts/_ask_thread.py."""
 from __future__ import annotations
 
 import sys
@@ -11,7 +11,7 @@ import yaml
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
-import _ask_parent  # noqa: E402
+import _ask_thread  # noqa: E402
 
 NOW = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
 
@@ -29,7 +29,7 @@ def _make_worktree(root: Path, with_parent: bool) -> Path:
 
 
 def _prepare(root: Path, status: Path, cfg: dict, reason: str = "batch stuck") -> dict:
-    return _ask_parent.prepare(
+    return _ask_thread.prepare(
         status_path=status,
         worktree_root=root,
         cfg=cfg,
@@ -42,7 +42,7 @@ def _prepare(root: Path, status: Path, cfg: dict, reason: str = "batch stuck") -
 
 
 def _write_reply(root: Path, text: str) -> Path:
-    reply = _ask_parent.reply_path(root)
+    reply = _ask_thread.reply_path(root)
     reply.write_text(text, encoding="utf-8")
     return reply
 
@@ -82,9 +82,9 @@ def main() -> int:
             print("PASS: prepare escalates with a self-describing ASCII message and 3600s give-up")
 
             cfg_none = {"pipeline": {"parent_escalation_timeout_minutes": None}}
-            assert _ask_parent.timeout_minutes(cfg_none) == 60
-            assert _ask_parent.timeout_minutes({"pipeline": {"parent_escalation_timeout_minutes": "x"}}) == 60
-            assert _ask_parent.timeout_minutes({"pipeline": {"parent_escalation_timeout_minutes": 5}}) == 5
+            assert _ask_thread.timeout_minutes(cfg_none) == 60
+            assert _ask_thread.timeout_minutes({"pipeline": {"parent_escalation_timeout_minutes": "x"}}) == 60
+            assert _ask_thread.timeout_minutes({"pipeline": {"parent_escalation_timeout_minutes": 5}}) == 5
             print("PASS: timeout_minutes defaults and coerces")
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -93,41 +93,41 @@ def main() -> int:
             accepted = ["retry", "approve", "halt"]
             for action in accepted:
                 reply = _write_reply(root, f"```yaml\naction: {action}\n```\n  do the thing  \n")
-                result = _ask_parent.consume(reply, accepted)
+                result = _ask_thread.consume(reply, accepted)
                 assert result["action"] == action, result
                 assert result["guidance"] == "do the thing"
                 assert not reply.exists()
             print("PASS: consume returns each accepted action with stripped guidance and deletes the file")
 
             reply = _write_reply(root, "```yaml\naction: approve\n```\nok")
-            assert _ask_parent.consume(reply, ["retry", "halt"])["action"] == "halt"
+            assert _ask_thread.consume(reply, ["retry", "halt"])["action"] == "halt"
             print("PASS: consume maps an unaccepted action to halt")
 
-            missing = _ask_parent.reply_path(root)
-            assert _ask_parent.consume(missing, accepted) == {"action": "halt", "guidance": "", "halt_suffix": ""}
+            missing = _ask_thread.reply_path(root)
+            assert _ask_thread.consume(missing, accepted) == {"action": "halt", "guidance": "", "halt_suffix": ""}
             print("PASS: consume of a missing file is halt")
 
             for text in ("just prose", "```yaml\naction: [unclosed\n```\nx", "```yaml\nother: 1\n```\nx"):
                 reply = _write_reply(root, text)
-                result = _ask_parent.consume(reply, accepted)
+                result = _ask_thread.consume(reply, accepted)
                 assert result["action"] == "halt", (text, result)
                 assert not reply.exists()
             print("PASS: consume degrades to halt without a usable action")
 
         long_guidance = "\n  \nfirst " + "x" * 300 + "\nsecond"
-        suffix = _ask_parent.halt_suffix(long_guidance)
+        suffix = _ask_thread.halt_suffix(long_guidance)
         assert suffix == " -- parent: " + ("first " + "x" * 300)[:200]
         assert "second" not in suffix
-        assert _ask_parent.halt_suffix("  \n ") == ""
+        assert _ask_thread.halt_suffix("  \n ") == ""
         print("PASS: halt_suffix truncates and uses the first non-blank line")
 
-        assert _ask_parent.unreachable_suffix("mh:orch") == " (parent_thread mh:orch unreachable)"
+        assert _ask_thread.unreachable_suffix("mh:orch") == " (parent_thread mh:orch unreachable)"
         print("PASS: unreachable_suffix")
 
-        assert _ask_parent.parse_actions("retry, halt,retry", "go-batch") == ["retry", "halt"]
+        assert _ask_thread.parse_actions("retry, halt,retry", "go-batch") == ["retry", "halt"]
         for args in (("bogus",), ("",), ("retry", "nope"), ("approve", "go-batch")):
             try:
-                _ask_parent.parse_actions(*args)
+                _ask_thread.parse_actions(*args)
                 assert False, f"expected ValueError for {args!r}"
             except ValueError:
                 pass
@@ -136,11 +136,11 @@ def main() -> int:
         for path in (HUB / "mill-config.yaml", HUB / "plugins" / "mill" / "templates" / "mill-config.yaml"):
             data = yaml.safe_load(path.read_text(encoding="utf-8"))
             assert (
-                data["pipeline"]["parent_escalation_timeout_minutes"] == _ask_parent.DEFAULT_TIMEOUT_MINUTES
+                data["pipeline"]["parent_escalation_timeout_minutes"] == _ask_thread.DEFAULT_TIMEOUT_MINUTES
             ), path
         print("PASS: hub and template configs carry the default timeout key")
 
-        print("All _ask_parent unit tests passed.")
+        print("All _ask_thread unit tests passed.")
         return 0
     except AssertionError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)

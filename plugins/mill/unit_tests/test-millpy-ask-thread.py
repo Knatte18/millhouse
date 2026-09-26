@@ -1,4 +1,4 @@
-"""Unit tests for plugins/mill/scripts/millpy-ask-parent.py."""
+"""Unit tests for plugins/mill/scripts/millpy-ask-thread.py."""
 from __future__ import annotations
 
 import contextlib
@@ -14,20 +14,20 @@ HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 _spec = importlib.util.spec_from_file_location(
-    "millpy_ask_parent", HUB / "plugins" / "mill" / "scripts" / "millpy-ask-parent.py"
+    "millpy_ask_thread", HUB / "plugins" / "mill" / "scripts" / "millpy-ask-thread.py"
 )
-millpy_ask_parent = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(millpy_ask_parent)
+millpy_ask_thread = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(millpy_ask_thread)
 
 
 def _run(root: Path, argv: list[str]) -> tuple[int, str]:
     cfg = {"paths": {"status_md": "_mill/status.md"}, "pipeline": {}}
     buffer = io.StringIO()
-    with mock.patch.object(millpy_ask_parent._paths, "resolve_git_root", return_value=root), \
-            mock.patch.object(millpy_ask_parent._paths, "resolve_hub_path", return_value=root), \
-            mock.patch.object(millpy_ask_parent._config, "load_config", return_value=cfg), \
+    with mock.patch.object(millpy_ask_thread._paths, "resolve_git_root", return_value=root), \
+            mock.patch.object(millpy_ask_thread._paths, "resolve_hub_path", return_value=root), \
+            mock.patch.object(millpy_ask_thread._config, "load_config", return_value=cfg), \
             contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(io.StringIO()):
-        code = millpy_ask_parent.main(argv)
+        code = millpy_ask_thread.main(argv)
     out = buffer.getvalue()
     assert out.isascii()
     return code, out
@@ -56,7 +56,7 @@ def main() -> int:
             data = json.loads(out)
             assert data["escalate"] is True
             assert data["parent_thread"] == "mh:orch"
-            assert data["reply_path"].endswith("_mill/parent-reply.md")
+            assert data["reply_path"].endswith("_mill/ask-reply.md")
             assert "my-slug" in data["message"]
             print("PASS: prepare escalates when parent_thread is set")
 
@@ -64,7 +64,7 @@ def main() -> int:
             assert code == 1 and out == ""
             print("PASS: prepare rejects an action the site does not accept")
 
-            reply = root / "_mill" / "parent-reply.md"
+            reply = root / "_mill" / "ask-reply.md"
             reply.write_text("```yaml\naction: retry\n```\nfix it\n", encoding="utf-8")
             code, out = _run(root, ["consume", "--actions", "retry,halt"])
             assert code == 0
@@ -83,7 +83,7 @@ def main() -> int:
             assert code == 0 and json.loads(out)["escalate"] is False
             print("PASS: prepare without parent_thread does not escalate")
 
-        print("All millpy-ask-parent unit tests passed.")
+        print("All millpy-ask-thread unit tests passed.")
         return 0
     except AssertionError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
