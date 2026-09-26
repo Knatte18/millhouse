@@ -101,7 +101,7 @@ def test_review_code_finalize_receives_raw_text_byte_identical() -> bool:
     must NOT be HTML-unescaped.
 
     Agent-mode output is a file the reviewer wrote itself via Write;
-    it is never HTML-escaped the way the implementer's <task-notification> payload is (that payload
+    it is never HTML-escaped the way an implementer report taken from a <task-notification> payload may be (that payload
     is unrelated and untouched -- see _implementer_common.py:892).
     Unescaping this file's content would corrupt any finding that legitimately quotes "&lt;",
     "&gt;", or "&amp;" from a source snippet.

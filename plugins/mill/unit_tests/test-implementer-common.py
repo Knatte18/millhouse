@@ -3623,7 +3623,7 @@ def main() -> int:
             errors += 1
 
     # Case 63: #605 regression -- finalize_from_output unescapes HTML entities in the agent-output file before delegating to _forward_output.
-    # The harness HTML-escapes the <task-notification> payload uniformly before delivery, so the raw file on disk may contain entities like "&amp;", "&lt;", "&gt;".
+    # A captured <task-notification> payload may contain HTML entities, so the raw file on disk may contain entities like "&amp;", "&lt;", "&gt;".
     # Patch _forward_output to capture its first positional argument (the "output" string) so we can assert the captured text is the fully-unescaped original rather than exercising the real gate logic.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
