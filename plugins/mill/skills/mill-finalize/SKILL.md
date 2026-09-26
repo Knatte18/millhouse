@@ -88,6 +88,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _finalize_c
 
 When it returns True, bind `pr_notes_path = <worktree>/.scratch/pr-notes-<slug>.md`; otherwise bind `pr_notes_path = None`.
 A failure of this call only prints a warning and never halts Step 3.
+The source is `<task_dir>/pr-notes.md`; no mill script writes it, so it exists only when a session or the operator authored it, and a missing file yields False.
 The scratch file survives both the `git rm -r` and the restore-from-base branches because `.scratch/` is gitignored.
 
 **Citation scan (non-blocking).** Before either branch below runs, scan for permanent-doc citations of `_mill/discussion.md` that this cleanup is about to invalidate. A citation can live in either the worktree's own tracked tree or the wiki, so this is two separate greps, both read-only and neither one halts Step 3 under any outcome:
