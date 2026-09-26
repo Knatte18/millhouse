@@ -29,7 +29,11 @@ implementing  '2026-09-26T08:45:21Z'
 ```yaml
 batches:
   - name: ask-thread-scripts
-    state: pending
+    state: running
+    implementer_session: 887b64c3-8630-4348-a87d-7368a512aa0f
+    start_sha: e1dac742e8ef6861f2defdbc228590766e4b02bc
+    verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-thread.py'', ''test-millpy-ask-thread.py'']']
   - name: ask-thread-skill-and-callers
     state: pending
+    verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-thread.py'', ''test-millpy-ask-thread.py'']']
 ```
