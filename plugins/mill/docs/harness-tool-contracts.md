@@ -4,7 +4,7 @@ This file records confirmed return/notification shapes for harness tools used by
 These shapes were confirmed via live spikes and are not documented by the harness itself.
 Four skill files already carry inline copies of this material, load-bearing for each one's own logic — this doc consolidates and cross-references them;
 it does not replace any of them.
-`orch-wait` and `orch-review` are two further consumers of this contract, referencing it rather than carrying inline copies.
+`orch-wait`, `orch-review` and `ask-parent` are three further consumers of this contract, referencing it rather than carrying inline copies.
 
 ---
 
@@ -24,7 +24,7 @@ See `mill-go-base/SKILL.md`'s "## Agent-mode dispatch" section for the full disp
 
 ## Monitor tool
 
-The `Monitor` tool schema was directly reconfirmed via a live tool-schema read on 2026-09-23: parameters `command`/`ws`, `description`, `timeout_ms` (number, default `300000`, JSON `maximum: 3600000`, but the tool's own description states deadlines above `1800000` are capped to `1800000` — treat `1800000` as the real ceiling). There is no `persistent` parameter. This confirms the "no `persistent` parameter" claim common to ten independent field reports — GitHub issues #1058, #1062, #1066, #1067, #1078, #1085, #1088, #1096, #1100, #1108 — and supersedes this section's own prior claim (from an earlier, since-disproven 2026-09-21 read) that `persistent` existed; the four wait sections cited at the bottom of this section (the two entry-gate sections, the `orch-wait` Step 2 wait, and the `orch-review` Step 2 wait) now document the resulting design: every wait re-arms at least once whenever its configured `giveup_s` exceeds 1800s, since no `Monitor` build holds a wait open indefinitely.
+The `Monitor` tool schema was directly reconfirmed via a live tool-schema read on 2026-09-23: parameters `command`/`ws`, `description`, `timeout_ms` (number, default `300000`, JSON `maximum: 3600000`, but the tool's own description states deadlines above `1800000` are capped to `1800000` — treat `1800000` as the real ceiling). There is no `persistent` parameter. This confirms the "no `persistent` parameter" claim common to ten independent field reports — GitHub issues #1058, #1062, #1066, #1067, #1078, #1085, #1088, #1096, #1100, #1108 — and supersedes this section's own prior claim (from an earlier, since-disproven 2026-09-21 read) that `persistent` existed; the five wait sections cited at the bottom of this section (the two entry-gate sections, the `orch-wait` Step 2 wait, the `orch-review` Step 2 wait, and the `ask-parent` Step 4 wait) now document the resulting design: every wait re-arms at least once whenever its configured `giveup_s` exceeds 1800s, since no `Monitor` build holds a wait open indefinitely.
 
 A poll script run via `Monitor(command: ..., timeout_ms: 1800000, ...)`:
 
@@ -33,6 +33,15 @@ A poll script run via `Monitor(command: ..., timeout_ms: 1800000, ...)`:
 - This two-notification shape (one-per-line, then a separate event-less terminal notification) is NOT the same shape as `Agent`'s single combined-result notification.
   Do not conflate the two when writing a new entry-gate wait or similar poll-and-notify pattern.
 - Runs bash, not PowerShell, regardless of the operator's terminal — see `cli/SKILL.md`.
-- An expiry with no `<event>` content (a notification whose payload is neither `READY` nor a `TIMEOUT after ...` line) fires whenever the poll script is still running when `Monitor`'s `timeout_ms` cap is reached — expected for any wait exceeding 30 minutes, not build-specific. All four wait sections below re-arm on this outcome, recomputing the remaining budget from wall-clock elapsed time rather than restarting it.
+- An expiry with no `<event>` content (a notification whose payload is neither `READY` nor a `TIMEOUT after ...` line) fires whenever the poll script is still running when `Monitor`'s `timeout_ms` cap is reached — expected for any wait exceeding 30 minutes, not build-specific. All five wait sections below re-arm on this outcome, recomputing the remaining budget from wall-clock elapsed time rather than restarting it.
 
-See `mill-go-base/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" section and `mill-plan/SKILL.md`'s "### Entry-gate wait for upstream mill-start" section, `orch-wait/SKILL.md`'s Step 2, and `orch-review/SKILL.md`'s Step 2 (tracking `wait_started_epoch` and `task_id` per slug) for four consumers of this contract.
+See `mill-go-base/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" section and `mill-plan/SKILL.md`'s "### Entry-gate wait for upstream mill-start" section, `orch-wait/SKILL.md`'s Step 2, and `orch-review/SKILL.md`'s Step 2 (tracking `wait_started_epoch` and `task_id` per slug), and `ask-parent/SKILL.md`'s Step 4 for five consumers of this contract.
+
+## SendMessage to a peer session
+
+- Verified: `ListAgents` in a live session lists peer local Claude sessions by name (the orchestrator session appeared as `MH:orch`), so a named peer is addressable for an outbound `SendMessage(to: <name>, message: ...)`.
+- Unverified: whether a message wakes an idle peer session promptly, and whether a woken session can be held open with a timeout.
+- Unverified: whether name lookup is case-sensitive.
+  `_vscode_tasks.session_prefix` lower-cases the names it assembles (e.g. `mh:orch`) while `ListAgents` listed `MH:orch`, so a spawner passing a differently-cased `--parent` value can surface as the unreachable fallback.
+- Design consequence: `ask-parent` never relies on a reply message.
+  It treats a `SendMessage` error as "parent unreachable" and receives the answer as a file polled by `Monitor`, so the timeout bounds every unverified case.
