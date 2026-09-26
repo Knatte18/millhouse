@@ -34,13 +34,23 @@ implementing  '2026-09-26T14:30:43Z'
 ```yaml
 batches:
   - name: merge-core-entry
-    state: pending
+    state: running
+    implementer_session: b61bd069-f37d-40d9-b302-72803c08b49c
+    start_sha: 56474e41a0afc6340d4ae33556facc914bc30d6d
+    verify_baseline_failures: ['NONZERO_EXIT: exit 2: /home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/.venv/bin/python3:
+    can''t open file ''/home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/unit_tests/test-merge.py'':
+    [Errno 2] N']
   - name: merge-core-squash
     state: pending
+    verify_baseline_failures: ['NONZERO_EXIT: exit 2: /home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/.venv/bin/python3:
+    can''t open file ''/home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/unit_tests/test-merge.py'':
+    [Errno 2] N']
   - name: merge-cli
     state: pending
+    verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-merge.py'', ''test-millpy-merge.py'']']
   - name: skill-rewrite
     state: pending
+    verify_baseline_failures: []
   - name: cross-references
     state: pending
 ```
