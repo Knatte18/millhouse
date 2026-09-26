@@ -212,7 +212,7 @@ def _reclassify_verify_failure(
             "session_id": session_id or "unknown",
         }
 
-    reason = _cards_incomplete_reason(card_ids, cards_done, content)
+    reason = _cards_incomplete_reason(card_ids, cards_done, content, commit_none_card_ids=commit_none_card_ids)
     if reason is not None:
         # Partial batch -- implementer stopped after some cards (or self-reported fewer cards done than declared).
         # Reclassify as incomplete (not transient) so the orchestrator knows to resume rather than retry fresh.
@@ -232,6 +232,8 @@ def _cards_incomplete_reason(
     card_ids: set[int],
     cards_done,
     content: int,
+    *,
+    commit_none_card_ids: set[int] | None = None,
 ) -> str | None:
     """
     Decide whether a batch is incomplete, sharing the identical rule between
@@ -258,6 +260,9 @@ def _cards_incomplete_reason(
         this function is responsible for validating and coercing it.
         content: The content-commit count since start_sha (excluding the batch-start housekeeping
         commit).
+        commit_none_card_ids: Card numbers whose Commit: field is the literal none.
+        They never produce a content commit, so the count-only path excludes them from the
+        expected commit count; the cards_done set-difference path is unaffected.
 
     Returns:
         The "batch incomplete: ..."
@@ -267,10 +272,11 @@ def _cards_incomplete_reason(
 
     def _count_only_reason() -> str | None:
         # Raw commit-count heuristic: cannot see which specific cards were combined, so it only knows "fewer commits than declared cards".
-        if content < len(card_ids):
+        expected = len(card_ids - (commit_none_card_ids or set()))
+        if content < expected:
             return (
                 f"batch incomplete: {content} content commit(s) since start but"
-                f" {len(card_ids)} card(s) in batch -- implementer stopped before finishing all cards"
+                f" {expected} card(s) in batch -- implementer stopped before finishing all cards"
             )
         return None
 
@@ -304,6 +310,7 @@ def _batch_completeness_stuck(
     ignore_verify: bool = False,
     cards_done=None,
     already_complete: bool = False,
+    commit_none_card_ids: set[int] | None = None,
 ) -> dict | None:
     """
     Check whether the implementer's commits/self-report satisfy the declared card_ids.
@@ -345,6 +352,8 @@ def _batch_completeness_stuck(
                 sessions never regress.
         already_complete: When True, short-circuits the gate to "complete" regardless of every other
             argument -- the resume backstop.
+        commit_none_card_ids: Card numbers whose Commit: field is the literal none; they produce
+            no content commit, so the count-only recount excludes them from the expected total.
 
     Returns:
         A stuck dict with stuck_type="incomplete" and commits_made when incomplete,
@@ -371,7 +380,7 @@ def _batch_completeness_stuck(
     if content is None:
         return None
 
-    reason = _cards_incomplete_reason(card_ids, cards_done, content)
+    reason = _cards_incomplete_reason(card_ids, cards_done, content, commit_none_card_ids=commit_none_card_ids)
     if reason is None:
         return None
 
@@ -1994,6 +2003,7 @@ def _forward_output(
                 verify_cmd=verify_cmd,
                 cards_done=_cards_done,
                 already_complete=_already_complete,
+                commit_none_card_ids=commit_none_card_ids,
             )
             if _completeness_result is not None:
                 _attach_commit_sha(_completeness_result, project_root)
@@ -2166,6 +2176,7 @@ def _forward_output(
                                             card_ids,
                                             session_id,
                                             cards_done=None,
+                                            commit_none_card_ids=commit_none_card_ids,
                                         )
                                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                                             gate_result["commit_sha"] = new_head
@@ -2191,6 +2202,7 @@ def _forward_output(
                                         verify_cmd=verify_cmd,
                                         ignore_verify=True,
                                         cards_done=None,
+                                        commit_none_card_ids=commit_none_card_ids,
                                     )
                                     if _comp is not None:
                                         _attach_commit_sha(_comp, project_root)
@@ -2273,6 +2285,7 @@ def _forward_output(
                             card_ids,
                             session_id,
                             cards_done=None,
+                            commit_none_card_ids=commit_none_card_ids,
                         )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
@@ -2298,6 +2311,7 @@ def _forward_output(
                         verify_cmd=verify_cmd,
                         ignore_verify=True,
                         cards_done=None,
+                        commit_none_card_ids=commit_none_card_ids,
                     )
                     if _comp is not None:
                         _attach_commit_sha(_comp, project_root)
@@ -2380,6 +2394,7 @@ def _forward_output(
                             card_ids,
                             session_id,
                             cards_done=None,
+                            commit_none_card_ids=commit_none_card_ids,
                         )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
@@ -2405,6 +2420,7 @@ def _forward_output(
                         verify_cmd=verify_cmd,
                         ignore_verify=True,
                         cards_done=None,
+                        commit_none_card_ids=commit_none_card_ids,
                     )
                     if _comp is not None:
                         _attach_commit_sha(_comp, project_root)
