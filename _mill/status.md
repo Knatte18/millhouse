@@ -33,11 +33,18 @@ implementing  '2026-09-26T08:59:18Z'
 ```yaml
 batches:
   - name: wiki-guard
-    state: pending
+    state: running
+    implementer_session: bc72cbc1-ede0-40a4-825f-2e90460c2fa7
+    start_sha: 3cc10d6b7e0444a0ce05c110bf6f9e61d6cf7c8c
+    verify_baseline_failures: ['NONZERO_EXIT: exit 1: Using CPython 3.14.4 interpreter at: /usr/bin/python3', 'NONZERO_EXIT:
+    exit 1: --only: unknown test file(s): [''test-wiki-guard.py'']']
   - name: symbol-resolution
     state: pending
+    verify_baseline_failures: []
   - name: hook-install
     state: pending
+    verify_baseline_failures: []
   - name: symbol-resolution-tests
     state: pending
+    verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-plan-validate-symbol-resolution.py'']']
 ```
