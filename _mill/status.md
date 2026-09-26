@@ -38,7 +38,9 @@ batches:
     commit_sha: cefe99686742ba6794535380fd7c7014ed32bb5a
     verify_baseline_failures: []
   - name: sibling-skill-wording
-    state: pending
+    state: running
+    implementer_session: 83efabba-21d3-4101-8c4a-fad4f35f7f51
+    start_sha: 2c8b3339e6a7a7d5a58570ccce72377f47f7c525
   - name: script-wording
     state: pending
     verify_baseline_failures: []
