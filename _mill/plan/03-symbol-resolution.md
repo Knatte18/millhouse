@@ -22,6 +22,7 @@ Batch-local decision: tests live in batch 4 (a separate batch, so the large vali
 - **Context:** none
 - **Edits:**
   - `plugins/mill/scripts/_plan_validate.py`
+  - `plugins/mill/unit_tests/test-plan-validate.py`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none

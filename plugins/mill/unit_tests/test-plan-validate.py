@@ -5319,7 +5319,7 @@ def test_check_context_completeness_symbol_cs_member_declaration_still_fires() -
         project_root.mkdir()
         (project_root / "internal").mkdir()
         (project_root / "internal" / "Foo.cs").write_text(
-            "public int InvalidOperationException { get; set; }\n",
+            "public int OrderFailureReason { get; set; }\n",
             encoding="utf-8",
         )
         (project_root / "other.py").write_text("# placeholder", encoding="utf-8")
@@ -5332,7 +5332,7 @@ def test_check_context_completeness_symbol_cs_member_declaration_still_fires() -
             "alpha",
             card_num=1,
             edits=["other.py"],
-            requirements="  Read `InvalidOperationException` from the model.\n",
+            requirements="  Read `OrderFailureReason` from the model.\n",
         )
         batch_b = _make_batch_file(
             "beta",

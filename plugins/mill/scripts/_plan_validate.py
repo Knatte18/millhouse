@@ -2182,6 +2182,20 @@ _RE_SYMBOL_SHAPE = re.compile(r"^[A-Za-z_]\w*(\.[A-Za-z_]\w*)?$")
 _RE_LEADING_ASSIGN_PREFIX = re.compile(r"^[A-Za-z_]\w*\s*(?::\s*[A-Za-z_][\w<>\[\], .]*)?\s*=\s*")
 
 
+# Framework/stdlib type names that never resolve to a repo file. A curated, extendable single
+# constant; it is deliberately cross-language and its over-reach (e.g. a Python name matching a C#
+# one) is accepted.
+_FRAMEWORK_TYPE_NAMES: frozenset[str] = frozenset({
+    "InvalidOperationException", "ArgumentException", "ArgumentNullException",
+    "ArgumentOutOfRangeException", "NotSupportedException", "NotImplementedException",
+    "KeyNotFoundException", "FormatException", "Exception", "Math", "Path", "File", "Directory",
+    "String", "Convert", "Enumerable", "List", "Dictionary", "HashSet", "Task", "Span", "Guid",
+    "DateTime", "TimeSpan", "Console", "Environment", "Debug", "Array", "Object", "Nullable",
+    "Promise", "Map", "Set", "Error", "JSON", "ValueError", "TypeError", "KeyError",
+    "RuntimeError", "OSError",
+})
+
+
 def _symbol_candidate_shape(token: str) -> tuple[str, str | None] | None:
     """Return the symbol search key (and dotted qualifier, if any) for a NOT-path-shaped
     Requirements: backtick token, or None.
@@ -2393,6 +2407,47 @@ def _resolve_symbol_files(
 
     cache[search_key] = matches
     return cache[search_key]
+
+
+def _resolve_type_files(
+    type_name: str,
+    candidate_files: list[Path],
+    cache: dict[str, list[Path]],
+) -> list[Path]:
+    """Return the ``candidate_files`` that declare ``type_name`` as a type.
+
+    Like ``_resolve_symbol_files`` but matches only type-declaration forms (class/struct/interface/
+    enum/record for ``.cs``, class/interface/enum/type for ``.ts``, ``class`` for ``.py``, ``type``
+    for ``.go``), skips conventional test files, and memoizes in its own ``cache`` keyed by name.
+    """
+    if type_name in cache:
+        return cache[type_name]
+
+    name = re.escape(type_name)
+    type_patterns = {
+        ".cs": re.compile(r"\b(?:class|struct|interface|enum|record)\s+" + name + r"\b"),
+        ".ts": re.compile(r"\b(?:class|interface|enum|type)\s+" + name + r"\b"),
+        ".py": re.compile(r"^\s*class\s+" + name + r"\b"),
+        ".go": re.compile(r"^type\s+" + name + r"\b"),
+    }
+
+    matches: list[Path] = []
+    for file_path in candidate_files:
+        if file_path.suffix not in _SYMBOL_SEARCH_EXTENSIONS:
+            continue
+        if _is_conventional_test_file(file_path):
+            continue
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            # Unreadable file under an arbitrary project tree -- skip it, don't crash the run.
+            continue
+        pattern = type_patterns[file_path.suffix]
+        if any(pattern.search(line) for line in content.splitlines()):
+            matches.append(file_path)
+
+    cache[type_name] = matches
+    return matches
 
 
 # Package/namespace-declaration line, per extension, used by _filter_matches_by_qualifier: group 1
@@ -2858,7 +2913,9 @@ def _check_context_completeness(
     Decision): memoized per ``run()`` call, it finds every already-cited file containing a
     declaration-form occurrence of the search key. There is no repo-wide fallback -- a symbol whose
     declaring file is not cited anywhere in the plan yet is unresolvable and never flagged.
-    A dotted token's qualifier segment (``reedengine`` in ``reedengine.New``) then participates in
+    A dotted token whose uppercase-led qualifier (``Store`` in ``Store.Save``) is declared as a
+    type in exactly one cited file resolves through that file first (exemption 16); otherwise a
+    dotted token's qualifier segment (``reedengine`` in ``reedengine.New``) participates in
     disambiguation: when the resolution above (fresh or cache hit) yields more than one candidate,
     ``_filter_matches_by_qualifier`` narrows it by package/namespace match, falling back to
     directory-basename match, on the caller side -- after every ``_resolve_symbol_files`` call or
@@ -2920,6 +2977,13 @@ def _check_context_completeness(
     declares as a new function-signature parameter or struct-literal field (extracted from a
     parenthesized/braced backtick token) is a symbol the plan itself is introducing, not an existing
     dependency to resolve.
+    15. Framework type never resolved (symbol branch only): a search key or dotted qualifier in
+    ``_FRAMEWORK_TYPE_NAMES`` (``Math``, ``InvalidOperationException``, ...) is skipped unless a
+    cited repo file declares a type of that same name, which keeps today's resolution.
+    16. Type-qualified member (symbol branch only): an uppercase-led dotted qualifier declared as a
+    type in exactly one cited file resolves the member through that file; the token is covered when
+    that file is in the card's own refs (even if the member is not declared yet), and is never
+    flagged when the member is not declared in that file.
 
     Not-shaped-at-all or unresolvable tokens (JSON keys, ordinary lowercase words, sentinel strings)
     are never flagged -- only genuine file/symbol references that this validator can independently
@@ -2972,6 +3036,8 @@ def _check_context_completeness(
     # One symbol-resolution cache per run() call, shared across every batch/card, so a search key
     # recurring across the plan is only walked once (see _resolve_symbol_files's memoization).
     search_cache: dict[str, list[Path]] = {}
+    # Separate memo for _resolve_type_files, never mixed with the symbol search cache.
+    type_cache: dict[str, list[Path]] = {}
     # One git-ignore confirmation cache per run() call, keyed by resolved candidate path, so a path
     # recurring across cards costs one `git check-ignore` subprocess, not one per occurrence.
     ignore_memo: dict[Path, bool] = {}
@@ -3067,6 +3133,14 @@ def _check_context_completeness(
                         # some card's Requirements: declares as a new function-signature parameter
                         # or struct-literal field is not resolved as an unlisted dependency.
                         if search_key in declared_symbols:
+                            continue
+
+                        # Framework-type gate: a BCL/stdlib type name (or a member qualified by
+                        # one) is never a repo dependency unless a repo type declares that name.
+                        framework_name = qualifier if qualifier is not None else search_key
+                        if framework_name in _FRAMEWORK_TYPE_NAMES and not _resolve_type_files(
+                            framework_name, candidate_files, type_cache
+                        ):
                             continue
 
                     # Prohibition-marker exemption: the line naming this token forbids acting on it, so it is not an unlisted read dependency.
@@ -3224,22 +3298,36 @@ def _check_context_completeness(
                         # Check the shared cache before calling into _resolve_symbol_files at all --
                         # a recurring search_key across cards/batches then costs one function call
                         # (the actual filesystem walk), not one call per occurrence.
-                        if search_key in search_cache:
-                            matches = search_cache[search_key]
+                        # Type-first resolution: an uppercase-led qualifier names a type, so the
+                        # member resolves through the file declaring that type. A member of a type
+                        # declared in the card's own refs is covered even when not declared yet.
+                        type_files: list[Path] = []
+                        if qualifier is not None and qualifier[:1].isupper():
+                            type_files = _resolve_type_files(qualifier, candidate_files, type_cache)
+                        if len(type_files) == 1:
+                            type_file = type_files[0]
+                            canonical = path_to_token[type_file]
+                            # Member not declared in the type's file: unresolvable, never flagged.
+                            if not _resolve_symbol_files(search_key, [type_file], {}):
+                                continue
                         else:
-                            matches = _resolve_symbol_files(
-                                search_key, candidate_files, search_cache
-                            )
-                        # Qualifier-based disambiguation: applied on this (caller) side, after the
-                        # cache hit or fresh resolution above -- _resolve_symbol_files's own cache
-                        # stays qualifier-independent (keyed by search_key alone). A bare token
-                        # (qualifier is None) or an already-unambiguous result is left untouched.
-                        if qualifier is not None and len(matches) > 1:
-                            matches = _filter_matches_by_qualifier(matches, qualifier)
-                        if len(matches) != 1:
-                            continue
+                            if search_key in search_cache:
+                                matches = search_cache[search_key]
+                            else:
+                                matches = _resolve_symbol_files(
+                                    search_key, candidate_files, search_cache
+                                )
+                            # Qualifier-based disambiguation: applied on this (caller) side, after
+                            # the cache hit or fresh resolution above -- _resolve_symbol_files's own
+                            # cache stays qualifier-independent (keyed by search_key alone). A bare
+                            # token (qualifier is None) or an already-unambiguous result is left
+                            # untouched.
+                            if qualifier is not None and len(matches) > 1:
+                                matches = _filter_matches_by_qualifier(matches, qualifier)
+                            if len(matches) != 1:
+                                continue
 
-                        canonical = path_to_token[matches[0]]
+                            canonical = path_to_token[matches[0]]
 
                         if own_refs is None:
                             own_refs = _card_own_reference_set(card_text)
