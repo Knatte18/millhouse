@@ -29,9 +29,14 @@ implementing  '2026-09-26T09:35:08Z'
 ```yaml
 batches:
   - name: implementer-fixes
-    state: pending
+    state: running
+    implementer_session: cb38b6c5-5b75-4d7d-b056-b08660ac0f74
+    start_sha: 437406cb93a9cb60a3ddfab955d1aba59eb669fd
+    verify_baseline_failures: []
   - name: integration-repairs
     state: pending
   - name: spawn-suite
     state: pending
+    verify_baseline_failures: ['NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-31f5e19d',
+  'NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-32649cd0']
 ```
