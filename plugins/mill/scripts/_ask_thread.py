@@ -1,8 +1,8 @@
 """
-Deterministic helpers for escalating a stuck autonomous run to its parent session.
+Deterministic helpers for escalating a stuck autonomous run to a named session (default: its parent).
 
-Renders the message sent to the parent, computes the give-up deadline,
-and parses the parent's reply file into an action plus guidance.
+Renders the message sent to the target, computes the give-up deadline,
+and parses the reply file into an action plus guidance, or free text for open questions.
 Nothing here talks to the harness; the ``ask-thread`` skill does the sending and waiting.
 
 Public API:
@@ -11,15 +11,20 @@ Public API:
     parse_actions(actions_csv, site=None) -> list[str]
     timeout_minutes(cfg) -> int
     reply_path(worktree_root) -> Path
-    unreachable_suffix(parent_thread) -> str
+    unreachable_suffix(target) -> str
     halt_suffix(guidance) -> str
-    build_message(...) -> str
-    prepare(...) -> dict
-    consume(reply_file, actions) -> dict
+    new_ask_id() -> str
+    ask_id_line(ask_id) -> str
+    build_message(*, slug, worktree_root, reply_file, giveup_utc, ask_id, reply_to=None,
+                  site=None, reason=None, actions=None, questions=None) -> str
+    prepare(*, ..., site=None, reason=None, actions=None, questions=None, target=None,
+            reply_to=None, ask_id=None, now=None) -> dict
+    consume(reply_file, ask_id, actions=None) -> dict
 """
 from __future__ import annotations
 
 import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -138,9 +143,9 @@ def reply_path(worktree_root: Path) -> Path:
     return _paths.resolve_task_path(worktree_root, REPLY_REL_PATH)
 
 
-def unreachable_suffix(parent_thread: str) -> str:
+def unreachable_suffix(target: str) -> str:
     """Return the blocked-reason suffix used when messaging the parent fails."""
-    return to_ascii(f" (parent_thread {parent_thread} unreachable)")
+    return to_ascii(f" (parent_thread {target} unreachable)")
 
 
 def halt_suffix(guidance: str) -> str:
@@ -152,42 +157,98 @@ def halt_suffix(guidance: str) -> str:
     return ""
 
 
+def new_ask_id() -> str:
+    """Return a fresh 8-hex-digit id that correlates one question batch with its reply."""
+    return secrets.token_hex(4)
+
+
+def ask_id_line(ask_id: str) -> str:
+    """Return the line a reply must start with to answer the question batch ``ask_id``."""
+    return f"ask-id: {ask_id}"
+
+
+def _reply_instructions(
+    *, ask_id: str, reply_file: Path, reply_to: str | None, shape_lines: list[str]
+) -> list[str]:
+    """Render the how-to-answer block shared by action and open mode."""
+    lines = [
+        "",
+        "Reply rules:",
+        f"- The first non-empty line of your reply must be exactly: {ask_id_line(ask_id)}",
+        "- Keep the answer short.",
+    ]
+    if reply_to is None:
+        lines.append(f"- Answer by writing the reply file {reply_file} in one operation.")
+    else:
+        lines += [
+            f"- Write the complete reply (the ask-id line plus the answer) to {reply_file} in one operation,",
+            f"  AND send ONE SendMessage to {reply_to} with the same text.",
+            f"  For a long answer the message may instead be the ask-id line plus: answered, see {reply_file}",
+        ]
+    lines += ["", "Reply shape:", ask_id_line(ask_id)]
+    lines += shape_lines
+    return lines
+
+
 def build_message(
     *,
     slug: str,
-    site: str,
-    reason: str,
     worktree_root: Path,
     reply_file: Path,
-    actions: list[str],
     giveup_utc: str,
+    ask_id: str,
+    reply_to: str | None = None,
+    site: str | None = None,
+    reason: str | None = None,
+    actions: list[str] | None = None,
+    questions: str | None = None,
 ) -> str:
     """
-    Render the self-describing plain-ASCII message sent to the parent session.
+    Render the self-describing plain-ASCII message sent to the target session.
 
-    The parent needs no mill skill to answer: the message names the accepted actions
-    and the exact reply-file shape.
+    Action mode (``site``, ``reason``, ``actions``) asks for a decision from a fixed action list;
+    open mode (``questions``) asks free-form questions.
+    The target needs no mill skill to answer: the message names the reply file, the ``ask-id`` line
+    and the exact reply shape.
+    Raises ValueError unless exactly one of the two modes is fully given.
     """
-    one_line_reason = " ".join(reason.splitlines())
-    lines = [
-        f"[mill] Task {slug} is about to halt and asks you (its parent session) for a decision.",
-        f"Site: {site} ({SITES[site]['label']})",
-        f"Blocked reason: {one_line_reason}",
-        f"Worktree: {worktree_root}",
-        f"Reply file: {reply_file}",
-        f"Answer by {giveup_utc} UTC; after that the task halts for the operator.",
-        "",
-        "Accepted actions:",
-    ]
-    lines += [f"- {action}: {SITES[site]['actions'][action]}" for action in actions]
-    lines += [
-        "",
-        "Reply by writing the reply file in one operation, with this exact shape:",
-        "```yaml",
-        f"action: <one of: {', '.join(actions)}>",
-        "```",
-        "<free-text guidance for the task: what to change, or why to stop>",
-    ]
+    action_inputs = (site, reason, actions)
+    action_mode = all(value is not None for value in action_inputs)
+    open_mode = questions is not None
+    if action_mode == open_mode or (open_mode and any(value is not None for value in action_inputs)):
+        raise ValueError("give either site, reason and actions, or questions")
+
+    if open_mode:
+        lines = [
+            f"[mill] Task {slug} has questions for you and waits for your answer.",
+            f"Worktree: {worktree_root}",
+            f"Reply file: {reply_file}",
+            f"Answer by {giveup_utc} UTC; after that the task asks its operator instead.",
+            "",
+            "Questions:",
+            questions,
+        ]
+        shape = ["<your answers, by question number>"]
+    else:
+        one_line_reason = " ".join(reason.splitlines())
+        lines = [
+            f"[mill] Task {slug} is about to halt and asks you for a decision.",
+            f"Site: {site} ({SITES[site]['label']})",
+            f"Blocked reason: {one_line_reason}",
+            f"Worktree: {worktree_root}",
+            f"Reply file: {reply_file}",
+            f"Answer by {giveup_utc} UTC; after that the task halts for the operator.",
+            "",
+            "Accepted actions:",
+        ]
+        lines += [f"- {action}: {SITES[site]['actions'][action]}" for action in actions]
+        shape = [
+            "```yaml",
+            f"action: <one of: {', '.join(actions)}>",
+            "```",
+            "<free-text guidance for the task: what to change, or why to stop>",
+        ]
+    lines += _reply_instructions(ask_id=ask_id, reply_file=reply_file, reply_to=reply_to, shape_lines=shape)
     return to_ascii("\n".join(lines))
 
 
@@ -197,75 +258,99 @@ def prepare(
     worktree_root: Path,
     cfg: dict,
     slug: str,
-    site: str,
-    reason: str,
-    actions: list[str],
+    site: str | None = None,
+    reason: str | None = None,
+    actions: list[str] | None = None,
+    questions: str | None = None,
+    target: str | None = None,
+    reply_to: str | None = None,
+    ask_id: str | None = None,
     now: datetime | None = None,
 ) -> dict:
     """
     Decide whether to escalate and, if so, build everything the skill needs to send and wait.
 
-    Deletes any stale reply file first so a late reply from an earlier escalation never leaks in.
+    Deletes any stale reply file first so a late reply from an earlier ask never leaks in.
+    The target is ``target`` when given, else the task's ``parent_thread``.
+    Action mode is disabled by a timeout of 0; open mode is never disabled and falls back to the default wait.
 
     Returns:
-        ``{"escalate": False, "reason": ...}`` when escalation is disabled or the task has no
-        ``parent_thread``; otherwise ``{"escalate": True, "parent_thread", "reply_path",
-        "giveup_s", "message", "unreachable_suffix"}``.
+        ``{"escalate": False, "reason": ...}`` when disabled or no target resolves; otherwise
+        ``{"escalate": True, "target", "ask_id", "reply_path", "giveup_s", "message", "unreachable_suffix"}``.
     """
     reply_file = reply_path(worktree_root)
     reply_file.unlink(missing_ok=True)
 
     minutes = timeout_minutes(cfg)
     if minutes <= 0:
-        return {"escalate": False, "reason": "disabled"}
+        if questions is None:
+            return {"escalate": False, "reason": "disabled"}
+        minutes = DEFAULT_TIMEOUT_MINUTES
 
-    parent = _status.read_parent_thread(status_path)
-    if parent is None:
-        return {"escalate": False, "reason": "no parent_thread"}
+    resolved = target if target is not None else _status.read_parent_thread(status_path)
+    if resolved is None:
+        return {"escalate": False, "reason": "no target"}
 
+    resolved_ask_id = ask_id if ask_id is not None else new_ask_id()
     giveup_s = minutes * 60
     deadline = (now or datetime.now(timezone.utc)) + timedelta(seconds=giveup_s)
     giveup_utc = deadline.strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "escalate": True,
-        "parent_thread": parent,
+        "target": resolved,
+        "ask_id": resolved_ask_id,
         "reply_path": str(reply_file),
         "giveup_s": giveup_s,
         "message": build_message(
             slug=slug,
-            site=site,
-            reason=reason,
             worktree_root=worktree_root,
             reply_file=reply_file,
-            actions=actions,
             giveup_utc=giveup_utc,
+            ask_id=resolved_ask_id,
+            reply_to=reply_to,
+            site=site,
+            reason=reason,
+            actions=actions,
+            questions=questions,
         ),
-        "unreachable_suffix": unreachable_suffix(parent),
+        "unreachable_suffix": unreachable_suffix(resolved),
     }
 
 
-def consume(reply_file: Path, actions: list[str]) -> dict:
+def consume(reply_file: Path, ask_id: str, actions: list[str] | None = None) -> dict:
     """
-    Parse and delete the parent's reply file.
+    Parse and delete the reply file for the question batch ``ask_id``.
 
-    Any missing file, missing or invalid yaml block, missing ``action:``, or action outside
-    ``actions`` degrades to ``halt``.
+    A reply counts only when its first non-empty line, trailing whitespace stripped,
+    equals ``ask-id: <ask_id>``; a missing file or any other first line is no reply.
+    With ``actions`` the body is parsed as an action plus guidance and a missing, invalid or
+    unaccepted action degrades to ``halt``; without ``actions`` the stripped body is returned.
 
     Returns:
-        ``{"action", "guidance", "halt_suffix"}``; ``halt_suffix`` is non-empty only for ``halt``.
+        With ``actions``: ``{"action", "guidance", "halt_suffix"}``; ``halt_suffix`` is non-empty only for ``halt``.
+        Without: ``{"reply": <text>}``, empty when there is no reply.
     """
+    no_reply = {"action": "halt", "guidance": "", "halt_suffix": ""} if actions is not None else {"reply": ""}
     if not reply_file.exists():
-        return {"action": "halt", "guidance": "", "halt_suffix": ""}
+        return no_reply
     text = reply_file.read_text(encoding="utf-8", errors="replace")
     # Delete before parsing so the file is gone on every path.
     reply_file.unlink(missing_ok=True)
 
+    lines = text.splitlines(keepends=True)
+    first = next((index for index, line in enumerate(lines) if line.strip()), None)
+    if first is None or lines[first].rstrip() != ask_id_line(ask_id):
+        return no_reply
+    body = "".join(lines[first + 1:])
+    if actions is None:
+        return {"reply": body.strip()}
+
     action = "halt"
-    match = _YAML_BLOCK.search(text)
+    match = _YAML_BLOCK.search(body)
     if match is None:
-        guidance = text.strip()
+        guidance = body.strip()
     else:
-        guidance = text[match.end():].strip()
+        guidance = body[match.end():].strip()
         try:
             parsed = yaml.safe_load(match.group(1))
         except yaml.YAMLError:
