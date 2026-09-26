@@ -1,8 +1,7 @@
 ---
 name: handoff
-description: Write a handoff document so a fresh session can continue this conversation's work. Explicit invocation only.
+description: Write a handoff document so a fresh session can continue this conversation's work.
 argument-hint: "[path/to/file.md] [what will the next session focus on?]"
-disable-model-invocation: true
 ---
 
 Write a handoff document summarising the current conversation so a fresh agent can continue the work. Save to `.scratch/handoff.md` under the current working directory by default — never the OS temp directory (see `conversation`'s file-writing rule).
