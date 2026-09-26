@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: ask-thread-skill
 branch: hanf/ask-thread-skill
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-ask-thread-scripts  '2026-09-26T08:48:04Z'
 approved-ask-thread-skill-and-callers  '2026-09-26T08:50:12Z'
 holistic-reviewing  '2026-09-26T08:50:25Z'
 holistic-approved  '2026-09-26T08:50:56Z'
+done  '2026-09-26T08:51:08Z'
 ```
 
 ## Batches
