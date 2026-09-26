@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-fixes
+phase: implementing
 slug: implement-recovery-and-integration-tests
 branch: hanf/implement-recovery-and-integration-tests
 plan: _mill/plan
@@ -23,6 +23,7 @@ plan-fix-r1  '2026-09-26T09:34:23Z'
 planned  '2026-09-26T09:34:23Z'
 implementing  '2026-09-26T09:35:08Z'
 approved-implementer-fixes  '2026-09-26T09:39:59Z'
+implementing  '2026-09-26T09:43:28Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ batches:
     commit_sha: db7ae7ecbfa8977ed9bf0883e41ffeaad451bb1c
     verify_baseline_failures: []
   - name: integration-repairs
-    state: running
+    state: approved
     implementer_session: ba129d33-d563-42d0-9099-5ae8edb46047
     start_sha: 557d9e263b8b52b9f2bc4e67705508638a753f09
+    commit_sha: 0bf5f0603e5dc30d8eb3f24f124c92c3fe462fae
   - name: spawn-suite
     state: running
     implementer_session: 721a4ecb-ec04-4eac-a144-370b8d927170
