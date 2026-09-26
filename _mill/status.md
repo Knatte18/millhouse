@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: ask-thread-skill
 branch: hanf/ask-thread-skill
 plan: _mill/plan
@@ -21,4 +21,15 @@ planning  '2026-09-26T08:40:05Z'
 plan-review-r1  '2026-09-26T08:44:33Z'
 plan-fix-r1  '2026-09-26T08:45:04Z'
 planned  '2026-09-26T08:45:06Z'
+implementing  '2026-09-26T08:45:21Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: ask-thread-scripts
+    state: pending
+  - name: ask-thread-skill-and-callers
+    state: pending
 ```
