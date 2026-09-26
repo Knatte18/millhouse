@@ -130,6 +130,8 @@ This is the documented recovery path for a `blocked` batch entry (see the fallba
 3. Call `_status.resume_batch(status_path, batch_name, timestamp=_timestamp.now_utc_iso(), preserve_start_sha=<decided above>)`.
 4. Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: resume {batch_name} after external fix"`. Push.
 5. Re-run `/mill-go`. The phase is now `implementing` with the resumed batch at `state: pending` and no other batch entry non-terminal, so the Entry phase gate's existing "Mid-execution phase-gate widening" → `## Resume` (`resume.md`) routing picks it up unchanged — no further edit needed to that routing logic.
+   When step 2 decided `preserve_start_sha = True`, run the resumed batch's prepare stage as `--stage prepare <batch_name> --resume-incomplete`: Execute's normal prepare would re-capture `start_sha` at HEAD and discard the preserved value (see the `--resume-incomplete` fallback in the Agent-mode dispatch step 5.5 for its mechanics).
+   When `False`, the normal prepare applies.
 
 ### Mid-execution phase-gate widening
 

@@ -18,6 +18,7 @@ import _safe_rmtree  # noqa: E402
 from _implementer_common import (  # noqa: E402
     _forward_output,
     _batch_completeness_stuck,
+    _in_scope_dirty_stuck,
     _reclassify_verify_failure,
     _content_commit_count,
     emit_prepare,
@@ -107,6 +108,23 @@ def _setup_fixture(project_root: Path) -> str:
         capture_output=True,
         text=True,
     ).stdout.strip()
+
+
+def _commit_file(project_root: Path, relative_path: str, content: str, message: str) -> None:
+    """Write content to relative_path (creating parents), stage it, and commit with message."""
+    target = project_root / relative_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    subprocess.run(
+        ["git", "-C", str(project_root), "add", relative_path],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(project_root), "commit", "-m", message],
+        check=True,
+        capture_output=True,
+    )
 
 
 def main() -> int:
@@ -5922,6 +5940,92 @@ def main() -> int:
         except Exception as exc:
             print(f"FAIL: case 85b ({exc})", file=sys.stderr)
             errors += 1
+
+    # Case 86: Commit: none cards are excluded from the count-only completeness recount.
+    # Cards {1, 2, 3} with card 2 verification-only -> two content commits complete the batch.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        try:
+            _commit_file(project_root, "a.txt", "a", "card-1")
+            result_one_commit = _batch_completeness_stuck(
+                project_root, base_sha, {1, 2, 3}, "s86",
+                cards_done=None, commit_none_card_ids={2},
+            )
+            assert result_one_commit is not None, "86b: expected incomplete with one commit"
+            assert result_one_commit["stuck_type"] == "incomplete", result_one_commit
+            assert "1 content commit(s) since start but 2 card(s)" in result_one_commit["reason"], (
+                f"86b: reason should name 2 expected cards, got {result_one_commit}"
+            )
+            print("PASS: case 86b - one content commit of two expected -> incomplete naming 2 cards")
+
+            _commit_file(project_root, "b.txt", "b", "card-3")
+            result_two_commits = _batch_completeness_stuck(
+                project_root, base_sha, {1, 2, 3}, "s86",
+                cards_done=None, commit_none_card_ids={2},
+            )
+            assert result_two_commits is None, f"86a: expected None, got {result_two_commits}"
+            print("PASS: case 86a - two content commits with card 2 Commit: none -> complete")
+
+            result_malformed = _batch_completeness_stuck(
+                project_root, base_sha, {1, 2, 3}, "s86",
+                cards_done=["x"], commit_none_card_ids={2},
+            )
+            assert result_malformed is None, f"86c: expected None, got {result_malformed}"
+            print("PASS: case 86c - malformed cards_done falls back to the excluding recount")
+
+            result_without_exclusion = _batch_completeness_stuck(
+                project_root, base_sha, {1, 2, 3}, "s86",
+                cards_done=None,
+            )
+            assert result_without_exclusion is not None, "86d: expected incomplete without exclusion"
+            assert result_without_exclusion["stuck_type"] == "incomplete", result_without_exclusion
+            print("PASS: case 86d - without commit_none_card_ids the two-commit case is incomplete")
+
+            verify_stuck = {
+                "status": "stuck", "stuck_type": "verify", "reason": "verify failed",
+                "session_id": "s86",
+            }
+            reclassified = _reclassify_verify_failure(
+                verify_stuck, project_root, base_sha, {1, 2, 3}, "s86",
+                cards_done=None, commit_none_card_ids={2},
+            )
+            assert reclassified["stuck_type"] != "incomplete", (
+                f"86e: expected no incomplete reclassification, got {reclassified}"
+            )
+            print("PASS: case 86e - _reclassify_verify_failure honours commit_none_card_ids")
+        except Exception as exc:
+            print(f"FAIL: case 86 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 87: the finalize dirty gate ignores orchestrator-owned _mill/briefs files at any depth.
+    for label, brief_dir in (("flat", "_mill/briefs"), ("nested", "hub/_mill/briefs")):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            base_sha = _setup_fixture(project_root)
+            try:
+                _commit_file(project_root, f"{brief_dir}/implement-b-r1.md", "brief", "brief")
+                _commit_file(project_root, f"{brief_dir}/implement-b-r1.out.md", "out", "out")
+                _commit_file(project_root, "hub/src.txt", "src", "src")
+                (project_root / brief_dir / "implement-b-r1.md").write_text("changed", encoding="utf-8")
+                (project_root / brief_dir / "implement-b-r1.out.md").write_text("changed", encoding="utf-8")
+                gate_kwargs = dict(
+                    project_root=project_root,
+                    task_dir=project_root / "_mill",
+                    parent_branch="main",
+                    session_id="s87",
+                    start_sha=base_sha,
+                )
+                brief_only = _in_scope_dirty_stuck(**gate_kwargs)
+                assert brief_only is None, f"87 {label}: modified briefs must not trip the gate, got {brief_only}"
+                (project_root / "hub" / "src.txt").write_text("dirty", encoding="utf-8")
+                real_dirt = _in_scope_dirty_stuck(**gate_kwargs)
+                assert real_dirt is not None, f"87 {label}: a dirty real in-scope file must still trip the gate"
+                assert real_dirt["stuck_type"] == "logic", real_dirt
+                print(f"PASS: case 87 ({label}) - briefs excluded from the dirty gate, real in-scope dirt still caught")
+            except Exception as exc:
+                print(f"FAIL: case 87 {label} ({exc})", file=sys.stderr)
+                errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

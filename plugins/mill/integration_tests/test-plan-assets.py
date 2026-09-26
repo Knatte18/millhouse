@@ -46,6 +46,7 @@ import _render  # noqa: E402
 import _review_plan  # noqa: E402
 import _safe_rmtree  # noqa: E402
 import _timestamp  # noqa: E402
+from _yaml_writer import quote_scalar  # noqa: E402
 
 
 def _assert(cond: bool, msg: str) -> None:
@@ -74,6 +75,7 @@ def test_overview_template_renders(scratch: Path) -> None:
         tmp,
         {
             "TASK_TITLE": "Demo task",
+            "TASK_TITLE_YAML": quote_scalar("Demo task"),
             "SLUG": "demo-task",
             "STARTED": _timestamp.now_utc_compact(),
             "PARENT_BRANCH": "main",
@@ -100,7 +102,9 @@ def test_batch_template_renders(scratch: Path) -> None:
         tmp,
         {
             "TASK_TITLE": "Demo task",
+            "TASK_TITLE_YAML": quote_scalar("Demo task"),
             "BATCH_NAME": "foundation",
+            "BATCH_NAME_YAML": quote_scalar("foundation"),
             "BATCH_SLUG": "foundation",
         },
     )
