@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-parent-escalation-helper
 slug: parent-thread-escalation
 branch: hanf/parent-thread-escalation
 plan: _mill/plan
@@ -29,6 +29,7 @@ planning  '2026-09-26T07:13:00Z'
 plan-review-r1  '2026-09-26T07:18:08Z'
 planned  '2026-09-26T07:18:19Z'
 implementing  '2026-09-26T07:18:33Z'
+approved-parent-escalation-helper  '2026-09-26T07:26:24Z'
 ```
 
 ## Batches
@@ -36,9 +37,10 @@ implementing  '2026-09-26T07:18:33Z'
 ```yaml
 batches:
   - name: parent-escalation-helper
-    state: running
+    state: approved
     implementer_session: 36c9a503-d017-4c72-bc4e-d2c9509fa5be
     start_sha: 665e3c6d52d362cedfe0227d1111b4bd45356705
+    commit_sha: 738ea812d8c43ee988ba06edb6208c989b4c8e41
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-parent.py'', ''test-millpy-ask-parent.py'']']
   - name: fixer-parent-guidance
     state: pending
