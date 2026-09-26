@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: mill-merge-script
 branch: hanf/mill-merge-script
 plan: _mill/plan
@@ -26,4 +26,21 @@ plan-review-r2  '2026-09-26T14:24:02Z'
 plan-fix-r2  '2026-09-26T14:24:02Z'
 plan-review-r3  '2026-09-26T14:30:14Z'
 planned  '2026-09-26T14:30:24Z'
+implementing  '2026-09-26T14:30:43Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: merge-core-entry
+    state: pending
+  - name: merge-core-squash
+    state: pending
+  - name: merge-cli
+    state: pending
+  - name: skill-rewrite
+    state: pending
+  - name: cross-references
+    state: pending
 ```
