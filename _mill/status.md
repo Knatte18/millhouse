@@ -31,11 +31,16 @@ implementing  '2026-09-26T09:10:14Z'
 ```yaml
 batches:
   - name: agent-dispatch-core
-    state: pending
+    state: running
+    implementer_session: ba2240a7-f05f-492d-afad-fdfefefb2853
+    start_sha: 1cf037d2df0663a78f7e64910cb8544f06e16821
+    verify_baseline_failures: []
   - name: sibling-skill-wording
     state: pending
   - name: script-wording
     state: pending
+    verify_baseline_failures: []
   - name: test-comments
     state: pending
+    verify_baseline_failures: []
 ```
