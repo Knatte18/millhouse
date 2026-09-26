@@ -45,16 +45,19 @@ Why now: the two millpy-implement bugs cost real orchestrator turns in a live ru
 - Decision: `_cards_incomplete_reason` in `plugins/mill/scripts/_implementer_common.py` gains a keyword `commit_none_card_ids: set[int] | None = None`.
   Its count-only fallback (`_count_only_reason`, used when `cards_done` is absent or malformed) compares `content` against `len(card_ids - commit_none_card_ids)` instead of `len(card_ids)`; the message reports the adjusted expected count.
   The `cards_done` set-difference path is unchanged.
-  Thread the parameter from every caller: `_batch_completeness_stuck` (new keyword `commit_none_card_ids`), `_reclassify_verify_failure` (already receives it), and the four `_batch_completeness_stuck` call sites in `finalize_from_output` / `_forward_output` (which already hold `commit_none_card_ids`, computed from the batch file on disk).
+  Thread the parameter from every caller: `_batch_completeness_stuck` (new keyword `commit_none_card_ids`), `_reclassify_verify_failure` (already receives it), and every other caller of `_cards_incomplete_reason` or `_batch_completeness_stuck` (find them with grep; the finalize paths already hold `commit_none_card_ids`, computed from the batch file on disk).
 - Rationale: matches the issue's stated expectation and the existing code-derived carve-out (`_cards_done_all_commit_none`, issue #664); the set is computed from the batch file, never from the implementer's self-report.
 - Rejected: trusting only `cards_done` (absent in exactly the failure case); treating any batch containing a `Commit: none` card as always complete (hides genuinely stopped-early batches).
 
 ### resume-brief-dirty
 
-- Decision: fix the finalize side, not the prepare side.
-  In `_in_scope_dirty_stuck`, the `_mill/briefs/` exclusion is `line.startswith("_mill/briefs/")` on repo-relative paths from `git diff --name-only`.
-  Broaden it so a briefs path is excluded wherever the task dir sits inside the repo (a `/_mill/briefs/` path component, or equivalently a path relative to the resolved task dir), covering both the brief and its `.out.md`.
-  The plan-writer must first reproduce the failure with a unit test using a tracked, re-rendered brief (including a nested/hub-relative layout) and only then adjust the predicate, so the fix targets the real cause; if the unit test shows the current predicate already excludes the reported paths, the remaining fix is whatever the reproduction shows (e.g. the `.out.md` naming or a different path root) -- do not ship a fix without a failing-then-passing test.
+- Decision: fix the finalize side (authoritative; never the prepare side, even if the reproduction surprises).
+  Mechanism (verified by reading the code): `_in_scope_dirty_stuck` builds `owned_paths` from `git diff --name-only <start_sha>` and matches `status_porcelain` lines; both yield repo-root-relative paths.
+  Its exclusion `line.startswith("_mill/briefs/")` therefore only works when the task dir is at the repo root.
+  In a nested (hub-relative) layout, as in the reporting repo (`Models`), the brief is `<hub_subdir>/_mill/briefs/implement-<batch>-r1.md`, the prefix test misses it, and both the brief and its `.out.md` count as in-scope dirt.
+  Fix: exclude a path when it lies under the resolved briefs directory, computed as `(project_root-relative form of _paths.resolve_task_path(project_root, "_mill/briefs/"))`, with a `/_mill/briefs/` path-component match as fallback when that resolution is unavailable.
+  Implementation is reproduce-first: a unit test with a tracked, modified brief and `.out.md` under a nested task dir must fail on the current predicate and pass after the fix; a flat-layout case and a real dirty in-scope file must keep their current results.
+  If the reproduction unexpectedly passes on the current predicate, the fallback is still a finalize-side change (adjust the `owned_paths`/porcelain matching that the reproduction shows to be wrong), and the discrepancy is recorded in the plan.
 - Rationale: `--resume-incomplete` must not make a second `mill-go: start batch` commit, because `_content_commit_count` subtracts only commits whose subject starts with `mill-go: start batch` and a differently-named commit would be over-counted as content, while a same-named one is deliberately avoided (see the comment in `millpy-implement.py`'s resume branch).
   Briefs are already declared Builder-owned bookkeeping in `_in_scope_dirty_stuck`'s docstring (#885), so excluding them is the consistent fix.
 - Rejected: committing the brief in the resume branch (breaks the recount as above); committing with a new subject and teaching `_content_commit_count` about it (more moving parts, two places to keep in sync).
@@ -123,3 +126,4 @@ Root causes found by running each suite (`PYTHONPATH= uv run --project plugins/m
 - **Q:** Where should the #1162 fix live: prepare-side commit or finalize-side exclusion? **A:** [auto-pick] Finalize-side exclusion of orchestrator-owned brief artifacts. **Why:** a second housekeeping-style commit would corrupt `_content_commit_count`, and briefs are already documented as Builder-owned in the dirty gate.
 - **Q:** Fix stale integration tests or product code? **A:** [auto-pick] Fix the tests, except where a reproduction proves a product bug. **Why:** each failure traced to a deliberate later product change (#879 liveness, `git_root` param, `*_YAML` tokens, no-content-commit gate, wiki path resolution).
 - **Q:** How to make `test-spawn` find the wiki? **A:** [auto-pick] Set `paths.wiki` in the fixture's `config.local.yaml`. **Why:** the documented override, smallest change; layout rebuild is the fallback if further drift appears.
+- **Q:** Reviewer r1 BLOCKING (unverified #1162 root cause)? **A:** [auto-pick] Stated the nested-layout mechanism and made the fix reproduce-first with a finalize-side fallback. **Why:** the prefix test is repo-root-relative; nested task dirs defeat it.
