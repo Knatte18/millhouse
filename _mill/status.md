@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: plan-review-r3
 slug: mill-merge-script
 branch: hanf/mill-merge-script
 plan: _mill/plan
@@ -24,4 +24,5 @@ plan-review-r1  '2026-09-26T14:15:35Z'
 plan-fix-r1  '2026-09-26T14:16:00Z'
 plan-review-r2  '2026-09-26T14:24:02Z'
 plan-fix-r2  '2026-09-26T14:24:02Z'
+plan-review-r3  '2026-09-26T14:30:14Z'
 ```
