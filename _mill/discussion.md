@@ -60,7 +60,8 @@ The operator wants the reply to be one message back, with a file as an optional 
     Target is always `status.md` `parent_thread`.
     Behaviour matches today's `ask-parent`, except the reply may arrive as a message (next decision).
   - **Direct mode**: `/ask-thread [thread-name]`, invoked by the operator or by another agent.
-    Target is `thread-name` when given, else `parent_thread`; neither -> tell the user direct mode cannot start and stop.
+    Target is `thread-name` when given, else `parent_thread`, resolved once at invocation (the skill reads `parent_thread` via `_status.read_parent_thread`); neither -> tell the user direct mode cannot start and stop.
+    This is the only "no target" outcome in direct mode: the resolved name is passed as `--to` on every batch's `prepare`, so `prepare` never returns `"no target"` in direct mode.
     Once invoked, direct mode lasts for the rest of the session (until the session ends or the operator says stop).
     Whenever the session would otherwise ask the operator a question, it instead sends the questions to the target in batches of at most 5.
     The cap of 5 copies mill-start's Phase: Discuss per-batch cap (same interviewing habit, same reply length for a human-driven target); it is not otherwise load-bearing.
@@ -75,7 +76,7 @@ The operator wants the reply to be one message back, with a file as an optional 
     No fixed answer set, no action enum, no `halt_suffix`.
     Direct mode never changes automatic-mode sites: a halt site in the same session still runs automatic mode.
     Under `--auto`/`--orch` a session asks the operator nothing, so direct mode has nothing to route there.
-  - Direct-mode fallback (no target, `SendMessage` error, `escalate: false`, or timeout with no reply): ask the operator directly with the same numbered questions.
+  - Direct-mode per-batch fallback (`SendMessage` error, or timeout with no reply): ask the operator directly with the same numbered questions.
   - Automatic-mode fallback: unchanged — return `halt` (with `unreachable_suffix` on a send error).
 - Rationale: one skill, one send/wait/timeout path; the brief pins both behaviours.
 - Rejected: a separate direct-mode skill (two skills for one job).
@@ -101,7 +102,11 @@ The operator wants the reply to be one message back, with a file as an optional 
   - The asker waits with the existing `Monitor` poll on the reply file (re-arm and expiry rules unchanged), except that `READY` fires only when the file's first non-empty line is `ask-id: <ask_id>` (the poll replaces `[ -s ]` with a position-anchored check, `awk 'NF{print; exit}' "<reply_path>" 2>/dev/null | grep -qxE "ask-id: <ask_id>[[:space:]]*"`, which tests only the first non-empty line, never a match further down), so a stale or mismatched file never ends the wait.
   - When a message from the target arrives while waiting: check its first non-empty line for `ask-id: <ask_id>` first.
     No match: ignore it; the `Monitor` keeps running (re-arm per the expiry rules if it has already expired).
-    Match: stop the recorded `Monitor` task (`TaskStop`), then — unless the reply file already starts with the matching `ask-id` line (the target used the attachment path; the file wins) — write the message text verbatim to the reply file with the Write tool; then run `consume`.
+    Match: unless the reply file already starts with the matching `ask-id` line (the target already wrote it; the file wins), write the message text verbatim to the reply file with the Write tool.
+    The skill never cancels the `Monitor` (no `TaskStop`: no mill skill calls it programmatically and `harness-tool-contracts.md` documents no early cancel).
+    Instead the running poll sees the now-matching file on its next 15 s tick and ends itself with `READY`, which leads to `consume` as usual.
+    If no `Monitor` is armed at that moment (it expired and has not been re-armed yet), run `consume` directly.
+    After `consume`, any later event from an earlier `Monitor` `task_id` for this batch (e.g. a `TIMEOUT` or expiry notice) is ignored.
   - `consume` re-checks the id: a missing file, or one whose first non-empty line is not `ask-id: <ask_id>`, is treated as no reply (automatic mode: `halt`; direct mode: empty reply -> ask the operator).
     The `ask-id` line is stripped before parsing the yaml block (automatic) or returning the text (direct).
   - `READY` / `TIMEOUT` / harness stop from `Monitor`: run `consume` exactly as today.
@@ -177,7 +182,8 @@ The operator wants the reply to be one message back, with a file as an optional 
 - `_status.read_parent_thread(status_path)` returns the `parent_thread:` value or `None`.
 - `_paths.resolve_task_path(worktree_root, REPLY_REL_PATH)` resolves the reply file; keep using it.
 - The skill's Monitor poll script and re-arm rules reference `orch-wait/SKILL.md` Step 2 and `harness-tool-contracts.md`'s Monitor section; the `harness-tool-contracts.md` Monitor section cites `ask-parent/SKILL.md`'s Step 4 — update that citation to the new path and step name.
-- `SendMessage`, `TaskStop`, `ListAgents` may be deferred or top-level depending on the build; the skill loads any of them whose schema is not loaded via `ToolSearch` (`select:SendMessage,TaskStop,ListAgents`, listing only the missing ones) before first use.
+- `SendMessage`, `ListAgents` and `Monitor` may be deferred or top-level depending on the build; the skill loads any of them whose schema is not loaded via `ToolSearch` (`select:SendMessage,ListAgents,Monitor`, listing only the missing ones) before first use.
+  The skill does not use `TaskStop`.
   `ListAgents` has no prior caller in any skill; its self-name line was verified live on 2026-09-26 (see Reply protocol).
 - New skill frontmatter: `name: ask-thread`, `argument-hint: "[thread-name]"`, a description stating both modes (drop "Internal machinery skill, not invocable directly").
 - Session names: `_vscode_tasks.session_prefix` lower-cases task-session names (`mh:<slug>:<phase>`); the hub orch session is `MH:orch`.
@@ -196,7 +202,7 @@ The operator wants the reply to be one message back, with a file as an optional 
 - `test-ask-thread.py` (renamed from `test-ask-parent.py`, keep every existing case with names updated) — TDD candidates:
   - `build_message` action mode with and without `reply_to`: reply-to name and "SendMessage" instruction present only when given; reply file path always present.
   - `build_message` open mode: questions text included verbatim (ASCII-folded), no action list, no yaml `action:` shape.
-  - `prepare` with `target` overriding `parent_thread`; `target=None` and no `parent_thread` -> `escalate: false, reason: "no target"`; timeout `0` -> `"disabled"` in action mode, but open mode with timeout `0` escalates with `giveup_s == DEFAULT_TIMEOUT_MINUTES * 60`; return key `target`.
+  - `prepare` with `target` overriding `parent_thread`; `target=None` and no `parent_thread` -> `escalate: false, reason: "no target"` (reachable in action mode; direct mode always passes `target`); timeout `0` -> `"disabled"` in action mode, but open mode with timeout `0` escalates with `giveup_s == DEFAULT_TIMEOUT_MINUTES * 60`; return key `target`.
   - `prepare` still deletes a stale reply file.
   - `consume` open mode: missing file -> `reply: ""`; matching `ask-id` + content -> stripped text without the id line; file deleted.
   - `consume` id check, both modes: missing `ask-id` line or a different id -> no reply (`halt` / `""`), file deleted.
