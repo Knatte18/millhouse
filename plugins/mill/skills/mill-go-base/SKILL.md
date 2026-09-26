@@ -356,7 +356,7 @@ This three-step pattern applies at every dispatch point:
    If the file exists: treat the reviewer as no-longer-running and proceed straight to the existing "no longer running" branch below (skip the `TaskOutput` call entirely for this occurrence).
    If the file does not exist: the result is ambiguous (still-running or dead-before-writing) — fall back to `TaskOutput` exactly as today, unchanged.
    This `test -f` pre-check applies to the reviewer sub-case of (c) only;
-   the fixer sub-case of (c), and the implementer's mirrored probe in (b) above, continue using `TaskOutput` unchanged — fixer and implementer have no autonomously-written deliverable file available before their terminal notification arrives (per the `cheap-liveness-check-reviewer-only (#784)` Decision), so no equivalent check exists for them.
+   the fixer sub-case of (c), and the implementer's mirrored probe in (b) above, continue using `TaskOutput` unchanged — fixer and implementer have no autonomously-written deliverable file available before their terminal event arrives (per the `cheap-liveness-check-reviewer-only (#784)` Decision), so no equivalent check exists for them.
    Branch on the result:
    - **If it reports the agent is still running:** take no dispatch action this turn.
      Do not re-dispatch, do not classify as `stuck_type: transient`.
