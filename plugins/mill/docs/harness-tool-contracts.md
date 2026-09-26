@@ -4,7 +4,7 @@ This file records confirmed return/notification shapes for harness tools used by
 These shapes were confirmed via live spikes and are not documented by the harness itself.
 Four skill files already carry inline copies of this material, load-bearing for each one's own logic — this doc consolidates and cross-references them;
 it does not replace any of them.
-`orch-wait`, `orch-review` and `ask-parent` are three further consumers of this contract, referencing it rather than carrying inline copies.
+`orch-wait`, `orch-review` and `ask-thread` are three further consumers of this contract, referencing it rather than carrying inline copies.
 
 ---
 
@@ -35,13 +35,14 @@ A poll script run via `Monitor(command: ..., timeout_ms: 1800000, ...)`:
 - Runs bash, not PowerShell, regardless of the operator's terminal — see `cli/SKILL.md`.
 - An expiry with no `<event>` content (a notification whose payload is neither `READY` nor a `TIMEOUT after ...` line) fires whenever the poll script is still running when `Monitor`'s `timeout_ms` cap is reached — expected for any wait exceeding 30 minutes, not build-specific. All five wait sections below re-arm on this outcome, recomputing the remaining budget from wall-clock elapsed time rather than restarting it.
 
-See `mill-go-base/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" section and `mill-plan/SKILL.md`'s "### Entry-gate wait for upstream mill-start" section, `orch-wait/SKILL.md`'s Step 2, and `orch-review/SKILL.md`'s Step 2 (tracking `wait_started_epoch` and `task_id` per slug), and `ask-parent/SKILL.md`'s Step 4 for five consumers of this contract.
+See `mill-go-base/SKILL.md`'s "### Entry-gate wait for upstream mill-plan" section and `mill-plan/SKILL.md`'s "### Entry-gate wait for upstream mill-start" section, `orch-wait/SKILL.md`'s Step 2, and `orch-review/SKILL.md`'s Step 2 (tracking `wait_started_epoch` and `task_id` per slug), and `ask-thread/SKILL.md`'s Step 4 (Wait) for five consumers of this contract.
 
 ## SendMessage to a peer session
 
 - Verified: `ListAgents` in a live session lists peer local Claude sessions by name (the orchestrator session appeared as `MH:orch`), so a named peer is addressable for an outbound `SendMessage(to: <name>, message: ...)`.
-- Unverified: whether a message wakes an idle peer session promptly, and whether a woken session can be held open with a timeout.
+- Verified: on 2026-09-26 `ListAgents`' first output line was `This session is <name> [<id>] ...` (e.g. `This session is mh:ask-thread-skill:start [68784b]`), which is how `ask-thread` learns its own name for `--reply-to`.
+- Unverified: whether a message wakes an idle peer session or a waiting asker promptly, and whether a woken session can be held open with a timeout.
 - Unverified: whether name lookup is case-sensitive.
   `_vscode_tasks.session_prefix` lower-cases the names it assembles (e.g. `mh:orch`) while `ListAgents` listed `MH:orch`, so a spawner passing a differently-cased `--parent` value can surface as the unreachable fallback.
-- Design consequence: `ask-parent` never relies on a reply message.
-  It treats a `SendMessage` error as "parent unreachable" and receives the answer as a file polled by `Monitor`, so the timeout bounds every unverified case.
+- Design consequence: `ask-thread` asks the target to reply with one `SendMessage` and always to write the reply file too.
+  A matching reply message is written into the reply file and ends the wait early, while the `Monitor` poll on the file plus the timeout bound every unverified case; a `SendMessage` error is "target unreachable".
