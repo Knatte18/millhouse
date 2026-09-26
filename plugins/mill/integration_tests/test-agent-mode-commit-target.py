@@ -182,6 +182,15 @@ def main() -> int:
             f"prepare stage should create atomic pre-commit on task branch; HEAD unchanged ({initial_sha})",
         )
 
+        # Simulate the implementer's genuine content commit; _forward_output rejects a batch whose
+        # only commits since start_sha are "mill-go: start batch" housekeeping commits.
+        (task_wt / "impl-output.txt").write_text("implementer output\n", encoding="utf-8")
+        _run(["git", "-C", str(task_wt), "add", "impl-output.txt"], cwd=container)
+        _run(
+            ["git", "-C", str(task_wt), "commit", "-m", "feat: implementer content commit"],
+            cwd=container,
+        )
+
         # Verify main branch was not touched
         main_after_prepare = _run(
             ["git", "-C", str(hub), "rev-parse", "main"],
