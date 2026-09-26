@@ -149,6 +149,8 @@ This is part of the mill turn-reduction initiative (mechanize deterministic step
   4. Otherwise run the fresh squash.
   - The squash commit message becomes `<cached_task>` followed by a blank line and the trailer `Mill-Task: <slug>`.
   - In-place mode applies the same checks with the current working tree in place of `<parent-path>`.
+    Because in-place mode skips the pre-squash ff-only step (the only other fetch), it first runs `git fetch origin <parent_branch>` so checks 1-3 compare against a current `origin/<parent_branch>`;
+    a fetch failure is a `halt` (network/auth), not a silent fallthrough.
 - Rationale: a run killed between `commit` and `push` leaves a clean parent ahead of origin that output-based detection mistakes for "nothing to commit" and never pushes;
   a parent that advanced after a landed squash makes a re-squash conflict instead of reporting "landed".
   A trailer is a deterministic marker that survives later parent commits;
