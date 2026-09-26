@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: implement-recovery-and-integration-tests
 branch: hanf/implement-recovery-and-integration-tests
 plan: null
@@ -15,4 +15,6 @@ task_description: |
 
 ```text
 discussing  '2026-09-26T09:25:23Z'
+discussion-fix-r2  '2026-09-26T09:30:03Z'
+discussed  '2026-09-26T09:30:03Z'
 ```
