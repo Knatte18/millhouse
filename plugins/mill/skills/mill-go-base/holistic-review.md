@@ -6,6 +6,7 @@ Only execute this section if `cfg.get("roles", {}).get("code-review", {}).get("h
 `max_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("rounds", 1)`.
 `min_holistic_rounds = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("min_rounds", 1)`.
 `auto_approve_on_cap = cfg.get("roles", {}).get("code-review", {}).get("holistic", {}).get("auto_approve_on_cap", False)`.
+`parent_escalated_holistic = False` and `holistic_cap_extended = False` (session-local).
 Loop variable `H` starts at 1. `extra_files = []`.
 
 **Convergence gate (min_rounds + demoted predicate).** On any round whose envelope's top-level `verdict` is `APPROVE` (the `APPROVE` branch below), compute:
@@ -98,6 +99,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
    Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...] [--prior-notes <digest-path>]`.
    Include any accumulated `extra_files` from prior `NEED_CONTEXT` rounds via `--extra-file <p>` (one flag per path).
+   When `holistic_cap_extended` is true, also append `--max-rounds <max_holistic_rounds>` to `<args>`, so the review CLI's round-cap check accepts the extra round.
 
    **Exit handling.**
    If the finalize envelope is absent, halt with "BLOCKED: holistic review pre-launch failure" and surface the last stderr line to the user.
@@ -118,6 +120,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    Tree-guard checkpoint block, pre-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately before this retry's Agent-mode dispatch.
 
    Follow the Agent-mode dispatch pattern (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") with `<cli> = millpy-review-code.py` and `<args> = [--extra-file <p> ...]`.
+   When `holistic_cap_extended` is true, also append `--max-rounds <max_holistic_rounds>` to `<args>`, so the review CLI's round-cap check accepts the extra round.
 
    Tree-guard checkpoint block, post-dispatch form (see `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch") — immediately after it returns.
 
@@ -179,10 +182,10 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    Parse stdout JSON (same last-`{"status":...}`-line pattern as `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch").
    The CLI handles `holistic-fixing` phase + commit + push itself.
    - `stuck_type: infrastructure`: auto-retry ONCE with a fresh re-fire: re-dispatch once with a fresh session.
-     If the re-fire also fails with `infrastructure`: set batch state -> `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
+     If the re-fire also fails with `infrastructure`: set batch state -> `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked* with `escalate: false`.
      The re-fire is fresh (killed session cannot be reattached).
    - `stuck_type: transient`: one-retry policy (re-invoke once) — this retry IS the one-shot self-resolve attempt.
-     If still transient after it: set batch state -> `blocked`, `blocked_reason: "transient: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
+     If still transient after it: set batch state -> `blocked`, `blocked_reason: "transient: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked* with `escalate: false`.
    - `stuck_type: verify` or `logic` (first occurrence) → self-resolve once: investigate the finding using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the holistic review file, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
      **Regardless of whether a plan edit was made**, append a `## Prior failure` section to `00-overview.md` (placed immediately after its frontmatter, before `## Batch Index` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text, regardless of whether the reason names a specific batch, spans several, or names none at all.
      When the stuck-JSON `reason` names exactly one batch, identify that batch's name by reading the `reason` text against the known batch names (a judgment call, since `reason` is free text; this matches the existing judgment already required by "edit the plan file(s) if the failure traces to an ambiguous or incorrect card" above) and consider a new implementable card warranted (distinct from, and in addition to, the `## Prior failure` bullet logged above).
@@ -200,13 +203,13 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
      On success (no exception), append a new `### Card N:` heading (using the returned number) to the target batch's own `## Cards` list (not inside `## Prior failure`), following this file's existing card-field conventions (`Context:`/`Edits:`/`Creates:`/`Deletes:`/`Moves:`/`Requirements:`/`Commit:` per `plugins/mill/templates/plan-batch.md`), then re-run `_check_card_numbering` (imported from `_plan_validate`) once more as a post-write defensive re-check, passing `batch_files = sorted(p for p in plan_dir.glob("??-*.md") if p.name != "00-overview.md")` (the same glob-and-filter expression `compute_next_card_number` uses internally, re-globbed fresh so the just-written card is included) — `signature: _check_card_numbering(batch_files: list[Path]) -> list[dict]` — before proceeding to the "record the self-resolve... re-invoke" steps below unchanged.
 
-     On `PlanDAGError` (a genuine numbering-range collision — batches are expected to occupy disjoint numeric ranges at plan-write time), make no write to the target batch file at all and instead route directly to this same bullet's existing escalation path below (`_status.set_batch_field` state → `blocked`, `blocked_reason` naming the collision text from the exception, `_status.append_phase(status_path, "blocked", ...)`, commit, go to *Blocked*) — a card-numbering collision means self-resolve itself cannot safely proceed, so it escalates immediately rather than attempting the retry-then-escalate cycle the rest of this bullet uses for fixer-reported failures.
+     On `PlanDAGError` (a genuine numbering-range collision — batches are expected to occupy disjoint numeric ranges at plan-write time), make no write to the target batch file at all and instead route directly to this same bullet's existing escalation path below (`_status.set_batch_field` state → `blocked`, `blocked_reason` naming the collision text from the exception, `_status.append_phase(status_path, "blocked", ...)`, commit, go to *Blocked* with `escalate: false`) — a card-numbering collision means self-resolve itself cannot safely proceed, so it escalates immediately rather than attempting the retry-then-escalate cycle the rest of this bullet uses for fixer-reported failures.
 
      When the `reason` names zero batches or more than one, self-resolve falls back to the plain-bullet `## Prior failure` log only (already appended to `00-overview.md` above) — no card insertion is attempted, since there is no single unambiguous target batch to insert into.
 
      Before re-invoking, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck (holistic)"`.
      Then re-invoke `millpy-fix.py --scope holistic` once (fresh) for this round.
-     If the retry produces the *same* `verify`/`logic` failure: set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked*.
+     If the retry produces the *same* `verify`/`logic` failure: set batch state -> `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"`, and go to *Blocked* with `escalate: false`.
    - On success: increment H and loop.
 
 6. On `NEED_CONTEXT`: append the files the reviewer asked for to `extra_files` (passed as `--extra-file <p>` in sub-step 3), emit `_notify.notify("<VARIANT_LABEL>.need-context", ..., slug=slug, round=H)`, and re-run the round.
@@ -215,4 +218,15 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
 
    **If `auto_approve_on_cap` is `True`:** run the same terminal actions step 4's `APPROVE` branch already runs at its own implicit-approve-at-cap case — `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`; commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug} (auto-approved on round-cap exhaustion, config auto_approve_on_cap)"` — where `<review_file_path>` is the `file` field from the most recently completed round's `reviews[0]` (round `H = max_holistic_rounds`), same convention as step 4's own commit. Proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`) — do NOT halt.
 
-   **Otherwise** (flag is `False`, unchanged today's behavior): `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push; halt with "Holistic review exhausted {max_holistic_rounds} round(s). Task left as [active] for manual review."
+   **Otherwise** (flag is `False`):
+   before the halt below, when `parent_escalated_holistic` is false, set it true and load the `ask-parent` skill with site `go-holistic-cap`, reason `f"holistic review exhausted {max_holistic_rounds} round(s)"`, actions `approve,retry,halt`.
+
+   - On `approve`: run the same terminal actions the `auto_approve_on_cap` `True` branch runs, with commit message `"<VARIANT_LABEL>: holistic approve {slug} (approved by parent)"`, and proceed to Handoff.
+   - On `retry`: let `H_last = max_holistic_rounds` and `review_file_path` be the `file` field of round `H_last`'s `reviews[0]`.
+     Write the guidance to `<briefs_dir>/parent-guidance-holistic-r{H_last}.txt`.
+     Dispatch the holistic fixer via the Agent-mode dispatch pattern with `<cli> = millpy-fix.py` and `<args> = --scope holistic --review-file <review_file_path> --round {H_last} --parent-guidance <briefs_dir>/parent-guidance-holistic-r{H_last}.txt` (step 5's `REQUEST_CHANGES` fixer shape, never step 4's `--nits-only` shape, since this round still has unresolved BLOCKINGs), handling its stuck results with step 5's bullets.
+     On success set `max_holistic_rounds = H_last + 1` (session-local; config untouched) and `holistic_cap_extended = True`, then run one more loop iteration at `H = max_holistic_rounds` (steps 0–6; no new phase string is appended beyond what those steps already append).
+     If that extra round again exhausts the cap, this step 7 runs again and halts without asking (the escalation is spent).
+   - On `halt`: the halt below, with `halt_suffix` appended to both the set_blocked reason and the halt message.
+
+   Halt: `_status.set_blocked(status_path, f"holistic review exhausted {max_holistic_rounds} round(s)", timestamp=_timestamp.now_utc_iso())`; commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on holistic review"` and push; halt with "Holistic review exhausted {max_holistic_rounds} round(s). Task left as [active] for manual review."
