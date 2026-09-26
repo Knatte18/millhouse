@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cross-references
+phase: holistic-reviewing
 slug: mill-merge-script
 branch: hanf/mill-merge-script
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-merge-core-squash  '2026-09-26T14:38:48Z'
 approved-merge-cli  '2026-09-26T14:39:44Z'
 approved-skill-rewrite  '2026-09-26T14:40:55Z'
 approved-cross-references  '2026-09-26T14:42:21Z'
+holistic-reviewing  '2026-09-26T14:42:31Z'
 ```
 
 ## Batches
