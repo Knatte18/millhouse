@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: subagent-handback-report
 branch: hanf/subagent-handback-report
-plan: null
+plan: _mill/plan
 parent_branch: main
 task: 'mill-go-base: take the subagent report from the SubagentHandback message'
 task_description: |
@@ -19,4 +19,5 @@ discussion-fix-r1  '2026-09-26T09:05:30Z'
 discussion-fix-r2  '2026-09-26T09:06:23Z'
 discussion-fix-r3  '2026-09-26T09:06:55Z'
 discussed  '2026-09-26T09:06:55Z'
+planning  '2026-09-26T09:08:47Z'
 ```
