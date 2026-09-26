@@ -59,7 +59,9 @@ batches:
     commit_sha: 4bd75ba7d8dfa125ece621f6afbecff77e73c770
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-merge.py'', ''test-millpy-merge.py'']']
   - name: skill-rewrite
-    state: pending
+    state: running
+    implementer_session: d11069dd-b580-468c-b8d4-7cbfec841311
+    start_sha: 166e297e5b03fe15e08fbb61ff53afb9e103907d
     verify_baseline_failures: []
   - name: cross-references
     state: pending
