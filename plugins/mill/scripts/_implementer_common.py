@@ -1613,12 +1613,12 @@ def finalize_from_output(
         print(
             f"ERROR: --agent-output file not found: {agent_output_path} -- for"
             " implementer/fixer/merge-in dispatches the orchestrator must write the"
-            " notification message to this path before calling --stage finalize",
+            " subagent report message to this path before calling --stage finalize",
             file=sys.stderr,
         )
         return 1
 
-    # The harness HTML-escapes the <task-notification> payload uniformly before delivery, so the text captured to agent_output_path may contain entities like "&amp;" and "&lt;".
+    # The harness HTML-escapes a <task-notification> payload, so the text captured to agent_output_path may contain entities like "&amp;" and "&lt;"; unescaping is a no-op for a hand-back message that carries none.
     # Unescape here (at the read site) so downstream JSON parsing and status.md writes see the original, uncorrupted text.
     output = html.unescape(Path(agent_output_path).read_text(encoding="utf-8"))
     return _forward_output(

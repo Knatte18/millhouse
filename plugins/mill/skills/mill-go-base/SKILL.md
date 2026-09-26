@@ -284,21 +284,26 @@ This three-step pattern applies at every dispatch point:
    nothing here, since reviewer cost visibility is this feature's whole scope.
    Immediately before this `Agent()` call, run `date +%s` in the Bash tool and hold the value in a
    local variable, e.g. `review_start_epoch`.
-   Once the terminal `<task-notification>` for this `agentId` is accepted (see step 4 below), run
+   Once the first terminal event (hand-back message or `<task-notification>`) for this `agentId` is accepted (see step 4 below), run
    `date +%s` again and hold the difference as `review_elapsed_s = <second reading> - review_start_epoch`.
 
-   The orchestrator must then **wait for the completion `<task-notification>`** from that background agent.
-   For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the notification payload — that text feeds both step 3's classification and step 4's capture, unchanged.
-   For a **reviewer** dispatch, step 4 is skipped (the reviewer already wrote its own output file — see step 4 below), so the payload feeds **step 3's classification only**.
+   The orchestrator must then **wait for the subagent's terminal event**: normally the SubagentHandback message, with the `<task-notification>` as fallback and as the only carrier of a non-completed `<status>`.
+   For an **implementer, fixer, or merge-in** dispatch, read the subagent's final message from the hand-back message (falling back to the notification payload only when no hand-back message arrived and the payload is non-empty) — that text feeds both step 3's classification and step 4's capture.
+   For a **reviewer** dispatch, the hand-back message is only the one-line ack, and it feeds **step 3's classification only** (step 4 is skipped — the reviewer already wrote its own output file, see step 4 below).
+
+   Event-order rules:
+   - Proceed on a hand-back message without waiting for the notification.
+   - Act on a later notification only when its `<status>` is not `completed`.
+   - A `completed` notification whose result only points to a hand-back message, with none in context, falls through to step 3's empty/no-structured-report handling.
 
    A background agent is a **detached worker** that can be stopped or interrupted independently of the orchestrator.
-   If the `<task-notification>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 3's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
+   If the `<task-notification>` `<status>` indicates the subagent was stopped or interrupted (rather than completing normally), route it through step 3's recovery paths below — implementer, reviewer, and fixer notifications are all checked with a one-shot liveness probe before being treated as terminal (for implementer, the probe gates only the stopped/interrupted trigger;
    a clean turn-exhaustion stop still routes straight to Clean mid-work stop, unprobed — see step 3(b)).
 
-3. **Recover from raw API errors and interruptions:** Classify the notification (or the inline tool return on immediate failure) into one of three cases:
+3. **Recover from raw API errors and interruptions:** Classify the subagent's terminal event(s) — the hand-back message text plus the notification's `<status>` (or the inline tool return on immediate failure) — into one of three cases:
 
    **(a) Raw API/infrastructure errors — key on the error marker alone.**
-   If the notification message contains a raw API/infrastructure error marker (text like `API Error` / `Internal server error`), classify it as `stuck_type: transient` and re-dispatch once immediately using a fresh brief and session (no `--resume`).
+   If the hand-back message text or the notification message, whichever carries it, contains a raw API/infrastructure error marker (text like `API Error` / `Internal server error`), classify it as `stuck_type: transient` and re-dispatch once immediately using a fresh brief and session (no `--resume`).
    Key on that marker **alone** — the old heuristic's other negative signals ("roughly 0 tokens, no `MILL_REVIEW` block and no `status` JSON") no longer discriminate anything: under the reviewer-skipped-capture contract (step 4 below), a **successful** reviewer payload is now *also* exactly ~0 tokens with no `MILL_REVIEW` block, since the reviewer's chat reply is just a one-line ack.
    This applies to implementer, reviewer, and fixer Agent dispatches.
    On a second consecutive raw API error: implementer, fixer, and reviewer dispatches all escalate per the "Stuck escalation" section.
@@ -316,13 +321,15 @@ This three-step pattern applies at every dispatch point:
    The ack exists so a human reading the transcript can confirm the reviewer finished;
    it must not become a branch condition here.
 
-   **(b) Notification for an implementer dispatch — split by trigger.**
+   **(b) Terminal event for an implementer dispatch — split by trigger.**
    Two distinct triggers both land on an implementer dispatch that didn't cleanly report success,
-   and they are no longer handled identically:
-   - **Clean turn-exhaustion** (the notification is a non-error, non-JSON message — the payload contains neither an `API Error` / `Internal server error` marker nor a valid `status` JSON block — AND carries no non-clean-terminal `<status>` signal: the implementer voluntarily ran out of turn budget before emitting the required JSON report) — **unchanged**, routes straight to Clean mid-work stop below, never through the liveness probe in (c).
+   and they are no longer handled identically.
+   A hand-back message with a valid JSON `status` block needs no `<status>` tag to be treated as clean;
+   a hand-back message holding no structured `status` block takes the clean turn-exhaustion route.
+   - **Clean turn-exhaustion** (the report is a non-error, non-JSON message — the payload contains neither an `API Error` / `Internal server error` marker nor a valid `status` JSON block — AND carries no non-clean-terminal `<status>` signal: the implementer voluntarily ran out of turn budget before emitting the required JSON report) — **unchanged**, routes straight to Clean mid-work stop below, never through the liveness probe in (c).
      The redundancy rationale still holds here: `--stage finalize`'s own completeness recount disambiguates partial-vs-dead by inspecting the actual commit count against the batch's card count, which is conclusive when the implementer had a full turn to make commits before stopping.
    - **Non-clean terminal notification** (the `<task-notification>`'s `<status>` tag is present and its value is not `completed` — observed values include `completed`, `failed`; a stall/watchdog kill surfaces as `<status>failed</status>` with the stall reason in `<summary>` — AND the message does not contain (a)'s literal API-error marker text) — **NEW liveness probe**, mirroring (c) exactly: before invoking `--stage finalize`, call `TaskOutput(task_id: <agentId>, block: false)` using the `agentId` retained per step 2. This call is for its status field only — the subagent's raw JSONL transcript in its return value must never be read, logged, or otherwise acted on.
-     If it reports the agent is still running: take no action this turn — no finalize call, no escalation — and wait for the agent's own next `<task-notification>` for the same `agentId`, exactly as (c) already does for reviewer/fixer.
+     If it reports the agent is still running: take no action this turn — no finalize call, no escalation — and wait for the next terminal event for that `agentId` (a hand-back message or a `<task-notification>`), exactly as (c) already does for reviewer/fixer.
      If it reports the agent is no longer running,
      or the probe call itself errors: proceed to Clean mid-work stop below exactly as documented.
      This includes the case where `TaskOutput` is not a callable tool in this host at all (confirmed via `ToolSearch("select:TaskOutput")` returning no match, or an immediate "unknown tool" failure on the call itself) — treat that identically to a runtime probe error and proceed to the same branch; do not attempt to invent a replacement liveness check.
@@ -330,7 +337,7 @@ This three-step pattern applies at every dispatch point:
 
    **Clean mid-work stop (implementer only):** Reached either directly (clean turn-exhaustion, per (b) above) or after (b)'s stopped/interrupted probe branch determines the agent is no longer running.
    Do NOT re-dispatch fresh immediately.
-   Instead, write the notification to the `.out.md` file as normal and invoke the `--stage finalize` step (step 5).
+   Instead, write the subagent's report message (hand-back text, or notification payload as fallback) to the `.out.md` file as normal and invoke the `--stage finalize` step (step 5).
    Finalize inspects the commit count against the batch's card count and returns one of:
    - **`status: success`** (all cards committed and the tree is clean) — proceed to step 6, whose inferred-success rule logs the audit row when `inferred` is `true`.
    - **`stuck_type: incomplete`** (some-but-not-all cards committed — the partial clean stop) — route to the **`incomplete` recovery defined in step 5 below** (warm-`SendMessage` first, then the `--resume-incomplete` fallback).
@@ -349,11 +356,11 @@ This three-step pattern applies at every dispatch point:
    If the file exists: treat the reviewer as no-longer-running and proceed straight to the existing "no longer running" branch below (skip the `TaskOutput` call entirely for this occurrence).
    If the file does not exist: the result is ambiguous (still-running or dead-before-writing) — fall back to `TaskOutput` exactly as today, unchanged.
    This `test -f` pre-check applies to the reviewer sub-case of (c) only;
-   the fixer sub-case of (c), and the implementer's mirrored probe in (b) above, continue using `TaskOutput` unchanged — fixer and implementer have no autonomously-written deliverable file available before their terminal notification arrives (per the `cheap-liveness-check-reviewer-only (#784)` Decision), so no equivalent check exists for them.
+   the fixer sub-case of (c), and the implementer's mirrored probe in (b) above, continue using `TaskOutput` unchanged — fixer and implementer have no autonomously-written deliverable file available before their terminal event arrives (per the `cheap-liveness-check-reviewer-only (#784)` Decision), so no equivalent check exists for them.
    Branch on the result:
    - **If it reports the agent is still running:** take no dispatch action this turn.
      Do not re-dispatch, do not classify as `stuck_type: transient`.
-     The harness will deliver the agent's own next `<task-notification>` for the same `agentId` when it actually finishes (matches the observed `#595` behavior — the "killed" agent later delivered a real `completed` notification unprompted).
+     The harness will deliver the next terminal event for that `agentId` (a hand-back message or a `<task-notification>`) when it actually finishes (matches the observed `#595` behavior — the "killed" agent later delivered a real `completed` notification unprompted).
      This wait is unbounded by design, matching every other Agent-mode dispatch's existing "no log-polling or liveness check required" contract (see "Agent-mode properties" below) — no bounded re-check loop is added for this probe.
      For a **reviewer** dispatch: this is one continuous `Agent()` call and one continuous measurement — do NOT restart or reset `review_start_epoch`;
      there is nothing to sum yet.
@@ -365,11 +372,12 @@ This three-step pattern applies at every dispatch point:
    This probe exists because both `#587` and `#595` were live incidents where a "killed"/"stopped by user" notification was stale for an agent that was, in fact, still running to completion — see `_mill/discussion.md`'s `stopped/interrupted-notification liveness probe (#587, #595)` Decision for the full incident writeups and rationale.
 
 4. **Capture output — reviewer-skipped.**
-   For an **implementer, fixer, or merge-in** dispatch, write **the message captured from the `<task-notification>`** to `<brief_path>.out.md` (utf-8), unchanged.
+   For an **implementer, fixer, or merge-in** dispatch, write **the subagent's report message**, taken from the SubagentHandback message (notification payload only as fallback), verbatim to `<brief_path>.out.md` (utf-8).
+   The `html.unescape` at the finalize read sites is unchanged and applies to whichever source was captured.
    The response file extends the brief path by replacing the trailing `.md` with `.out.md` — for a brief `foo-r1.md` the response is `foo-r1.out.md`.
    For a **reviewer** dispatch, skip this step entirely — the reviewer holds its own `Write` grant and already wrote `.out.md` itself;
    the orchestrator does not write it a second time.
-   The old behaviour made the orchestrator read the reviewer's entire final message and write that whole thing back out to disk, so a full findings dump landed in the Builder's context twice — once in the notification payload it had to read to classify the round, and again in the file it wrote — even though "Builder reads only the JSON envelope verdict, never the findings" and "Implementer owns receive-review" (see Principles) already forbid the Builder from acting on those findings.
+   The old behaviour made the orchestrator read the reviewer's entire final message and write that whole thing back out to disk, so a full findings dump landed in the Builder's context twice — once in the final message it had to read to classify the round, and again in the file it wrote — even though "Builder reads only the JSON envelope verdict, never the findings" and "Implementer owns receive-review" (see Principles) already forbid the Builder from acting on those findings.
 
 5. **Run finalize stage:** Invoke the CLI with `--stage finalize`, the same standard arguments, and `--agent-output <path>`.
    For the three **review** CLIs, `<path>` is the `output_path` field read verbatim from step 1's prepare envelope — do not re-derive it by string-replacing the brief path's trailing `.md` with `.out.md`;
@@ -412,14 +420,14 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       ```
       SendMessage(to: <agentId>, "Finish any remaining cards in this batch, run verify, then emit the required JSON report as your final line.")
       ```
-      Wait for the resulting `<task-notification>`.
-      **Liveness probe:** if that notification is non-clean-terminal in the same sense step 3(b)/(c) already define (the `<status>` tag is present and its value is not `completed`, OR the value is `completed` but the message contains no valid JSON `status` report) — call `TaskOutput(task_id: <agentId>, block: false)` using the same `agentId` retained from the original dispatch (per step 2's existing "Record the `agentId`..." documentation). This call is for its status field only — the subagent's raw JSONL transcript in its return value must never be read, logged, or otherwise acted on.
-      - If the probe reports the agent is still running: take no action this turn (no `.out.md` write, no finalize call) and wait for the agent's own next `<task-notification>` for the same `agentId`, exactly as step 3(c)'s probe already does — this wait is unbounded, matching that existing contract; no bounded re-check loop is added here.
+      Wait for the resumed agent's terminal event, which arrives as a hand-back message with the `<task-notification>` as fallback and status source.
+      **Liveness probe:** if that terminal event is non-clean-terminal in the same sense step 3(b)/(c) already define (the notification's `<status>` tag is present and its value is not `completed`, OR the value is `completed` but the message — read from the hand-back message when present — contains no valid JSON `status` report) — call `TaskOutput(task_id: <agentId>, block: false)` using the same `agentId` retained from the original dispatch (per step 2's existing "Record the `agentId`..." documentation). This call is for its status field only — the subagent's raw JSONL transcript in its return value must never be read, logged, or otherwise acted on.
+      - If the probe reports the agent is still running: take no action this turn (no `.out.md` write, no finalize call) and wait for the next terminal event for that `agentId` (a hand-back message or a `<task-notification>`), exactly as step 3(c)'s probe already does — this wait is unbounded, matching that existing contract; no bounded re-check loop is added here.
       - If the probe reports the agent is no longer running, or the probe call itself errors: proceed as documented below.
       This includes the case where `TaskOutput` is not a callable tool in this host at all (confirmed via `ToolSearch("select:TaskOutput")` returning no match, or an immediate "unknown tool" failure on the call itself) — treat that identically to a runtime probe error and proceed to the same branch; do not attempt to invent a replacement liveness check.
       If the notification IS clean-terminal (status `completed` with a valid JSON report) on first receipt, the probe never fires at all — proceed straight to the step below; this changes nothing about the already-working clean-completion path.
 
-      Write the notification's message to `<brief_path>.out.md` (overwriting the prior capture, per step 4's naming rule), and re-run `--stage finalize` (step 5) with the same standard arguments.
+      Write the report message (hand-back text, notification payload as fallback) to `<brief_path>.out.md` (overwriting the prior capture, per step 4's naming rule), and re-run `--stage finalize` (step 5) with the same standard arguments.
       The warm-`SendMessage` path **bypasses prepare entirely**, so status.md's original `start_sha` and `implementer_session` are untouched — finalize's completeness recount runs from the original baseline and counts every content commit (the partial ones plus any new ones).
       Re-capturing `start_sha` here would under-count a now-finished batch and loop `incomplete` forever.
    2. **`--resume-incomplete` fallback (cold re-dispatch).**
@@ -429,7 +437,7 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
       **Defensive re-check (third trigger only).** This narrow, belt-and-suspenders re-check applies ONLY when the fallback was reached via the third trigger above — the other two triggers have nothing further to re-check: no `agentId` exists for the first, and a proven-`completed` `SendMessage` error already settles the second.
       It exists to close the narrow TOCTOU window between the notification-time probe (in the Liveness probe paragraph above) and this fallback actually firing, not because the notification-time probe is itself insufficient.
       Immediately before the fallback's own dispatch action below, if the `agentId` is still in scope, call `TaskOutput(task_id: <agentId>, block: false)` one more time. This call is for its status field only — the subagent's raw JSONL transcript in its return value must never be read, logged, or otherwise acted on.
-      - If it reports the agent is still running: do NOT proceed with the cold `--resume-incomplete` dispatch this turn — instead, take no action and wait for the agent's own next `<task-notification>` for the same `agentId`, identical to the no-action-this-turn contract the Liveness probe paragraph already documents for its own "still running" branch.
+      - If it reports the agent is still running: do NOT proceed with the cold `--resume-incomplete` dispatch this turn — instead, take no action and wait for the next terminal event for that `agentId` (a hand-back message or a `<task-notification>`), identical to the no-action-this-turn contract the Liveness probe paragraph already documents for its own "still running" branch.
       - If it reports the agent is no longer running, or the probe call itself errors: proceed with the `--resume-incomplete` dispatch exactly as documented below.
       This includes the case where `TaskOutput` is not a callable tool in this host at all (confirmed via `ToolSearch("select:TaskOutput")` returning no match, or an immediate "unknown tool" failure on the call itself) — treat that identically to a runtime probe error and proceed to the same branch; do not attempt to invent a replacement liveness check.
       Re-dispatch the implementer once via the `--resume-incomplete` path — run the prepare stage as `--stage prepare <batch_name> --resume-incomplete`, then the Agent tool, then `--stage finalize` as usual. `--resume-incomplete` reads the original `start_sha` and `implementer_session` from status.md instead of re-capturing HEAD, skips the cleanliness snapshot and the `mill-go: start batch` housekeeping commit, and so **preserves the original `start_sha`** — never a fresh one.
@@ -450,10 +458,10 @@ discussion `warm-resume-mechanism`, `start-sha-preserving-resume`):
    This is the only place this call is made; steps 3(b) and 5.5 defer to it.
 
 **Agent-mode properties:**
-- No log-polling or liveness check required: the orchestrator waits for the `<task-notification>` from the background agent instead of polling a log file.
+- No log-polling or liveness check required: the orchestrator waits for the background agent's terminal event (hand-back message, with the `<task-notification>` as fallback) instead of polling a log file.
 - A background agent IS a detached worker and CAN be stopped or interrupted.
   ('Stopped/interrupted' here is one example of the broader non-clean-terminal `<status>` trigger step 3(b)/(c) now test for — see step 3 above.)
-  A stopped/interrupted agent produces a notification indicating it did not complete normally — handle that per step 3's recovery paths below (implementer: liveness-probe-then-clean-mid-work-stop/`incomplete` routing per step 3(b);
+  A stopped/interrupted agent produces a notification whose `<status>` tag indicates it did not complete normally — handle that per step 3's recovery paths below (implementer: liveness-probe-then-clean-mid-work-stop/`incomplete` routing per step 3(b);
   reviewer/fixer: liveness-probe-then-one-retry-transient path per step 3(c)).
 - `transient` stuck errors can still be emitted by `finalize` as synthetic JSON (e.g., if the brief write fails).
 - The one-retry transient policy applies immediately to raw API errors, and to stopped/interrupted reviewer/fixer agents once step 3's liveness probe confirms the agent is no longer running (see step 3).

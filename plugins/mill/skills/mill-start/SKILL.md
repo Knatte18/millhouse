@@ -251,7 +251,7 @@ it never halts the phase.
 This widens the prior status.md-only safeguard to the whole `_mill/` tree (`discussion.md`, `status.md`, `briefs/`, `reviews/`) and restores only the exact paths git reports as deleted, never a blanket subtree checkout — see `_mill/discussion.md`'s "Detection query and restore granularity" Decision for why a legitimate uncommitted modification elsewhere in `_mill/` (e.g. a just-appended, not-yet-committed `status.md` phase row) is never swept into the restore.
 
 Load the `mill-receiving-review` skill now, unconditionally, before round 1's dispatch below — this is what makes step 3's "before evaluating or acting on findings" rule structurally satisfiable.
-Under Agent-mode dispatch the reviewer's findings arrive only in the review file it writes, not embedded in the `<task-notification>` payload (which now carries only a one-line ack);
+Under Agent-mode dispatch the reviewer's findings arrive only in the review file it writes, and the reviewer's hand-back message carries only a one-line ack;
 the orchestrator must read that review file to present BLOCKING findings or NITs to the user, so the skill must already be active in context before that file is ever read.
 Loading it this early is still correct, it is just no longer motivated by the payload containing the findings.
 
