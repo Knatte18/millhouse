@@ -63,6 +63,10 @@ The operator wants the reply to be one message back, with a file as an optional 
     Target is `thread-name` when given, else `parent_thread`; neither -> tell the user direct mode cannot start and stop.
     Once invoked, direct mode lasts for the rest of the session (until the session ends or the operator says stop).
     Whenever the session would otherwise ask the operator a question, it instead sends the questions to the target in batches of at most 5.
+    "Ask the operator" covers every operator question the agent itself poses: `AskUserQuestion`, `mill:conversation` numbered-options menus, and free-text questions in prose.
+    It binds skills loaded before or after `/ask-thread` alike.
+    Harness permission prompts are not agent questions and are not covered.
+    The rule is an instruction held in the session's context by the loaded `ask-thread` skill; there is no hook, flag or other enforcement mechanism, and the plan must not add one.
     Each question is numbered, carries the asker's recommended answer first, and lists the alternatives (same shape as `mill:conversation`'s numbered-options rule).
     The free-text reply is taken as the decision and the session continues.
     No fixed answer set, no action enum, no `halt_suffix`.
@@ -81,10 +85,18 @@ The operator wants the reply to be one message back, with a file as an optional 
     If `ListAgents` is unavailable or has no such line, `--reply-to` is omitted.
   - The rendered message tells the target: reply with ONE `SendMessage` to `<reply-to>`; keep it short; for a long answer write the full text to the reply file (absolute path given) in one operation and send a message saying so.
     Without `--reply-to`, the message tells the target to answer by writing the reply file only.
-  - Automatic mode: the reply (message or file) must start with the same fenced ```` ```yaml ```` `action:` block as today, followed by free-text guidance.
-  - The asker waits with the existing `Monitor` poll on the reply file (unchanged script, re-arm and expiry rules unchanged).
-  - When a message from the target arrives while waiting: stop the recorded `Monitor` task (`TaskStop`), then — if the reply file does not exist or is empty — write the message text verbatim to the reply file with the Write tool; then run `consume`.
-    If the file already has content (the target used the attachment path), the file wins and the message text is not written.
+  - Automatic mode: after the `ask-id` line (next bullet), the reply (message or file) carries the same fenced ```` ```yaml ```` `action:` block as today, followed by free-text guidance.
+  - **Batch correlation (`ask-id`).** Every `prepare` call generates a fresh `ask_id` (short random hex, e.g. `secrets.token_hex(4)`; `prepare` accepts an explicit `ask_id` for tests) and returns it in its JSON.
+    The rendered message shows it and requires every reply — message or file — to have `ask-id: <ask_id>` as its first non-empty line.
+    One reply is exactly one message or one file; the first reply carrying the current `ask_id` is the complete answer.
+    A message or file without the current `ask_id` (a late reply to an earlier, timed-out batch, a follow-up or split second message, or an unrelated message) is not a reply: the asker ignores it and keeps waiting for the current deadline.
+    Messages arriving after the current batch was consumed are ignored the same way, since they cannot carry the next batch's id.
+  - The asker waits with the existing `Monitor` poll on the reply file (re-arm and expiry rules unchanged), except that `READY` fires only when the file's first non-empty line is `ask-id: <ask_id>` (poll with `grep -q` on that line instead of `[ -s ]`), so a stale or mismatched file never ends the wait.
+  - When a message from the target arrives while waiting: check its first non-empty line for `ask-id: <ask_id>` first.
+    No match: ignore it; the `Monitor` keeps running (re-arm per the expiry rules if it has already expired).
+    Match: stop the recorded `Monitor` task (`TaskStop`), then — unless the reply file already starts with the matching `ask-id` line (the target used the attachment path; the file wins) — write the message text verbatim to the reply file with the Write tool; then run `consume`.
+  - `consume` re-checks the id: a missing file, or one whose first non-empty line is not `ask-id: <ask_id>`, is treated as no reply (automatic mode: `halt`; direct mode: empty reply -> ask the operator).
+    The `ask-id` line is stripped before parsing the yaml block (automatic) or returning the text (direct).
   - `READY` / `TIMEOUT` / harness stop from `Monitor`: run `consume` exactly as today.
   - Every path ends in `consume`, which reads and deletes the file, so parsing stays in Python and the file never survives to the handoff untracked-file gate.
 - Rationale: whether a `SendMessage` wakes an idle asker is unverified; the file poll plus timeout keeps both modes correct whichever way that turns out, and routing message text through the file keeps one parser.
@@ -98,13 +110,14 @@ The operator wants the reply to be one message back, with a file as an optional 
     The action-list mode keeps today's content, plus the reply-to instructions.
     Output stays plain ASCII via `to_ascii`.
   - `_ask_thread.prepare(...)` gains `target: str | None = None` (overrides `parent_thread`) and `reply_to: str | None = None`; open mode is selected by passing `questions` instead of `site`/`actions`.
-    Return key `parent_thread` is renamed `target`; `escalate: false` reasons are `"disabled"` and `"no target"`.
+    Return key `parent_thread` is renamed `target`, and a new key `ask_id` is added; `escalate: false` reasons are `"disabled"` and `"no target"`.
+    `build_message` takes `ask_id` and renders it with the first-line echo instruction in both modes.
     Still deletes a stale reply file first.
-  - `_ask_thread.consume(reply_file, actions=None)`: with `actions` behaves as today; with `actions=None` (open mode) returns `{"reply": <stripped text>}` (empty string when the file is missing or blank), and deletes the file.
+  - `_ask_thread.consume(reply_file, ask_id, actions=None)`: verifies and strips the `ask-id` first line (mismatch or missing file = no reply); with `actions` it then behaves as today (no reply -> `halt`); with `actions=None` (open mode) it returns `{"reply": <stripped text>}` (empty string for no reply). It deletes the file on every path.
   - CLI `millpy-ask-thread.py`:
     - `prepare --site <id> --reason <text> --actions <csv> [--reply-to <name>]` (automatic)
     - `prepare --questions-file <path> [--to <name>] [--reply-to <name>]` (direct); `--site`/`--actions` and `--questions-file` are mutually exclusive and one set is required; `--to` is rejected in automatic mode (exit 1).
-    - `consume --actions <csv>` (automatic) or `consume --open` (direct); exactly one required.
+    - `consume --ask-id <id> --actions <csv>` (automatic) or `consume --ask-id <id> --open` (direct); `--ask-id` always required, `--actions`/`--open` exactly one required.
     - Log/error prefix `[ask-thread]`.
   - The questions file lives at `.scratch/ask-thread-questions.md` in the task worktree; the skill writes it with the Write tool before each batch and it is not committed.
 - Rationale: the multi-line question text goes through a file rather than a shell-quoted argument; one module keeps one timeout/stale-file/ASCII path.
@@ -166,9 +179,11 @@ The operator wants the reply to be one message back, with a file as an optional 
   - `build_message` open mode: questions text included verbatim (ASCII-folded), no action list, no yaml `action:` shape.
   - `prepare` with `target` overriding `parent_thread`; `target=None` and no `parent_thread` -> `escalate: false, reason: "no target"`; timeout `0` -> `"disabled"`; return key `target`.
   - `prepare` still deletes a stale reply file.
-  - `consume` open mode: missing file -> `reply: ""`; content -> stripped text; file deleted.
-  - `consume` action mode unchanged (existing cases).
-- `test-millpy-ask-thread.py` (renamed) — CLI: `prepare --questions-file` happy path and `--to` override; `--to` with `--site` -> exit 1; neither `--site` set nor `--questions-file` -> exit 1; `consume --open`; reply path ends with `_mill/ask-reply.md`.
+  - `consume` open mode: missing file -> `reply: ""`; matching `ask-id` + content -> stripped text without the id line; file deleted.
+  - `consume` id check, both modes: missing `ask-id` line or a different id -> no reply (`halt` / `""`), file deleted.
+  - `consume` action mode: existing cases, with the `ask-id` line prepended.
+  - `prepare` returns a fresh `ask_id` per call (two calls differ) and the message contains it; an explicit `ask_id` is used verbatim.
+- `test-millpy-ask-thread.py` (renamed) — CLI: `prepare --questions-file` happy path and `--to` override; `--to` with `--site` -> exit 1; neither `--site` set nor `--questions-file` -> exit 1; `consume --ask-id <id> --open`; `consume` without `--ask-id` -> exit 1; reply path ends with `_mill/ask-reply.md`.
 - Repo-wide check: the grep in Technical context returns nothing outside `_mill/`.
 
 ## Q&A log
