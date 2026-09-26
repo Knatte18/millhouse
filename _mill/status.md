@@ -48,3 +48,9 @@ batches:
     state: pending
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-plan-validate-symbol-resolution.py'']']
 ```
+
+## Inferred-success log
+
+```text
+'2026-09-26T09:53:27Z'  wiki-guard  round 1
+```
