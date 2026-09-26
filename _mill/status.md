@@ -43,7 +43,9 @@ batches:
     commit_sha: 738ea812d8c43ee988ba06edb6208c989b4c8e41
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-ask-parent.py'', ''test-millpy-ask-parent.py'']']
   - name: fixer-parent-guidance
-    state: pending
+    state: running
+    implementer_session: c8024833-c7c7-405a-8fe0-213ec584aff6
+    start_sha: 54b1bdc2c0279c73e28838054d7192bc5e02e1bf
     verify_baseline_failures: []
   - name: ask-parent-skill
     state: pending
