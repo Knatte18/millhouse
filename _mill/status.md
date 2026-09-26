@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussing
+phase: discussed
 slug: ask-thread-skill
 branch: hanf/ask-thread-skill
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 
 ```text
 discussing  '2026-09-26T07:59:00Z'
+discussed  '2026-09-26T08:36:18Z'
 ```
