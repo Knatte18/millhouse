@@ -3,7 +3,7 @@
 ```yaml
 task: Ask the parent session when stuck (parent_thread)
 slug: parent-thread-escalation
-approved: false
+approved: true
 skip_checks: ["wiki-config-mutation"]
 discussion_sha: 95c09528760f6a801e78a2587d95c14eac82a7f6
 started: 20260926-070743
