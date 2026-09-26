@@ -66,7 +66,9 @@ batches:
     commit_sha: f2f5ee9fcd68f6f6247c9b21333b6d0bc7061fe0
     verify_baseline_failures: []
   - name: cross-references
-    state: pending
+    state: running
+    implementer_session: e984682e-2fd1-4a28-9422-7efb84492440
+    start_sha: 025783d2b9d1d4984b2bd46e9df6331a11f05624
 ```
 ## Inferred-success log
 
