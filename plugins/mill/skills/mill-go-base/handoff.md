@@ -1,5 +1,8 @@
 # mill-go-base: Handoff
 
+Initialise `parent_escalated_nits = False` and `parent_escalated_done_gate = False` for this Handoff run.
+Each gate may ask the parent session at most once per Handoff run; the two gates fail for unrelated reasons, so each has its own flag.
+
 **Nit-enforcement gate.**
 Check for approved scopes with unfixed nits:
 
@@ -29,7 +32,15 @@ That identical shape now includes `--prior-blocking <digest-path>` too (per `plu
 This dispatch is this site's audit trail per Shared Decision `audit-trail-via-status-timeline`: no separate `_status.append_phase` call is added here, because the dispatched NIT-fix pass's `--stage finalize` call already appends the `nits-fixed-holistic` marker to status.md on completion (see the Handoff section's existing "Manual recovery note" paragraph, unedited by this batch) — that marker, not a new `self-resolved-nits` row, is the intended record of this self-resolve action.
 After the dispatch completes, re-run `_nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)`.
 
-If it is STILL non-empty, `_notify.notify("<VARIANT_LABEL>.blocked", f"unfixed nits in scope(s): {scope_list}", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt with: `BLOCKED: unfixed nits in scope(s): <scope-list> -- NIT-fix pass did not clear them` where `<scope-list>` is the joined list of scope names.
+If it is STILL non-empty, first, when `parent_escalated_nits` is false, set it true and load the `ask-parent` skill with site `go-handoff-nits`, reason `f"unfixed nits in scope(s): {scope_list}"`, actions `retry,halt`.
+The builder lock stays held during the wait (it is per-worktree and blocks nothing else).
+
+- On `retry`: write the guidance to `<briefs_dir>/parent-guidance-holistic-r<H>.txt` (same `<H>` and directory as the prior-blocking digest above).
+  Re-dispatch the same NIT-fix pass (identical `--scope holistic --review-file <review-file-abs-path> --round <H> --nits-only --prior-blocking <digest-path>` args) with `--parent-guidance <briefs_dir>/parent-guidance-holistic-r<H>.txt` added, and run its `--stage finalize` as before.
+  Then re-run `_nit_gate.compute_unfixed_nits(worktree_root, reviews_dir, status_path)`: empty -> proceed to the terminal cleanliness gate; still non-empty -> the halt below with no second escalation.
+- On `halt`: the halt below, with `halt_suffix` appended to the `BLOCKED:` message and the notify text.
+
+Halt: `_notify.notify("<VARIANT_LABEL>.blocked", f"unfixed nits in scope(s): {scope_list}", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`, then halt with: `BLOCKED: unfixed nits in scope(s): <scope-list> -- NIT-fix pass did not clear them` where `<scope-list>` is the joined list of scope names.
 Do NOT set `phase: done` when the gate fires;
 the task remains in its current phase so the operator can inspect and re-run `/mill-go`.
 
@@ -138,9 +149,15 @@ If the exit code is non-zero and the JSON line has `result: blocked`, proceed to
 
 1. Check whether `<git_root>/.claude/agents/mill-done-gate-fixer.md` exists (a plain filesystem existence check, e.g. `Path(git_root, ".claude", "agents", "mill-done-gate-fixer.md").exists()`).
 2. **If it exists:** dispatch it once via `Agent(subagent_type: "mill-done-gate-fixer")` — not through the CLI prepare/finalize family `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" documents for implementer/reviewer/fixer — with a brief naming the plan overview (`<plan_dir>/00-overview.md`), the configured `done_gate` command (`gate_cmd`), and the captured failure output (the JSON's `reason` field). Wait for the dispatch to complete, then re-run the same "0. Pre-done gate" snippet above once more (a second `_done_gate.run_gate(gate_cmd, git_root)` call). If this re-run's `result['result'] == 'ok'`, proceed to the existing numbered step 1 (`_status.append_phase(status_path, "done", ...)`) as normal — the gate now passes. If it is still `'blocked'`: release the builder lock and notify (`_notify.notify("<VARIANT_LABEL>.blocked", "done gate failed", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`), then halt with `BLOCKED: done gate failed — <reason>` (the re-run's `reason` field), appending the note "mill-done-gate-fixer was already attempted and did not resolve the failure."
+   Before that release/notify, when `parent_escalated_done_gate` is false, set it true and load the `ask-parent` skill with site `go-handoff-done-gate`, reason `f"done gate failed: {reason}"` (the re-run's `reason` field), actions `retry,halt`.
+   - On `retry`: dispatch `Agent(subagent_type: "mill-done-gate-fixer")` once more with the same brief plus, appended at the end, a `Parent guidance:` heading followed by the guidance verbatim.
+     Wait for it, then re-run the "0. Pre-done gate" snippet: `ok` -> numbered step 1; still `blocked` -> the release/notify/halt above with its "already attempted" note.
+   - On `halt`: the release/notify/halt above, with `halt_suffix` appended to the `BLOCKED:` message.
+
    Do NOT set `phase: done` when the gate fires;
    the task remains in its current phase so the operator can investigate the failure.
 3. **If it does not exist:** skip the dispatch entirely and go straight to the same lock-release/notify sequence and halt as step 2's still-blocked branch, but without the "already attempted" note — `BLOCKED: done gate failed — <reason>` using the original run's `reason` field.
+   This step never escalates to the parent, since there is nothing to re-dispatch.
    Do NOT set `phase: done` when the gate fires;
    the task remains in its current phase so the operator can investigate the failure.
 

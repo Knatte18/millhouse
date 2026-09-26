@@ -19,6 +19,7 @@ Public API:
     read(status_path) -> dict
     read_full(status_path) -> dict
     read_parent_branch(status_path) -> str | None
+    read_parent_thread(status_path) -> str | None
     read_slug(status_path) -> str
     read_branch(status_path, *, cfg, slug) -> str
     phase_entry_timestamp(status_path, phase, *, occurrence=1, latest=False) -> str | None
@@ -975,6 +976,29 @@ def read_parent_branch(status_path: Path | str) -> str | None:
         return None
     except (ValueError, KeyError, TypeError):
         return None
+
+
+def read_parent_thread(status_path: Path | str) -> str | None:
+    """Return the ``parent_thread:`` value written by ``millpy-spawn.py --parent``.
+
+    The value names the session that spawned the task.
+    Returns ``None`` when the row is absent or blank, or on any parse failure.
+
+    Args:
+        status_path: Absolute path to the task's ``status.md`` file.
+
+    Returns:
+        The stripped parent session name, never case-folded,
+        or ``None`` on any parse failure.
+    """
+    status_path = _as_path(status_path, "read_parent_thread")
+    try:
+        value = read_full(status_path)["yaml"].get("parent_thread")
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def phase_entry_timestamp(

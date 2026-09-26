@@ -235,6 +235,8 @@ On a fresh run only (no `## Batches` section in status.md):
 
 ## Execute — sequential loop
 
+Initialise `parent_escalated_batches = set()` (session-local): the batches that already used their one `go-batch` parent escalation this run.
+
 For each batch in `order`:
 
 ## Agent-mode dispatch
@@ -669,7 +671,7 @@ If `blocking_paths` is non-empty (a path could not be confidently classified aga
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", f"out-of-scope untracked file(s): {blocking_paths}")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
 - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — out-of-scope untracked files"`
-- Go to *Blocked*.
+- Go to *Blocked* with `escalate: false`.
 
 If `blocking_paths` is empty (whether or not anything was removed), fall through unchanged into the dirt-computation flow below.
 
@@ -695,7 +697,7 @@ If `parent_is_live` is `False` (the recorded parent branch no longer exists -- e
   - `_status.set_batch_field(status_path, batch_name, "blocked_reason", <fallback-text> | <cycle-text>)` -- for `fallback`, use `f"parent branch {parent_branch} no longer exists; no archive-tag chain resolved a successor ({reason})"` (reading `reason` from the returned dict's `reason` field); for `cycle`, use `"parent branch archive-tag chain walk hit its hop cap without resolving a live parent"`
   - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
   - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — parent branch dead, no resolution"`
-  - Go to *Blocked* (its existing `_notify.notify` + builder-lock release already cover this halt -- do not add a second, redundant release/notify call here).
+  - Go to *Blocked* with `escalate: false` (its existing `_notify.notify` + builder-lock release already cover this halt -- do not add a second, redundant release/notify call here).
 
 If `parent_is_live` is `True`, or after a `"resolved"` auto-rebind above (using the rebound `parent_branch`), compute out-of-scope drift:
 
@@ -713,14 +715,14 @@ If `in_scope_dirt is None` (the parent diff is unresolvable -- e.g. the parent b
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "parent diff unresolvable -- cannot determine in-scope drift")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
 - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — parent diff unresolvable"`
-- Go to *Blocked*.
+- Go to *Blocked* with `escalate: false`.
 
 If `in_scope_dirt` is non-empty (and not `None`; genuine implementer-introduced dirt within task scope that did not pre-date the batch):
 - `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
 - `_status.set_batch_field(status_path, batch_name, "blocked_reason", "uncommitted working tree after implementer report")`
 - `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
 - Commit on the task branch: `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on <batch_name> — dirty tree"`
-- Go to *Blocked*.
+- Go to *Blocked* with `escalate: false`.
 
 If `in_scope_dirt` is empty (and not `None`), record `commit_sha` via `_status.set_batch_field(status_path, batch_name, "commit_sha", <sha from JSON report>)`.
 Then continue to "3.
@@ -735,10 +737,11 @@ Code review runs once, holistically, after every batch is approved — see `## H
 
 For any `stuck_type` (`transient` already-retried, `verify`, `logic`, `infrastructure`, `incomplete`): auto-handle according to the stuck_type rules below — mill-go never surfaces a numbered prompt and waits for an operator reply here.
 Each stuck_type gets its own one-shot self-resolve or auto-retry step per the rules below;
-on a repeat of the same failure after that one-shot attempt, the bullet's own escalation path sets batch state → `blocked`, appends the phase, commits, and goes to *Blocked*.
+on a repeat of the same failure after that one-shot attempt, the bullet's own escalation path goes to *Blocked* with `escalate: true` plus its halt parameters (`blocked_reason`, `commit_suffix`, `push`), and *Blocked* asks the parent session first and records the block only when the halt proceeds.
+A parent-guided retry (see *Blocked*) does not reset any bullet's one-shot self-resolve or auto-retry, so a stuck result after it is a repeat and goes straight to *Blocked*.
 
 - **`infrastructure`** (the worker died, likely logout) — auto-retry ONCE: re-dispatch once with a fresh session (no `--resume` flag — the dead session cannot be reattached).
-  If the re-fire also reports `infrastructure`: set batch state → `blocked`, `blocked_reason: "infrastructure: worker died (logout?)"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
+  If the re-fire also reports `infrastructure`: go to *Blocked* with `blocked_reason: "infrastructure: worker died (logout?)"`, `commit_suffix: ""`, `push: false`, `escalate: true`.
   The re-fire matches the existing `running`-state handling in `plugins/mill/skills/mill-go-base/resume.md` (fresh start;
   killed session cannot be reattached).
 - **CLI emits `stuck_type: transient`** (LLM-layer failure surfaced as the synthetic stuck JSON described in Implement step 2;
@@ -749,12 +752,12 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
     proceed directly to the per-batch cleanliness gate (scope violations check) then batch completion as if the implementer had reported success — commits were made before the timeout, so there is nothing left to retry.
   - **Otherwise** (no commits made, the field is absent,
     or the timeout happened before any commit) → self-resolve once: re-fire the implementer fresh (no `--resume`) — a first-occurrence timeout with no commits is most often a transient LLM/network hiccup, so no plan edit is needed for this attempt.
-    If the retry ALSO reports `transient` with no commits made: set batch state → `blocked`, `blocked_reason: "transient: no commits after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
+    If the retry ALSO reports `transient` with no commits made: go to *Blocked* with `blocked_reason: "transient: no commits after retry"`, `commit_suffix: ""`, `push: false`, `escalate: true`.
 - **`incomplete`** (batch provably partial — some cards committed, not all;
   reached here only when the in-line recovery already ran once and the batch is still partial) — resume preserving the original `start_sha`, never retry-fresh (Shared Decisions `stuck_type: incomplete is a new first-class classification` and `resume must preserve the original start_sha`;
   discussion `warm-resume-mechanism`, `start-sha-preserving-resume`): auto-resume **once** via the same `start_sha`-preserving path (warm-`SendMessage` first, `millpy-implement.py <batch_name> --resume-incomplete` as the fallback — see step 5.5's `incomplete` recovery).
   If the auto-resume yields `success`, continue normally.
-  If it is **still** `incomplete`, set batch state → `blocked`, `blocked_reason: "incomplete after resume"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name} (incomplete after resume)"` and push, and go to *Blocked*.
+  If it is **still** `incomplete`, go to *Blocked* with `blocked_reason: "incomplete after resume"`, `commit_suffix: " (incomplete after resume)"`, `push: true`, `escalate: true`.
   Never re-fire with a fresh `start_sha`.
 - `verify` / `logic` (first occurrence) → self-resolve once: investigate the failure using the same judgment an implementer/fixer already applies when picking "edit plan and retry" — read the verify/review output that produced this stuck signal, edit the plan file(s) if the failure traces to an ambiguous or incorrect card.
   **Regardless of whether a plan edit was made**, append a `## Prior failure` section to the affected batch file (`<plan_dir>/NN-<batch_name>.md`, placed immediately after its frontmatter, before `## Rename mechanic`/`## Batch Scope` — create the section if it is not already present) with one new bullet stating the round and the verbatim stuck-JSON `reason` text.
@@ -775,14 +778,39 @@ on a repeat of the same failure after that one-shot attempt, the bullet's own es
 
   On `PlanDAGError` from `compute_next_card_number` whose message matches the simple contiguous-range-collision shape (`f"card {N} already used by batch {stem}; ..."` — extract `{N}` via `re.match(r"^card (\d+) already used", str(exc))`): call `_plan_validate.renumber_after_collision(plan_dir, N)` (`signature: _plan_validate.renumber_after_collision(plan_dir: Path, colliding_number: int) -> None`), then retry `compute_next_card_number(plan_dir, target_batch_file)` once.
   If the retry succeeds, proceed with the existing card-insertion flow below (append the `### Card N:` heading using the RETRIED call's returned number, run `_check_card_numbering` as the existing post-write defensive re-check already does) unchanged.
-  If the retry still raises `PlanDAGError`, or the original exception's message did not match the simple contiguous-range-collision shape, make no write to the target batch file at all and route directly to this same bullet's existing escalation path below (`_status.set_batch_field` state → `blocked`, `blocked_reason` naming the collision text from the exception, `_status.append_phase(status_path, "blocked", ...)`, commit, go to *Blocked*) exactly as today — a collision this auto-renumber cannot resolve still means self-resolve cannot safely proceed.
+  If the retry still raises `PlanDAGError`, or the original exception's message did not match the simple contiguous-range-collision shape, make no write to the target batch file at all and route directly to this same bullet's existing escalation path below (go to *Blocked* with `blocked_reason` naming the collision text from the exception, `commit_suffix: ""`, `push: false`, `escalate: true`) — a collision this auto-renumber cannot resolve still means self-resolve cannot safely proceed.
   Renumbering is safe here specifically because mill-go executes batches strictly sequentially per `topo_order`, so the colliding (downstream) batch has, by construction, not yet been dispatched and has no commits referencing its old card numbers.
 
   Before re-firing, record the self-resolve: `_status.append_phase(status_path, "self-resolved-verify-logic", _timestamp.now_utc_iso())`, `git -C <worktree> add <plan_dir> <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: self-resolved verify/logic stuck ({batch_name})"`.
   Then re-fire the implementer fresh for this batch.
-  If the retry produces the *same* `verify`/`logic` failure on this batch: set batch state → `blocked`, `blocked_reason: "verify/logic: unresolved after retry"`, `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}"`, and go to *Blocked*.
+  If the retry produces the *same* `verify`/`logic` failure on this batch: go to *Blocked* with `blocked_reason: "verify/logic: unresolved after retry"`, `commit_suffix: ""`, `push: false`, `escalate: true`.
 
 ### Blocked
+
+Parameters: `blocked_reason`, `commit_suffix`, `push`, `escalate`.
+`escalate: true` means entered from a `### Stuck escalation` bullet with nothing recorded yet.
+`escalate: false` means the caller (a step 2b cleanliness gate, or a step 5 stuck bullet in `plugins/mill/skills/mill-go-base/holistic-review.md`) already recorded the block, so steps 1 and 2 are skipped.
+
+**Step 1, parent escalation** — only when `escalate` is true and `batch_name` is not in `parent_escalated_batches`.
+Add `batch_name` to the set, then load the `ask-parent` skill with site `go-batch`, reason `f"batch {batch_name}: {blocked_reason}"`, actions `retry,halt`.
+
+- On `retry`: append one bullet `parent guidance: <guidance verbatim>` to the batch file's `## Prior failure` section (placement and create-if-absent rule exactly as the `verify`/`logic` self-resolve bullet states).
+  Apply any plan-file edits the guidance calls for (plan files only; the orchestrator never edits task code).
+  Commit `git -C <worktree> add <plan_dir> && git -C <worktree> commit -m "<VARIANT_LABEL>: parent-guided retry ({batch_name})"`, with no `_status.append_phase` call: no new phase string is added, so a crash mid-retry leaves `phase:` at its pre-halt value, which the "Mid-execution phase-gate widening" routing already resumes.
+  Then re-fire the implementer for this batch.
+  For `blocked_reason == "incomplete after resume"`, use the `start_sha`-preserving `--resume-incomplete` cold re-dispatch documented in "## Agent-mode dispatch" step 5.5;
+  otherwise use a fresh `millpy-implement.py <batch_name>` dispatch per "### 1. Implement" (no `--resume`).
+  Process its result from "### 2. Parse implementer report" onward; skip steps 2–3 below.
+  mill-go-base has no `Commit: none` idempotency guard, so a re-fire can repeat an uncommitted external action exactly as the self-resolve re-fire can.
+- On `halt`: `blocked_reason = blocked_reason + halt_suffix`, continue to step 2.
+
+**Step 2, record** — only when `escalate` is true:
+- `_status.set_batch_field(status_path, batch_name, "state", "blocked")`
+- `_status.set_batch_field(status_path, batch_name, "blocked_reason", blocked_reason)`
+- `_status.append_phase(status_path, "blocked", _timestamp.now_utc_iso())`
+- Commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: blocked on {batch_name}{commit_suffix}"`; push only when `push` is true.
+
+**Step 3**, running only when the halt proceeds:
 
 - `_notify.notify("<VARIANT_LABEL>.blocked", f"batch {batch_name}: {blocked_reason}", slug=slug, batch=batch_name)`.
 - Release the builder lock:

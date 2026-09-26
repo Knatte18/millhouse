@@ -759,6 +759,60 @@ class TestMillpyFix(unittest.TestCase):
         mock_run.assert_not_called()
         self.assertEqual(mock_render.call_args[0][1]["PRIOR_BLOCKING"], "(none)")
 
+    def _prepare_with_mocked_render(self, extra_args):
+        with unittest.mock.patch.object(millpy_fix._render, "render") as mock_render:
+            mock_render.return_value = "Brief text"
+            with unittest.mock.patch.object(
+                millpy_fix._implementer_claude, "run"
+            ) as mock_run:
+                rc, _out = self._run_main([
+                    "--scope", "holistic",
+                    "--review-file", str(self.review_file),
+                    "--stage", "prepare",
+                    *extra_args,
+                ])
+        self.assertEqual(rc, 0)
+        mock_run.assert_not_called()
+        return mock_render
+
+    def test_stage_prepare_parent_guidance_threaded_into_render(self):
+        """--parent-guidance <path>: PARENT_GUIDANCE token equals the file's exact text."""
+        guidance_file = self.tmp_path / "parent-guidance.md"
+        guidance_file.write_text("Prefer option B; skip the refactor.\n", encoding="utf-8")
+        mock_render = self._prepare_with_mocked_render(
+            ["--parent-guidance", str(guidance_file)]
+        )
+        self.assertEqual(
+            mock_render.call_args[0][1]["PARENT_GUIDANCE"],
+            guidance_file.read_text(encoding="utf-8"),
+        )
+
+    def test_parent_guidance_omitted_renders_as_none(self):
+        """--parent-guidance omitted -> PARENT_GUIDANCE token renders as "(none)"."""
+        mock_render = self._prepare_with_mocked_render([])
+        self.assertEqual(mock_render.call_args[0][1]["PARENT_GUIDANCE"], "(none)")
+
+    def test_parent_guidance_empty_file_renders_as_none(self):
+        """--parent-guidance pointing at an empty file -> PARENT_GUIDANCE renders as "(none)"."""
+        guidance_file = self.tmp_path / "empty-parent-guidance.md"
+        guidance_file.write_text("", encoding="utf-8")
+        mock_render = self._prepare_with_mocked_render(
+            ["--parent-guidance", str(guidance_file)]
+        )
+        self.assertEqual(mock_render.call_args[0][1]["PARENT_GUIDANCE"], "(none)")
+
+    def test_real_template_renders_parent_guidance_without_leftover_token(self):
+        """The real fixer-holistic-brief.md renders with every token millpy-fix passes."""
+        guidance_file = self.tmp_path / "parent-guidance-real.md"
+        guidance_file.write_text("Use the narrow fix only.\n", encoding="utf-8")
+        mock_render = self._prepare_with_mocked_render(
+            ["--parent-guidance", str(guidance_file)]
+        )
+        template_path = mock_render.call_args[0][0]
+        rendered = millpy_fix._render.render(template_path, mock_render.call_args[0][1])
+        self.assertIn("Use the narrow fix only.", rendered)
+        self.assertNotIn("<PARENT_GUIDANCE>", rendered)
+
     def test_stage_finalize_reads_agent_output(self):
         """--stage finalize: reads agent output file, calls finalize_from_output."""
         agent_output_path = self.tmp_path / "agent-output.txt"
