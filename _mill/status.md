@@ -36,7 +36,9 @@ batches:
     commit_sha: db7ae7ecbfa8977ed9bf0883e41ffeaad451bb1c
     verify_baseline_failures: []
   - name: integration-repairs
-    state: pending
+    state: running
+    implementer_session: ba129d33-d563-42d0-9099-5ae8edb46047
+    start_sha: 557d9e263b8b52b9f2bc4e67705508638a753f09
   - name: spawn-suite
     state: pending
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-31f5e19d',
