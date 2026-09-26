@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-hook-install
+phase: approved-symbol-resolution-tests
 slug: tooling-false-positives
 branch: hanf/tooling-false-positives
 plan: _mill/plan
@@ -29,6 +29,7 @@ implementing  '2026-09-26T08:59:18Z'
 approved-wiki-guard  '2026-09-26T09:53:35Z'
 approved-symbol-resolution  '2026-09-26T09:55:30Z'
 approved-hook-install  '2026-09-26T09:57:22Z'
+approved-symbol-resolution-tests  '2026-09-26T09:59:02Z'
 ```
 
 ## Batches
@@ -55,9 +56,10 @@ batches:
     commit_sha: 32f1eb30cba547aa681970d36116bb59486295d5
     verify_baseline_failures: []
   - name: symbol-resolution-tests
-    state: running
+    state: approved
     implementer_session: 4dfd3809-2e09-4563-ad18-8de0d42e57cc
     start_sha: 5f12d2368a5df86e7c2b58bc82d1ec96db7db170
+    commit_sha: 31a432aced636f3865de882d17a162bf877768fe
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: --only: unknown test file(s): [''test-plan-validate-symbol-resolution.py'']']
 ```
 ## Inferred-success log
