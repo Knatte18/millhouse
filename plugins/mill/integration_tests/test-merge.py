@@ -16,17 +16,17 @@ Layout mirrors `test-spawn.py`:
     <container>/hub hub repo (the parent) <container>/worktrees/<slug> child worktree under the task
     branch (hub-form default)
 
-Flow under test (mirrors mill-merge SKILL.md step numbering):
+Flow under test (mirrors the `_merge.py` step order):
 
     0. Seed: task-branch worktree with a commit, Home.md [active], a done status.md,
     plan/00-overview.md with one batch (verify: null so we skip the verify step in the test).
     1. Acquire merge lock on the parent's .scratch/.
     2. mill-merge-in no-op check (parent has no new commits).
     3. Direct squash-merge child -> parent.
-    4. Archive tag creation (Step 6).
-    5. Home.md [active] -> [done] (Step 7).
-    6. Regenerate sidebar (Step 8).
-    7. Release merge lock (Step 8).
+    4. Archive tag creation (_merge.step_archive_tag).
+    5. Home.md [active] -> [done] (_merge.step_wiki_done).
+    6. Regenerate sidebar (_merge.step_wiki_done).
+    7. Release merge lock (_merge.run_merge).
 
 Asserts each side effect.
 Worktree, branch, and wiki active-dir remain intact — mill-cleanup's job.
@@ -402,7 +402,7 @@ def _setup_nested_hub_scenario(
         cwd=container,
     )
 
-    # === Child cleanup commit (mirror mill-merge Step 4) ===
+    # === Child cleanup commit (mirror _merge.step_cleanup_commit) ===
     # Remove _mill directory and commit.
     _run(
         ["git", "-C", str(outer_repo), "rm", "-r", "src/hub/_mill"],
@@ -586,7 +586,7 @@ def main() -> int:
         )
 
         # --- dirty-parent-worktree preflight (#705) ---
-        # Proves the underlying `git status --porcelain --untracked-files=no` check mill-merge/SKILL.md's Step 5 now documents actually flags both halt scenarios from the operator-facing message (independent uncommitted edit, and a mid-Step-5-retry partially-applied squash) and ignores untracked-only noise.
+        # Proves the underlying `git status --porcelain --untracked-files=no` check `_merge.step_squash`'s dirty-parent check actually flags both halt scenarios from the operator-facing message (independent uncommitted edit, and a mid-Step-5-retry partially-applied squash) and ignores untracked-only noise.
         # None of the three cases needs a wiki, worktree, or junctions -- a plain two-branch git repo is enough -- so each gets its own lightweight fixture directly at a fresh container path, instead of a `_setup_trio()` spin-up.
 
         # Scenario (a): independent uncommitted edit in the parent worktree.
@@ -901,7 +901,7 @@ def main() -> int:
             encoding="utf-8",
         )
 
-        # Mirror mill-merge's corrected Entry Step 5 phase-gate logic directly as plain test code (this logic is orchestration prose in SKILL.md, not an importable function, so the test replicates the same two-call sequence Batch 3 Card 7 documents).
+        # Mirror `_merge.step_phase_gate` directly as plain test code (that logic is now importable; the test keeps its own replica and replicates the same two-call sequence Batch 3 Card 7 documents).
         # Read the raw `slug:` field -- NOT `_status.read_slug`, which falls back to the parent directory name (always literally "_mill" here) when the field is absent, so it can never distinguish "absent" from "present and different" the way this check needs to.
         raw_slug = _status.read_full(foreign_mill_dir / "status.md")["yaml"].get("slug")
         _assert(raw_slug is not None, "expected foreign status.md to carry a slug: field")
@@ -1335,7 +1335,7 @@ def main() -> int:
         ) = _setup_nested_hub_scenario(container_nested)
         print(f"[test-merge] nested-hub container: {container_nested}", file=sys.stderr)
 
-        # --- Perform squash-merge with restore step (mill-merge Step 5) ---
+        # --- Perform squash-merge with restore step (mirror _merge.step_squash) ---
         # On parent branch, run the squash-merge sequence verbatim.
         _run(
             ["git", "-C", str(outer_repo), "checkout", parent_branch],
