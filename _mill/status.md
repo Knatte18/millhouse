@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-gap-fix-r1
+phase: discussion-fix-r2
 slug: tooling-false-positives
 branch: hanf/tooling-false-positives
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-26T08:46:24Z'
 discussion-gap-fix-r1  '2026-09-26T08:51:13Z'
+discussion-fix-r2  '2026-09-26T08:51:52Z'
 ```
