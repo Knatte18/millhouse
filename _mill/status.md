@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: parent-thread-escalation
 branch: hanf/parent-thread-escalation
 plan: _mill/plan
@@ -36,6 +36,7 @@ approved-mill-go-base-wiring  '2026-09-26T07:31:09Z'
 approved-plan-start-quick-wiring  '2026-09-26T07:32:48Z'
 holistic-reviewing  '2026-09-26T07:32:59Z'
 holistic-approved  '2026-09-26T07:34:08Z'
+done  '2026-09-26T07:34:20Z'
 ```
 
 ## Batches
