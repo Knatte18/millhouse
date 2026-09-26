@@ -3,7 +3,7 @@
 ```yaml
 task: 'Post-merge teardown: keep PR notes, remove checkpoint branches'
 slug: merge-teardown-hygiene
-approved: false
+approved: true
 started: '20260926-085141'
 parent_branch: main
 discussion_sha: fb638e03b3de2f46479bf62b346c98efd1ba1828

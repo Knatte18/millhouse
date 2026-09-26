@@ -64,7 +64,7 @@ Batch 2 consumes `stash_pr_notes` from the finalize skill text.
   Import the new names from `_finalize_cleanup`.
   In `test-cleanup.py`, first update the two existing cases that filter recorded git calls with `"branch" in c and ("-d" in c or "-D" in c)` and assert exactly one match (near the `run_calls` and `run_calls2` filters): exclude calls whose argv contains a `mill-checkpoint-` name from the filtered list, so they still assert exactly one task-branch delete; also grep the file for any other exact-count assertion on branch-delete calls and adjust it the same way.
   In `test-cleanup.py`, following the existing `_apply_worktree_record` and `_apply_inplace_record` test pattern that patches `mill_cleanup._subprocess_util.run`, add one worktree-record case and one in-place case asserting the recorded git calls include a `branch -D mill-checkpoint-...` call with the slash-to-dash name derived from the record's branch, and one case asserting a non-zero return from that call does not raise (its fake `run` returns 0 for the `rev-parse` existence probe and non-zero only for the `branch -D` call, since a non-zero probe short-circuits before `branch -D`).
-  No separate pr-reap test: `_apply_pr_reap_record` delegates to the two functions covered here.
+  Also add one `_apply_pr_reap_record` case, reusing the fixture and patching pattern of the file's existing pr-reap tests (grep for them), asserting the recorded git calls include the `branch -D mill-checkpoint-...` call exactly once (the delegation to the two functions above must not double-delete).
 - **Commit:** `test(cleanup): cover checkpoint deletion and pr-notes stash`
 
 ## Batch Tests
