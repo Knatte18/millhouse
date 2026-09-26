@@ -63,6 +63,7 @@ The operator wants the reply to be one message back, with a file as an optional 
     Target is `thread-name` when given, else `parent_thread`; neither -> tell the user direct mode cannot start and stop.
     Once invoked, direct mode lasts for the rest of the session (until the session ends or the operator says stop).
     Whenever the session would otherwise ask the operator a question, it instead sends the questions to the target in batches of at most 5.
+    The cap of 5 copies mill-start's Phase: Discuss per-batch cap (same interviewing habit, same reply length for a human-driven target); it is not otherwise load-bearing.
     "Ask the operator" covers every operator question the agent itself poses: `mill:conversation` numbered-options menus and free-text questions in prose.
     `AskUserQuestion` is listed as covered too, defensively: `mill:conversation` forbids it in mill sessions, but a non-mill skill loaded in the same session may still reach for it.
     Question numbers continue across batches for the whole direct-mode session (batch 2 starts at 6 after a 5-question batch 1), so a reply or later message can refer to any question unambiguously.
@@ -97,7 +98,7 @@ The operator wants the reply to be one message back, with a file as an optional 
     One reply is exactly one message or one file; the first reply carrying the current `ask_id` is the complete answer.
     A message or file without the current `ask_id` (a late reply to an earlier, timed-out batch, a follow-up or split second message, or an unrelated message) is not a reply: the asker ignores it and keeps waiting for the current deadline.
     Messages arriving after the current batch was consumed are ignored the same way, since they cannot carry the next batch's id.
-  - The asker waits with the existing `Monitor` poll on the reply file (re-arm and expiry rules unchanged), except that `READY` fires only when the file's first non-empty line is `ask-id: <ask_id>` (poll with `grep -q` on that line instead of `[ -s ]`), so a stale or mismatched file never ends the wait.
+  - The asker waits with the existing `Monitor` poll on the reply file (re-arm and expiry rules unchanged), except that `READY` fires only when the file's first non-empty line is `ask-id: <ask_id>` (the poll replaces `[ -s ]` with a position-anchored check, `awk 'NF{print; exit}' "<reply_path>" 2>/dev/null | grep -qxE "ask-id: <ask_id>[[:space:]]*"`, which tests only the first non-empty line, never a match further down), so a stale or mismatched file never ends the wait.
   - When a message from the target arrives while waiting: check its first non-empty line for `ask-id: <ask_id>` first.
     No match: ignore it; the `Monitor` keeps running (re-arm per the expiry rules if it has already expired).
     Match: stop the recorded `Monitor` task (`TaskStop`), then — unless the reply file already starts with the matching `ask-id` line (the target used the attachment path; the file wins) — write the message text verbatim to the reply file with the Write tool; then run `consume`.
@@ -133,7 +134,10 @@ The operator wants the reply to be one message back, with a file as an optional 
 
 - Decision: direct mode runs only where `status.md` resolves (the reply file lives in `_mill/`, the timeout comes from mill config).
   Outside one, the skill tells the user and stops.
-- Rationale: YAGNI; every current asker is a mill task session.
+  This explicitly excludes the hub orch session (`MH:orch`, running in the main worktree with no `_mill/`) as an asker: `/ask-thread` typed there stops with that message.
+  The orch session remains a target (it is the usual `parent_thread`).
+  Consequence for the operator: to put questions to a task thread from the orch session, send it a plain `SendMessage` or attach to one of the task's phase sessions; direct mode is for a task session routing its own questions outward.
+- Rationale: YAGNI; every current asker is a mill task session, and the brief frames direct mode as a session sending its own questions to its parent or another thread.
 - Rejected: a scratch-dir reply file and default timeout for non-mill repos.
 
 ### Target name used verbatim
