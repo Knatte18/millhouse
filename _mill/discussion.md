@@ -63,7 +63,9 @@ The operator wants the reply to be one message back, with a file as an optional 
     Target is `thread-name` when given, else `parent_thread`; neither -> tell the user direct mode cannot start and stop.
     Once invoked, direct mode lasts for the rest of the session (until the session ends or the operator says stop).
     Whenever the session would otherwise ask the operator a question, it instead sends the questions to the target in batches of at most 5.
-    "Ask the operator" covers every operator question the agent itself poses: `AskUserQuestion`, `mill:conversation` numbered-options menus, and free-text questions in prose.
+    "Ask the operator" covers every operator question the agent itself poses: `mill:conversation` numbered-options menus and free-text questions in prose.
+    `AskUserQuestion` is listed as covered too, defensively: `mill:conversation` forbids it in mill sessions, but a non-mill skill loaded in the same session may still reach for it.
+    Question numbers continue across batches for the whole direct-mode session (batch 2 starts at 6 after a 5-question batch 1), so a reply or later message can refer to any question unambiguously.
     It binds skills loaded before or after `/ask-thread` alike.
     Harness permission prompts are not agent questions and are not covered.
     The rule is an instruction held in the session's context by the loaded `ask-thread` skill; there is no hook, flag or other enforcement mechanism, and the plan must not add one.
@@ -83,7 +85,10 @@ The operator wants the reply to be one message back, with a file as an optional 
   - The asker passes its own session name as `--reply-to`.
     It takes it from `ListAgents`' first line, `This session is <name> [<id>] ...` (verified live on 2026-09-26: `This session is mh:ask-thread-skill:start [68784b]`), using the text between `This session is ` and ` [`.
     If `ListAgents` is unavailable or has no such line, `--reply-to` is omitted.
-  - The rendered message tells the target: reply with ONE `SendMessage` to `<reply-to>`; keep it short; for a long answer write the full text to the reply file (absolute path given) in one operation and send a message saying so.
+  - The rendered message tells the target: keep the answer short; write the complete reply (the `ask-id` line plus the answer) to the reply file (absolute path given) in one operation, AND send ONE `SendMessage` to `<reply-to>` with the same text (for a long answer the message may instead be the `ask-id` line plus "answered, see <path>").
+    The file write is required for every reply, short or long, as long as message wake-up of a waiting asker is unverified: it is the channel the `Monitor` poll can see, so a message that never reaches the asker still ends the wait.
+    The message is the reply channel whenever it arrives and ends the wait early.
+    Once wake-up is verified live, a later task may make the file optional (attachment-only for long answers) as the brief intends; that is a message-text and SKILL.md change only, since the asker already handles both.
     Without `--reply-to`, the message tells the target to answer by writing the reply file only.
   - Automatic mode: after the `ask-id` line (next bullet), the reply (message or file) carries the same fenced ```` ```yaml ```` `action:` block as today, followed by free-text guidance.
   - **Batch correlation (`ask-id`).** Every `prepare` call generates a fresh `ask_id` (short random hex, e.g. `secrets.token_hex(4)`; `prepare` accepts an explicit `ask_id` for tests) and returns it in its JSON.
@@ -101,7 +106,7 @@ The operator wants the reply to be one message back, with a file as an optional 
   - Every path ends in `consume`, which reads and deletes the file, so parsing stays in Python and the file never survives to the handoff untracked-file gate.
 - Rationale: whether a `SendMessage` wakes an idle asker is unverified; the file poll plus timeout keeps both modes correct whichever way that turns out, and routing message text through the file keeps one parser.
   The poll can be dropped later if message wake-up is verified.
-- Rejected: message-only (a missed message would always burn the full timeout with no alternative channel); file-only (today's behaviour, contradicts the brief); a separate request file the target polls (targets are human-driven sessions, which do not poll).
+- Rejected: message-only, including message-only for short replies (a missed message would always burn the full timeout with no alternative channel); file-only (today's behaviour, contradicts the brief); a separate request file the target polls (targets are human-driven sessions, which do not poll).
 
 ### Script and CLI shape
 
@@ -135,21 +140,25 @@ The operator wants the reply to be one message back, with a file as an optional 
 - Decision: `--to`, the skill argument and `parent_thread` are passed to `SendMessage` verbatim, never case-folded.
   A mismatch surfaces as a `SendMessage` error -> fallback.
 - Rationale: case-sensitivity of name lookup is still unverified (task sessions are lower-cased `mh:...`, the orch session is `MH:orch`); guessing a case transform could address the wrong session.
+- Rejected: case-folding the name, or retrying with a lower-cased name after a `SendMessage` error (could address a different session).
 
 ### Spawn does not switch direct mode on
 
 - Decision: out of scope; the operator or an agent invokes `/ask-thread` in a session.
 - Rationale: `millpy-spawn.py` has no `--follow` flag today, and turning direct mode on at launch means changing the generated session commands for every phase; that is a separate feature.
+- Rejected: a new `millpy-spawn.py --follow` flag that records a direct-mode marker in `status.md` for sessions to pick up.
 
 ### Target context growth
 
 - Decision: no restart mechanism; the message asks the target for short replies and routes long answers into the reply file, which keeps the target's own context small.
+- Rejected: a per-target message counter that warns or stops direct mode after N batches (no evidence yet of the limit to pick).
 
 ### Delivery tests
 
 - Decision: no automated test of real `SendMessage` delivery (unit tests never touch the harness).
   `harness-tool-contracts.md` keeps "does a message wake an idle peer / a waiting asker" as unverified, and states the protocol is correct either way because of the file poll and timeout.
   The first live use by the operator is the manual check; updating the contract doc from its result is a later edit.
+- Rejected: an integration test that drives two real Claude sessions (needs live harness sessions, which the test suites never start).
 
 ## Technical context
 
@@ -195,3 +204,4 @@ The operator wants the reply to be one message back, with a file as an optional 
 - **Q:** Where does the asker get its own session name? **A:** [auto-pick] `ListAgents`' `This session is <name> [<id>]` line, omitted when absent. **Why:** verified live on 2026-09-26; scripts cannot read it.
 - **Q:** Direct mode outside a mill task worktree? **A:** [auto-pick] Not supported. **Why:** the reply file and timeout come from `_mill/` and mill config; every current asker is a task session.
 - **Q:** Automated test of real message delivery? **A:** [auto-pick] No; manual check on first live use. **Why:** unit tests never touch the harness, and the protocol is correct either way.
+- **Q:** The brief says the reply file is not mandatory, but message wake-up is unverified; must the target still write the file for short replies? **A:** [auto-pick] Yes, the target writes the file and sends the message for every reply until wake-up is verified. **Why:** otherwise a missed short-reply message burns the full timeout; the brief itself defers the safety-net decision to the delivery test.
