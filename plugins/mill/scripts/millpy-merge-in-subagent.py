@@ -452,14 +452,14 @@ def main(argv=None) -> int:
                 print(
                     f"ERROR: --agent-output file not found: {args.agent_output} -- for"
                     " implementer/fixer/merge-in dispatches the orchestrator must write the"
-                    " notification message to this path before calling --stage finalize",
+                    " subagent report message to this path before calling --stage finalize",
                     file=sys.stderr,
                 )
                 return 1
             if not args.files:
                 print("--files is required for conflicts mode", file=sys.stderr)
                 return 1
-            # Mirror finalize_from_output's own read: unescape the HTML entities the harness injects into the <task-notification> payload before parsing.
+            # Mirror finalize_from_output's own read: unescape HTML entities, which may appear when the text came from a <task-notification> payload, before parsing.
             output = html.unescape(Path(args.agent_output).read_text(encoding="utf-8"))
             self_reported = _extract_status_json(output)
             if self_reported is not None and self_reported.get("status") == "success":
