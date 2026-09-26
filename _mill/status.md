@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r2
+phase: discussed
 slug: merge-teardown-hygiene
 branch: hanf/merge-teardown-hygiene
 plan: null
@@ -16,4 +16,5 @@ task_description: |
 ```text
 discussing  '2026-09-26T08:46:28Z'
 discussion-fix-r2  '2026-09-26T08:50:14Z'
+discussed  '2026-09-26T08:51:12Z'
 ```
