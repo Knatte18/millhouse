@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-reviewing
+phase: holistic-fixing
 slug: implement-recovery-and-integration-tests
 branch: hanf/implement-recovery-and-integration-tests
 plan: _mill/plan
@@ -26,6 +26,7 @@ approved-implementer-fixes  '2026-09-26T09:39:59Z'
 implementing  '2026-09-26T09:43:28Z'
 approved-spawn-suite  '2026-09-26T09:45:27Z'
 holistic-reviewing  '2026-09-26T09:45:31Z'
+holistic-fixing  '2026-09-26T09:46:18Z'
 ```
 
 ## Batches
