@@ -31,7 +31,7 @@ The operator wants the reply to be one message back, with a file as an optional 
 - Update every caller reference: `mill-go-base/SKILL.md`, `mill-go-base/handoff.md`, `mill-go-base/holistic-review.md`, `mill-plan/SKILL.md`, `mill-quick/SKILL.md`, `mill-start/SKILL.md` (skill name `ask-parent` -> `ask-thread`; site ids, reasons, actions and control flow unchanged).
 - `plugins/mill/docs/harness-tool-contracts.md`: rename references, record the newly verified `ListAgents` self-name line, rewrite the "Design consequence" bullet for the message-first protocol.
 - `SKILLS.md` row for the renamed skill.
-- Comment on `pipeline.parent_escalation_timeout_minutes` in `mill-config.yaml` and `plugins/mill/templates/mill-config.yaml` (kept in sync) to say it bounds both modes.
+- Comment on `pipeline.parent_escalation_timeout_minutes` in `mill-config.yaml` and `plugins/mill/templates/mill-config.yaml` (kept in sync) to say: minutes either mode waits for a reply; `0` disables automatic escalation only, and direct mode then waits the 60-minute default.
 
 **Out:**
 
@@ -117,7 +117,11 @@ The operator wants the reply to be one message back, with a file as an optional 
     The action-list mode keeps today's content, plus the reply-to instructions.
     Output stays plain ASCII via `to_ascii`.
   - `_ask_thread.prepare(...)` gains `target: str | None = None` (overrides `parent_thread`) and `reply_to: str | None = None`; open mode is selected by passing `questions` instead of `site`/`actions`.
-    Return key `parent_thread` is renamed `target`, and a new key `ask_id` is added; `escalate: false` reasons are `"disabled"` and `"no target"`.
+    Return key `parent_thread` is renamed `target`, and a new key `ask_id` is added; `escalate: false` reasons are `"disabled"` (automatic mode only) and `"no target"`.
+    **Timeout `0` is an automatic-mode kill switch only.** `pipeline.parent_escalation_timeout_minutes <= 0` keeps disabling automatic escalation (today's behaviour, `"disabled"`).
+    Direct mode is an explicit operator/agent invocation, so it is never disabled by that value: when the configured value is `<= 0`, direct mode waits `DEFAULT_TIMEOUT_MINUTES` (60) instead; otherwise it uses the configured value.
+    `prepare` therefore applies the `"disabled"` check only when called in action mode (with `site`/`actions`).
+    Rejected: letting `0` downgrade direct mode to asking the operator (silently overrides an explicit `/ask-thread <name>`).
     `build_message` takes `ask_id` and renders it with the first-line echo instruction in both modes.
     Still deletes a stale reply file first.
   - `_ask_thread.consume(reply_file, ask_id, actions=None)`: verifies and strips the `ask-id` first line (mismatch or missing file = no reply); with `actions` it then behaves as today (no reply -> `halt`); with `actions=None` (open mode) it returns `{"reply": <stripped text>}` (empty string for no reply). It deletes the file on every path.
@@ -192,7 +196,7 @@ The operator wants the reply to be one message back, with a file as an optional 
 - `test-ask-thread.py` (renamed from `test-ask-parent.py`, keep every existing case with names updated) — TDD candidates:
   - `build_message` action mode with and without `reply_to`: reply-to name and "SendMessage" instruction present only when given; reply file path always present.
   - `build_message` open mode: questions text included verbatim (ASCII-folded), no action list, no yaml `action:` shape.
-  - `prepare` with `target` overriding `parent_thread`; `target=None` and no `parent_thread` -> `escalate: false, reason: "no target"`; timeout `0` -> `"disabled"`; return key `target`.
+  - `prepare` with `target` overriding `parent_thread`; `target=None` and no `parent_thread` -> `escalate: false, reason: "no target"`; timeout `0` -> `"disabled"` in action mode, but open mode with timeout `0` escalates with `giveup_s == DEFAULT_TIMEOUT_MINUTES * 60`; return key `target`.
   - `prepare` still deletes a stale reply file.
   - `consume` open mode: missing file -> `reply: ""`; matching `ask-id` + content -> stripped text without the id line; file deleted.
   - `consume` id check, both modes: missing `ask-id` line or a different id -> no reply (`halt` / `""`), file deleted.
