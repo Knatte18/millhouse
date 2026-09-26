@@ -792,7 +792,7 @@ Parameters: `blocked_reason`, `commit_suffix`, `push`, `escalate`.
 `escalate: false` means the caller (a step 2b cleanliness gate, or a step 5 stuck bullet in `plugins/mill/skills/mill-go-base/holistic-review.md`) already recorded the block, so steps 1 and 2 are skipped.
 
 **Step 1, parent escalation** — only when `escalate` is true and `batch_name` is not in `parent_escalated_batches`.
-Add `batch_name` to the set, then load the `ask-parent` skill with site `go-batch`, reason `f"batch {batch_name}: {blocked_reason}"`, actions `retry,halt`.
+Add `batch_name` to the set, then load the `ask-thread` skill with site `go-batch`, reason `f"batch {batch_name}: {blocked_reason}"`, actions `retry,halt`.
 
 - On `retry`: append one bullet `parent guidance: <guidance verbatim>` to the batch file's `## Prior failure` section (placement and create-if-absent rule exactly as the `verify`/`logic` self-resolve bullet states).
   Apply any plan-file edits the guidance calls for (plan files only; the orchestrator never edits task code).

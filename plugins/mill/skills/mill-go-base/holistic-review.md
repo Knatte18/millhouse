@@ -219,7 +219,7 @@ Round 1 passes no `--prior-notes` (digest defaults to `(none)` in the template).
    **If `auto_approve_on_cap` is `True`:** run the same terminal actions step 4's `APPROVE` branch already runs at its own implicit-approve-at-cap case — `_status.append_phase(status_path, "holistic-approved", _timestamp.now_utc_iso())`; commit on the task branch: `git -C <worktree> add <status_path> <review_file_path> _mill/briefs/ && git -C <worktree> commit -m "<VARIANT_LABEL>: holistic approve {slug} (auto-approved on round-cap exhaustion, config auto_approve_on_cap)"` — where `<review_file_path>` is the `file` field from the most recently completed round's `reviews[0]` (round `H = max_holistic_rounds`), same convention as step 4's own commit. Proceed to Handoff (`plugins/mill/skills/mill-go-base/handoff.md`) — do NOT halt.
 
    **Otherwise** (flag is `False`):
-   before the halt below, when `parent_escalated_holistic` is false, set it true and load the `ask-parent` skill with site `go-holistic-cap`, reason `f"holistic review exhausted {max_holistic_rounds} round(s)"`, actions `approve,retry,halt`.
+   before the halt below, when `parent_escalated_holistic` is false, set it true and load the `ask-thread` skill with site `go-holistic-cap`, reason `f"holistic review exhausted {max_holistic_rounds} round(s)"`, actions `approve,retry,halt`.
 
    - On `approve`: run the same terminal actions the `auto_approve_on_cap` `True` branch runs, with commit message `"<VARIANT_LABEL>: holistic approve {slug} (approved by parent)"`, and proceed to Handoff.
    - On `retry`: let `H_last = max_holistic_rounds` and `review_file_path` be the `file` field of round `H_last`'s `reviews[0]`.
