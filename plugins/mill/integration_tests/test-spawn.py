@@ -61,8 +61,8 @@ def _setup_pair(container: Path) -> tuple[Path, Path, Path]:
     Layout mirrors real use:
         <container>/wiki.git — bare "remote"
         <container>/wiki — working clone of the bare
-        <container>/hub — working hub repo
-        <container>/hub/.millhouse/wiki — junction to wiki clone
+        <container>/wts/hub — working hub repo
+        <container>/wts/hub/.millhouse/wiki — junction to wiki clone
 
     Returns ``(hub, wiki, worktrees_dir)``.
     """

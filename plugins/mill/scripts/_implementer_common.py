@@ -1862,9 +1862,9 @@ def _forward_output(
     SHA under the new key name, so the two never coexist.
     card_commit_messages is an optional {card_number: Commit-field-message} dict, used as a
     full-batch-history fallback ahead of the two SHA-range no-content-commit demotions below: when
-    every value for this batch's own card_ids (per commit_none_card_ids exclusion is not applied
-    here -- only cards with a real Commit: message are ever keys) is found as a substring of `git log
-    --oneline --all`, the demotion is skipped and an inferred success is emitted instead, since a
+    every value for this batch's own card_ids is found as a substring of `git log --oneline --all`
+    (the commit_none_card_ids exclusion is not applied here -- only cards with a real Commit:
+    message are ever keys), the demotion is skipped and an inferred success is emitted instead, since a
     self-resolve re-fire mints a fresh start_sha that can no longer see cards committed before it.
     Defaults to None (the fallback never fires, preserving today's behavior for every caller that
     doesn't pass it).
