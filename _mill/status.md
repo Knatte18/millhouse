@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: plan-fix-r2
+phase: planned
 slug: tooling-false-positives
 branch: hanf/tooling-false-positives
 plan: _mill/plan
@@ -24,4 +24,5 @@ plan-review-r1  '2026-09-26T08:57:18Z'
 plan-fix-r1  '2026-09-26T08:57:18Z'
 plan-review-r2  '2026-09-26T08:58:32Z'
 plan-fix-r2  '2026-09-26T08:58:32Z'
+planned  '2026-09-26T08:58:38Z'
 ```
