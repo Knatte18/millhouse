@@ -34,7 +34,7 @@ no behavior change.
   Name the new locations by stable identifier: the step functions in `plugins/mill/scripts/_merge.py` (`step_parent`, `step_merge_in_check`, `step_cleanup_commit`, `step_squash`, `step_wiki_done`) and the section headings of the rewritten `plugins/mill/skills/mill-merge/SKILL.md` (`## Callback: merge-in`, `## Callback: confirm-parent`).
   - `plugins/mill/skills/mill-merge-in/SKILL.md`:
     Entry step 3's "as of the Card 1 fix (`mill-merge/SKILL.md` Step 2)" sentence -> `mill-merge` calls this skill only from its `merge-in` callback (`## Callback: merge-in`), always passing its resolved parent branch;
-    the "Liveness check (#817)" paragraph's two references to `mill-merge/SKILL.md` Entry Step 4 -> the dead-parent protocol and message texts implemented by `_merge.step_parent` (whose status-absent branch also skips the liveness check);
+    every reference in the "Liveness check (#817)" paragraph to `mill-merge/SKILL.md` Entry Step 4 (three today: "same call ... makes", "broader exemption than ... own precedent", "documented in ... paragraph") -> the dead-parent protocol and message texts implemented by `_merge.step_parent` (whose status-absent branch also skips the liveness check);
     the "#977 scenario" sentence -> `mill-merge` passes its status-absent `git.base_branch` fallback through the `merge-in` callback;
     the "Caller propagation (#977 follow-up)" paragraph -> the caller is `mill-merge`'s `## Callback: merge-in`, which re-runs `millpy-merge.py` with `--parent <substituted>` on every later re-run;
     the rebind-safety paragraph's reference to `mill-merge/SKILL.md` Entry Step 4's warning -> `_merge.step_parent`, which resolves `status_path` through the slug-driven active-hub lookup;

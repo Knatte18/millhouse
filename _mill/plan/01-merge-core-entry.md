@@ -61,7 +61,9 @@ Batch-local decisions:
   3. `class Stop(Exception)` with constructor `Stop(status: str, reason: str, *, action: str | None = None, resume: list[str] | None = None, data: dict | None = None, report: list[str] | None = None, step: str | None = None)`.
      A non-`None` `step` overrides the executing step's name in the result's `step` field (batch 2 uses it for the `lock` halt).
      `status` is `"halt"`, `"callback"`, or `"ok"`.
-     Module helpers `halt(reason, *, resume=[], data=None, step=None) -> Stop` and `callback(action, reason, *, resume, data, report) -> Stop` build instances (callers `raise` them).
+     Module helpers `halt(reason, *, resume, data=None, step=None) -> Stop` and `callback(action, reason, *, resume, data, report) -> Stop` build instances (callers `raise` them).
+     `resume` is a required keyword-only argument in both (no default, so no shared mutable `[]` default);
+     every call site passes `resume=[]` or `resume=None` explicitly.
      A `halt` with `resume=None` means "re-running is not the fix";
      `resume=[]` means "fix the cause, then plain re-run".
   4. `@dataclass class MergeOptions`: `merged_in: bool = False`, `confirm_parent: str | None = None`, `parent: str | None = None`.

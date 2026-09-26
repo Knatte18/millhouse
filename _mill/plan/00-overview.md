@@ -64,6 +64,15 @@ batches:
 - **Rationale:** discussion Decision `testing-scope` (injectable boundary, in-memory/tempfile fixtures, no real git/gh/daemon).
 - **Applies to:** all batches
 
+### Decision: unit-tests-only
+
+- **Decision:** no card adds a real-git or real-gh test of `_merge.run_merge` / `millpy-merge.py`;
+  the existing `plugins/mill/integration_tests/test-merge.py` gets comment-only edits.
+- **Rationale:** the discussion scopes this out explicitly (Scope "Out": new integration tests with real git/gh;
+  Decision `testing-scope`, which rejects a real-git integration test because the PR-state gate needs `gh` and a fake `gh` shim outweighs the gain).
+  Argv shapes are pinned by `FakeOps` call-recording assertions instead.
+- **Applies to:** all batches
+
 ### Decision: stop-signalling
 
 - **Decision:** steps signal a stop by raising `_merge.Stop` (an `Exception` subclass carrying `status`, `reason`, `action`, `resume`, `data`, `report`).
