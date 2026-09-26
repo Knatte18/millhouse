@@ -67,7 +67,8 @@ This is part of the mill turn-reduction initiative (mechanize deterministic step
   - `resume`: the exact argument list (JSON array of strings) the skill appends when re-invoking the script after handling the stop;
     `null` when re-running is not the fix (e.g. `open` PR halt says "close or merge it, then re-run `/mill-merge`", which is a plain re-run: `[]`).
   - `data`: action-specific payload (e.g. `parent_branch`, `outcome`, `candidate`, `hops`, `reason` for confirm-parent; `pr_url` for branch-protection; `slug`, `parent_branch`, `archive_tag`, `archive_action`, `moved_aside_to` for ok).
-  - `warnings`: list of ASCII strings (citation-scan hits, archive-tag push failure, notify failure).
+  - `warnings`: list of ASCII strings (citation-scan hits, archive-tag push failure).
+    Notify delivery failures are not surfaced: `_notify.notify` swallows them and logs to stderr by design, and this task does not change `_notify`.
   - `timings`: list of `{"step": str, "wall_s": float, "subproc_s": float}`, one per executed step (see Decision `timing`).
   - `report`: list of ASCII lines the skill prints verbatim to the operator.
 - Rationale: one shape covers every exit, so `SKILL.md` needs one parse-and-branch block.
@@ -206,7 +207,8 @@ This is part of the mill turn-reduction initiative (mechanize deterministic step
 ### timing
 
 - Decision: the runner wraps each step with `time.monotonic()` for `wall_s`.
-  All subprocess calls go through one helper in `_merge.py` that accumulates elapsed time into the current step's `subproc_s` (git, gh, and `_client` calls count as subprocess/network).
+  One timing helper in `_merge.py` wraps an arbitrary callable (not only `subprocess.run`) and accumulates its elapsed time into the current step's `subproc_s`;
+  every git/gh subprocess call and every `_client` call (which goes through the wiki daemon socket, not a subprocess) runs through it, and so do `_pr_state`, `_archive_tag`, and `_parent_branch` calls that shell out or hit the network.
   The `report` ends with one ASCII line per step: `[mill-merge] <step>: <wall>s (git/net <subproc>s)`, and a total.
   `mill-merge-in`'s verify time is outside the script; the skill already reports it.
 - Rationale: answers "script time vs git/network vs verify" for the next slow merge without a profiler.
@@ -247,7 +249,7 @@ This is part of the mill turn-reduction initiative (mechanize deterministic step
   - Rollback on any Step 5 failure before the squash lands: `git -C <parent-path> reset --hard origin/<parent_branch>`;
     dirty-parent and ff-only-divergence halts are exempt (no reset).
     Step 4 partial failure: `git reset --hard HEAD` on the child.
-  - Step 9: `_notify.notify("mill-merge.done", ...)` (failure -> warning), final report text unchanged.
+  - Step 9: `_notify.notify("mill-merge.done", ...)` (never raises; delivery failures stay on stderr as today), final report text unchanged.
 - Rationale: the task is a mechanical move, not a behavior change;
   preserving routing keeps every past bug fix (#497, #648, #817, #930, #977, #987) intact.
 
