@@ -18,6 +18,7 @@ import _safe_rmtree  # noqa: E402
 from _implementer_common import (  # noqa: E402
     _forward_output,
     _batch_completeness_stuck,
+    _in_scope_dirty_stuck,
     _reclassify_verify_failure,
     _content_commit_count,
     emit_prepare,
@@ -5996,6 +5997,35 @@ def main() -> int:
         except Exception as exc:
             print(f"FAIL: case 86 ({exc})", file=sys.stderr)
             errors += 1
+
+    # Case 87: the finalize dirty gate ignores orchestrator-owned _mill/briefs files at any depth.
+    for label, brief_dir in (("flat", "_mill/briefs"), ("nested", "hub/_mill/briefs")):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            base_sha = _setup_fixture(project_root)
+            try:
+                _commit_file(project_root, f"{brief_dir}/implement-b-r1.md", "brief", "brief")
+                _commit_file(project_root, f"{brief_dir}/implement-b-r1.out.md", "out", "out")
+                _commit_file(project_root, "hub/src.txt", "src", "src")
+                (project_root / brief_dir / "implement-b-r1.md").write_text("changed", encoding="utf-8")
+                (project_root / brief_dir / "implement-b-r1.out.md").write_text("changed", encoding="utf-8")
+                gate_kwargs = dict(
+                    project_root=project_root,
+                    task_dir=project_root / "_mill",
+                    parent_branch="main",
+                    session_id="s87",
+                    start_sha=base_sha,
+                )
+                brief_only = _in_scope_dirty_stuck(**gate_kwargs)
+                assert brief_only is None, f"87 {label}: modified briefs must not trip the gate, got {brief_only}"
+                (project_root / "hub" / "src.txt").write_text("dirty", encoding="utf-8")
+                real_dirt = _in_scope_dirty_stuck(**gate_kwargs)
+                assert real_dirt is not None, f"87 {label}: a dirty real in-scope file must still trip the gate"
+                assert real_dirt["stuck_type"] == "logic", real_dirt
+                print(f"PASS: case 87 ({label}) - briefs excluded from the dirty gate, real in-scope dirt still caught")
+            except Exception as exc:
+                print(f"FAIL: case 87 {label} ({exc})", file=sys.stderr)
+                errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

@@ -423,6 +423,16 @@ def _attach_commit_sha(stuck_dict: dict, project_root: Path) -> dict:
     return stuck_dict
 
 
+def _is_brief_path(path: str) -> bool:
+    """
+    Return True when a repo-root-relative path lies under a `_mill/briefs/` directory at any depth.
+
+    A nested (hub-relative) task layout puts briefs at `<subdir>/_mill/briefs/...`, so a plain
+    prefix test misses them.
+    """
+    return "/_mill/briefs/" in "/" + path
+
+
 def _in_scope_dirty_stuck(
     project_root: Path,
     task_dir: Path | None,
@@ -442,7 +452,7 @@ def _in_scope_dirty_stuck(
     gate, so it cannot false-block finalize if it becomes dirty again for reasons unrelated to the
     current batch. Do not "fix" this function to match compute_terminal_dirt's broader scope --
     that would reintroduce the false-block this function exists to avoid.
-    `_mill/briefs/` paths are excluded from `owned_paths` entirely -- they are Builder-owned
+    `_mill/briefs/` paths, at any depth (flat or under a hub subdirectory), are excluded from `owned_paths` entirely -- they are Builder-owned
     orchestration bookkeeping (rendered prompt / captured transcript), never implementer content
     this gate exists to police, and the Builder already stages and commits them itself at
     batch-approve/holistic-approve/handoff time (see mill-go-base/SKILL.md and holistic-review.md's
@@ -478,7 +488,7 @@ def _in_scope_dirty_stuck(
             return None
         owned_paths = {
             line for line in diff_result.stdout.splitlines()
-            if line and not line.startswith("_mill/briefs/")
+            if line and not _is_brief_path(line)
         }
         porcelain_lines = _pygit2_util.status_porcelain(project_root, include_untracked=False)
         dirt = [line for line in porcelain_lines if line[3:] in owned_paths]
