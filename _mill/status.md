@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-merge-core-entry
 slug: mill-merge-script
 branch: hanf/mill-merge-script
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-fix-r2  '2026-09-26T14:24:02Z'
 plan-review-r3  '2026-09-26T14:30:14Z'
 planned  '2026-09-26T14:30:24Z'
 implementing  '2026-09-26T14:30:43Z'
+approved-merge-core-entry  '2026-09-26T14:34:53Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ implementing  '2026-09-26T14:30:43Z'
 ```yaml
 batches:
   - name: merge-core-entry
-    state: running
+    state: approved
     implementer_session: b61bd069-f37d-40d9-b302-72803c08b49c
     start_sha: 56474e41a0afc6340d4ae33556facc914bc30d6d
+    commit_sha: 8a50679157172f0d318227abd0e93341125a5c96
     verify_baseline_failures: ['NONZERO_EXIT: exit 2: /home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/.venv/bin/python3:
     can''t open file ''/home/knatte/Code/millhouse/wts/mill-merge-script/plugins/mill/unit_tests/test-merge.py'':
     [Errno 2] N']
