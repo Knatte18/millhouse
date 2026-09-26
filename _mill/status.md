@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-spawn-suite
 slug: implement-recovery-and-integration-tests
 branch: hanf/implement-recovery-and-integration-tests
 plan: _mill/plan
@@ -24,6 +24,7 @@ planned  '2026-09-26T09:34:23Z'
 implementing  '2026-09-26T09:35:08Z'
 approved-implementer-fixes  '2026-09-26T09:39:59Z'
 implementing  '2026-09-26T09:43:28Z'
+approved-spawn-suite  '2026-09-26T09:45:27Z'
 ```
 
 ## Batches
@@ -42,9 +43,10 @@ batches:
     start_sha: 557d9e263b8b52b9f2bc4e67705508638a753f09
     commit_sha: 0bf5f0603e5dc30d8eb3f24f124c92c3fe462fae
   - name: spawn-suite
-    state: running
+    state: approved
     implementer_session: 721a4ecb-ec04-4eac-a144-370b8d927170
     start_sha: 126d0494c69db1664bfe6336dcbc0f87d7632899
+    commit_sha: ba66f00c29c2f3494d38f744e7ddde5a8c294d1a
     verify_baseline_failures: ['NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-31f5e19d',
   'NONZERO_EXIT: exit 1: [test-spawn] container: /home/knatte/Code/millhouse/wts/implement-recovery-and-integration-tests/.scratch/spawn-test-32649cd0']
 ```
@@ -53,4 +55,5 @@ batches:
 ```text
 '2026-09-26T09:39:52Z'  implementer-fixes  round 1
 '2026-09-26T09:43:15Z'  integration-repairs  round 1
+'2026-09-26T09:45:27Z'  spawn-suite  round 1
 ```
