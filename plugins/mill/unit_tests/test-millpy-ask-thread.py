@@ -55,7 +55,7 @@ def main() -> int:
             assert code == 0
             data = json.loads(out)
             assert data["escalate"] is True
-            assert data["parent_thread"] == "mh:orch"
+            assert data["target"] == "mh:orch"
             assert data["reply_path"].endswith("_mill/ask-reply.md")
             assert "my-slug" in data["message"]
             print("PASS: prepare escalates when parent_thread is set")
@@ -65,16 +65,48 @@ def main() -> int:
             print("PASS: prepare rejects an action the site does not accept")
 
             reply = root / "_mill" / "ask-reply.md"
-            reply.write_text("```yaml\naction: retry\n```\nfix it\n", encoding="utf-8")
-            code, out = _run(root, ["consume", "--actions", "retry,halt"])
+            reply.write_text("ask-id: abc12345\n```yaml\naction: retry\n```\nfix it\n", encoding="utf-8")
+            code, out = _run(root, ["consume", "--ask-id", "abc12345", "--actions", "retry,halt"])
             assert code == 0
             assert json.loads(out)["action"] == "retry"
             assert not reply.exists()
             print("PASS: consume prints the parsed action and removes the file")
 
-            code, out = _run(root, ["consume", "--actions", "retry,halt"])
+            code, out = _run(root, ["consume", "--ask-id", "abc12345", "--actions", "retry,halt"])
             assert code == 0 and json.loads(out)["action"] == "halt"
             print("PASS: consume with no reply file prints halt")
+
+            questions = root / "q.txt"
+            questions.write_text("1. caf\u00e9?\n", encoding="utf-8")
+            code, out = _run(root, ["prepare", "--questions-file", str(questions)])
+            data = json.loads(out)
+            assert code == 0 and data["escalate"] is True and data["target"] == "mh:orch"
+            assert "caf??" in data["message"] and data["ask_id"]
+            code, out = _run(root, ["prepare", "--questions-file", str(questions), "--to", "other"])
+            assert code == 0 and json.loads(out)["target"] == "other"
+            print("PASS: prepare --questions-file, with and without --to")
+
+            for argv in (
+                ["prepare", "--questions-file", str(questions), "--site", "go-batch"],
+                PREPARE_ARGS + ["--to", "x"],
+                ["prepare", "--questions-file", str(root / "missing.txt")],
+                ["prepare", "--reason", "r"],
+                ["consume", "--actions", "retry"],
+                ["consume", "--ask-id", "abc12345"],
+                ["consume", "--ask-id", "abc12345", "--actions", "retry", "--open"],
+            ):
+                code, out = _run(root, argv)
+                assert code == 1 and out == "", argv
+            print("PASS: usage errors exit 1 with empty stdout")
+
+            reply.write_text("ask-id: abc12345\nyes\n", encoding="utf-8")
+            code, out = _run(root, ["consume", "--ask-id", "abc12345", "--open"])
+            assert code == 0 and json.loads(out) == {"reply": "yes"} and not reply.exists()
+            print("PASS: consume --open returns the reply text")
+
+            assert json.loads(_run(root, ["resolve"])[1]) == {"target": "mh:orch"}
+            assert json.loads(_run(root, ["resolve", "--to", "x"])[1]) == {"target": "x"}
+            print("PASS: resolve")
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -82,6 +114,13 @@ def main() -> int:
             code, out = _run(root, PREPARE_ARGS)
             assert code == 0 and json.loads(out)["escalate"] is False
             print("PASS: prepare without parent_thread does not escalate")
+            assert json.loads(_run(root, ["resolve"])[1]) == {"target": None}
+            print("PASS: resolve without parent_thread prints null")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            code, out = _run(Path(tmp), ["resolve"])
+            assert code == 1 and out == ""
+            print("PASS: resolve outside a task worktree exits 1")
 
         print("All millpy-ask-thread unit tests passed.")
         return 0
