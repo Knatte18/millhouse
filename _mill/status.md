@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: implement-recovery-and-integration-tests
 branch: hanf/implement-recovery-and-integration-tests
-plan: null
+plan: _mill/plan
 parent_branch: main
 task: millpy-implement finalize/resume fixes and the red integration suites
 task_description: |
@@ -17,4 +17,5 @@ task_description: |
 discussing  '2026-09-26T09:25:23Z'
 discussion-fix-r2  '2026-09-26T09:30:03Z'
 discussed  '2026-09-26T09:30:03Z'
+planning  '2026-09-26T09:32:36Z'
 ```
