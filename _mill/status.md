@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: done
 slug: orch-wait-notify-parent
 branch: hanf/orch-wait-notify-parent
 plan: null
@@ -17,4 +17,5 @@ task_description: |
 ```text
 discussing  '2026-09-26T09:40:27Z'
 implementing  '2026-09-26T09:44:40Z'
+done  '2026-09-26T09:46:01Z'
 ```
