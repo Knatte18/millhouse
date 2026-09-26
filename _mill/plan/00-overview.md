@@ -3,7 +3,7 @@
 ```yaml
 task: "millpy-implement finalize/resume fixes and the red integration suites"
 slug: "implement-recovery-and-integration-tests"
-approved: false
+approved: true
 started: "20260926-093500"
 parent_branch: "main"
 discussion_sha: "d442faf1183d3a5fda1a24f9439efe12ae268ce7"

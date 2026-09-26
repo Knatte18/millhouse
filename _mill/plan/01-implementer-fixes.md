@@ -33,24 +33,7 @@ One batch: the two code fixes share one source file and one unit-test file; the 
   Update the docstrings of `_cards_incomplete_reason` and `_batch_completeness_stuck` to describe the new argument.
 - **Commit:** `fix(implementer-common): ignore Commit: none cards in the count-only completeness recount`
 
-### Card 2: finalize dirty gate excludes orchestrator-owned briefs at any depth (reproduce first)
-
-- **Context:**
-  - `plugins/mill/unit_tests/test-implementer-common.py`
-- **Edits:**
-  - `plugins/mill/scripts/_implementer_common.py`
-- **Creates:** none
-- **Deletes:** none
-- **Moves:** none
-- **Requirements:** Reproduce before fixing: first write the failing unit test of Card 3 (nested task dir, tracked brief and `.out.md` modified), run it, and confirm it fails on the current code.
-  The mechanism: in `_in_scope_dirty_stuck`, `owned_paths` comes from `git diff --name-only <start_sha>` and is matched against `_pygit2_util.status_porcelain` lines, both repo-root-relative; the current exclusion `line.startswith("_mill/briefs/")` therefore misses `<subdir>/_mill/briefs/...` in a nested (hub-relative) layout.
-  Fix: replace the prefix test with a small module-level helper `_is_brief_path(path: str) -> bool` returning True when `("/" + path)` contains `"/_mill/briefs/"`, and use it in the `owned_paths` comprehension.
-  The source of the briefs location is deliberately the fixed `_mill/briefs/` path component rather than the `task_dir` argument; if the reproduction shows this predicate is not the failing piece, keep the fix on the finalize side (adjust whichever `owned_paths` or porcelain matching the reproduction shows to be wrong) and record the discrepancy in the commit body.
-  Do not touch the resume-incomplete branch of prepare and never add a second `mill-go: start batch`-style commit.
-  Update the `_in_scope_dirty_stuck` docstring paragraph about `_mill/briefs/` to say the exclusion applies at any depth.
-- **Commit:** `fix(implementer-common): exclude nested _mill/briefs paths from the finalize dirty gate`
-
-### Card 3: unit tests for the recount and the dirty-gate exclusion
+### Card 2: unit tests for the Commit: none recount
 
 - **Context:**
   - `plugins/mill/scripts/_implementer_common.py`
@@ -61,9 +44,26 @@ One batch: the two code fixes share one source file and one unit-test file; the 
 - **Moves:** none
 - **Requirements:** Append new numbered cases before the final `if errors:` block of `main`, following the file's existing `try/except` + `errors += 1` + `PASS:` print style and the `_setup_fixture` helper.
   Recount cases (call `_batch_completeness_stuck` directly with `card_ids={1, 2, 3}` and `commit_none_card_ids={2}`): (a) two content commits after `base_sha`, `cards_done=None` -> `None`; (b) one content commit, `cards_done=None` -> stuck/incomplete whose reason names 2 expected cards; (c) `cards_done=["x"]` (malformed) with two commits -> `None`; (d) without `commit_none_card_ids` the two-commit case still returns incomplete (regression guard); (e) `_reclassify_verify_failure` with the same inputs does not report incomplete for two commits.
+- **Commit:** `test(implementer-common): cover the Commit: none recount`
+
+### Card 3: finalize dirty gate excludes orchestrator-owned briefs at any depth (reproduce first)
+
+- **Context:** none
+- **Edits:**
+  - `plugins/mill/scripts/_implementer_common.py`
+  - `plugins/mill/unit_tests/test-implementer-common.py`
+- **Creates:** none
+- **Deletes:** none
+- **Moves:** none
+- **Requirements:** Reproduce before fixing: first add the dirty-gate unit cases below (before the final `if errors:` block of `main`, same style as the other cases), run them, and confirm the nested-layout case fails on the current code.
   Dirty-gate cases via `_in_scope_dirty_stuck` (or `_forward_output` as case 57 does): with a nested layout `hub/_mill/briefs/implement-b-r1.md` and `implement-b-r1.out.md` committed after `base_sha`, then modified in the working tree, the gate returns `None`; the same modification to a real in-scope file (for example `hub/src.txt`) still returns the stuck dict; a flat `_mill/briefs/...` modification returns `None`.
-  Write the dirty-gate nested case first and confirm it fails against the pre-fix `_implementer_common.py` (Card 2's reproduction step).
-- **Commit:** `test(implementer-common): cover Commit: none recount and nested brief exclusion`
+  The mechanism: in `_in_scope_dirty_stuck`, `owned_paths` comes from `git diff --name-only <start_sha>` and is matched against `_pygit2_util.status_porcelain` lines, both repo-root-relative; the current exclusion `line.startswith("_mill/briefs/")` therefore misses `<subdir>/_mill/briefs/...` in a nested (hub-relative) layout.
+  Fix: replace the prefix test with a small module-level helper `_is_brief_path(path: str) -> bool` returning True when `("/" + path)` contains `"/_mill/briefs/"`, and use it in the `owned_paths` comprehension.
+  The source of the briefs location is deliberately the fixed `_mill/briefs/` path component rather than the `task_dir` argument; if the reproduction shows this predicate is not the failing piece, keep the fix on the finalize side (adjust whichever `owned_paths` or porcelain matching the reproduction shows to be wrong) and record the discrepancy in the commit body.
+  Do not touch the resume-incomplete branch of prepare and never add a second `mill-go: start batch`-style commit.
+  Then implement the fix and confirm all cases pass.
+  Update the `_in_scope_dirty_stuck` docstring paragraph about `_mill/briefs/` to say the exclusion applies at any depth.
+- **Commit:** `fix(implementer-common): exclude nested _mill/briefs paths from the finalize dirty gate`
 
 ### Card 4: mill-go-base blocked-batch resume procedure names --resume-incomplete
 
