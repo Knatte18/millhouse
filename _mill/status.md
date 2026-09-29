@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: scribe-migration
 branch: hanf/scribe-migration
 plan: _mill/plan
@@ -24,4 +24,17 @@ planning  '2026-09-29T13:14:38Z'
 plan-review-r1  '2026-09-29T13:18:39Z'
 plan-fix-r1  '2026-09-29T13:19:26Z'
 planned  '2026-09-29T13:19:35Z'
+implementing  '2026-09-29T13:19:48Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: scribe-release
+    state: pending
+  - name: mill-skill-references
+    state: pending
+  - name: update-plugins
+    state: pending
 ```
