@@ -12,14 +12,63 @@
 # mirroring mill-setup Phase 4.8. CODEGUIDE_PLUGIN_ROOT has no POSIX
 # equivalent here (no established settings.json convention for it yet) and is
 # intentionally not set.
+#
+# Before syncing, refreshes scribe@scribe (mill's declared dependency) when
+# installed and warns if it is older than mill requires.
+# After syncing, prints an uninstall hint for each <name>@millhouse install
+# whose plugin is no longer in marketplace.json.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_PATH="$SCRIPT_DIR/.claude-plugin/marketplace.json"
+INSTALLED_JSON="$HOME/.claude/plugins/installed_plugins.json"
+MILL_MANIFEST="$SCRIPT_DIR/plugins/mill/.claude-plugin/plugin.json"
 
 MARKETPLACE=$(python3 -c "import json; print(json.load(open('$MANIFEST_PATH'))['name'])")
 CACHE_BASE="$HOME/.claude/plugins/cache/$MARKETPLACE"
+
+# Refresh scribe@scribe (mill's dependency) and check it meets mill's minimum.
+SCRIBE_INSTALLED=$(python3 -c "
+import json, os
+path = '$INSTALLED_JSON'
+installed = os.path.exists(path) and 'scribe@scribe' in json.load(open(path)).get('plugins', {})
+print('yes' if installed else 'no')
+")
+
+if [ "$SCRIBE_INSTALLED" = "yes" ]; then
+    if ! claude plugin marketplace update scribe; then
+        echo "WARNING: 'claude plugin marketplace update scribe' failed -- continuing"
+    fi
+    if ! claude plugin update scribe@scribe; then
+        echo "WARNING: 'claude plugin update scribe@scribe' failed -- continuing"
+    fi
+
+    python3 -c "
+import json, re
+
+def parse_version(text):
+    return tuple(int(part) for part in text.split('.'))
+
+installed = json.load(open('$INSTALLED_JSON'))['plugins']['scribe@scribe']
+lowest = min((parse_version(record['version']) for record in installed), default=None)
+
+dependencies = json.load(open('$MILL_MANIFEST')).get('dependencies', [])
+required = None
+for entry in dependencies:
+    if isinstance(entry, dict) and entry.get('name') == 'scribe' and entry.get('marketplace') == 'scribe':
+        required = entry.get('version')
+
+if lowest is not None and required:
+    minimum = parse_version(re.sub(r'^(\\^|~|>=|=)', '', required))
+    if lowest < minimum:
+        found = '.'.join(map(str, lowest))
+        needed = '.'.join(map(str, minimum))
+        print(f\"WARNING: scribe@scribe is {found}, mill needs {needed} -- run 'claude plugin marketplace update scribe' and 'claude plugin update scribe@scribe'.\")
+"
+else
+    echo "scribe@scribe is not installed -- mill fails to load without it. Add and install it: '/plugin marketplace add Knatte18/scribe', then '/plugin install scribe@scribe'."
+fi
 
 while IFS=$'\t' read -r NAME VERSION; do
     SOURCE_DIR="$SCRIPT_DIR/plugins/$NAME"
@@ -47,6 +96,19 @@ data = json.load(open('$MANIFEST_PATH'))
 for p in data['plugins']:
     print(f\"{p['name']}\t{p['version']}\")
 ")
+
+# Point out installs whose plugin no longer exists in this marketplace.
+python3 -c "
+import json, os
+
+path = '$INSTALLED_JSON'
+if os.path.exists(path):
+    current = {p['name'] for p in json.load(open('$MANIFEST_PATH'))['plugins']}
+    for key in json.load(open(path)).get('plugins', {}):
+        name, _, marketplace = key.partition('@')
+        if marketplace == '$MARKETPLACE' and name not in current:
+            print(f\"Orphaned: {key} is no longer in this marketplace -- run 'claude plugin uninstall {key}'.\")
+"
 
 # Update MILL_PYTHON in ~/.claude/settings.json so \"\$MILL_PYTHON\" resolves
 # to the newly deployed mill cache venv.
