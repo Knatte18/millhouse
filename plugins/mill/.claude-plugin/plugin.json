@@ -1,6 +1,6 @@
 {
   "name": "mill",
-  "description": "Task orchestration, code quality, git workflow, and documentation for Claude Code (v2)",
+  "description": "Task orchestration, git workflow, and documentation for Claude Code (v2)",
   "version": "2.0.0",
   "license": "Apache-2.0",
   "author": {
