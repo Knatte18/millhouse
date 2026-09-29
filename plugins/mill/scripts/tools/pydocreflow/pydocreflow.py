@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Reflow Python docstrings and multi-line `#`-comment blocks to semantic line breaks (one sentence per
-line, plus a break at an internal independent-clause boundary), per the python-comments skill's
-"Line-wrap style" section (plugins/python/skills/python-comments/SKILL.md).
+line, plus a break at an internal independent-clause boundary), per the `scribe:python-comments` skill's
+line-wrap rule.
 
 Pure mechanical transform: only re-breaks existing text onto different lines, never adds, drops, or
 changes a word.

@@ -67,7 +67,7 @@ def prompt_stale_worktree(slug: str, worktree_path: Path) -> str:
     This is ambiguous: the task could legitimately be in-place (the directory is stale) or still
     have a live worktree.
 
-    Presents a numbered list per ``mill:conversation`` conventions:
+    Presents a numbered list per ``scribe:conversation`` conventions:
 
         1) Abort (Recommended)
         2) Treat as in-place — skip worktree remove
