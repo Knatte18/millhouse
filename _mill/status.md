@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-fixing
+phase: holistic-reviewing
 slug: scribe-migration
 branch: hanf/scribe-migration
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-mill-skill-references  '2026-09-29T13:26:55Z'
 approved-update-plugins  '2026-09-29T13:28:25Z'
 holistic-reviewing  '2026-09-29T13:28:33Z'
 holistic-fixing  '2026-09-29T13:29:59Z'
+holistic-reviewing  '2026-09-29T13:31:01Z'
 ```
 
 ## Batches
