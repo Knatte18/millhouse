@@ -46,7 +46,9 @@ batches:
     commit_sha: acdaa61ea88054d71fe43bf3ac3cac1feec8553f
     verify_baseline_failures: []
   - name: update-plugins
-    state: pending
+    state: running
+    implementer_session: cd3cab67-b18d-4a0c-85c8-e6646cf66358
+    start_sha: ae70770923b551ec55e5bde3abf7060ab382b67d
     verify_baseline_failures: []
 ```
 ## Inferred-success log
