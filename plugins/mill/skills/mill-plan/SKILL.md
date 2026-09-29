@@ -13,9 +13,9 @@ Your job is to turn `discussion.md` into an implementation plan detailed enough 
 
 ## Entry
 
-**Step 0: Load `mill:prose`, then `mill:conversation`.**
-Load both skills via the Skill tool, unconditionally, immediately — before any other Entry step or phase; `mill:conversation` builds on `mill:prose`, so load it first. mill-plan no longer surfaces any operator-facing prompt (the former Max-rounds-escape prompt at step 6 is now an unconditional halt — see Phase: Plan Review);
-these skills are loaded defensively in case a future addition needs `mill:conversation`'s numbered-options convention or `mill:prose`'s writing rules.
+**Step 0: Load `scribe:prose`, then `scribe:conversation`, then `mill:conventions`.**
+Load all three skills via the Skill tool, unconditionally, immediately — before any other Entry step or phase; `scribe:conversation` builds on `scribe:prose`, and `mill:conventions` builds on both, so load them in that order. mill-plan no longer surfaces any operator-facing prompt (the former Max-rounds-escape prompt at step 6 is now an unconditional halt — see Phase: Plan Review);
+these skills are loaded defensively in case a future addition needs `scribe:conversation`'s numbered-options convention or `scribe:prose`'s writing rules.
 
 **Step 0.5 — Parse arguments.**
 Read `$ARGUMENTS`. Token-walk left-to-right:
@@ -259,7 +259,7 @@ Before recommending the target language's lint command (Go: `golangci-lint run`;
 If it does, recommend including it, e.g. `go test ./... && golangci-lint run`.
 That includes a lint-only recommendation (`golangci-lint run`) when a repo-wide *test* command is skipped as too slow, since linters are fast, unlike full regression suites.
 If the candidate command does NOT exit 0 (pre-existing repo-wide lint debt unrelated to this task), recommend no lint command and record the finding in the plan overview's Shared Decisions, so the recommendation does not steer every future task in the hub toward fixing unrelated debt first.
-`csharp-build` defines no lint command today, so C# projects are unaffected by this recommendation.
+`scribe:csharp-build` defines no lint command today, so C# projects are unaffected by this recommendation.
 Recommend no `done_gate` only when the project has neither a meaningful repo-wide test nor a defined lint command.
 When the recommended value differs from the currently effective `cfg["pipeline"]["done_gate"]`, record a `### Decision:` under the overview's `## Shared Decisions` labelled as a recommendation for the operator.
 It names the recommended command and the currently effective value, and includes the sentence "Not applied: mill-go gates on the effective config value, not this Decision."
