@@ -66,7 +66,9 @@ Only `conversation` has mill-specific content; `prose`, `code-quality`, `code-co
 - **Task-state and scratch locations** — mill's text is stale (says task-state lives in the wiki).
   Rewrite to match CLAUDE.md: per-task working state (`status.md`, `discussion.md`, `plan/`, `reviews/`, `briefs/`) lives in `_mill/` on the task branch; the wiki holds only `Home.md` and daemon-rendered files; scripts resolve the wiki through `_paths.resolve_wiki_path`, never the `.wiki` junction.
   Keep the plugin-managed scratch note (shared `.scratch/`, subdirectories such as `test-review-<type>-<id>/`, `plans/`, `briefs/` created as needed) and that `.scratch/` is gitignored via `**/.scratch/`.
-  Drop mill's "Default scratch location: `.scratch/` in the repo root" and "never write to /tmp" — scribe's File writing rule covers both.
+  Drop mill's "never write to /tmp" — scribe's File writing rule covers it.
+  Keep mill's scratch-location rule as a mill-specific override, reworded: in a mill worktree `.scratch/` means the worktree root's `.scratch/`, because mill's scripts, fixtures and new-thread prompts (`.scratch/prompt.md`) resolve it from the worktree root.
+  This intentionally narrows scribe's "`.scratch/` under the current working directory" for mill sessions; state it as such in the skill.
 - **sed reach** — scribe already says the no-`sed` rule carries into forked and sub-agent sessions.
   The mill-specific addition: the rule also binds every prompt, brief, or script a mill orchestrator generates for a dispatched implementer, reviewer, or fixer (from CLAUDE.md's "Never use `sed`" bullet).
   State only that addition, not the rule itself.
@@ -109,7 +111,7 @@ Mentions without a load verb:
   1. A line is a load directive when it names `scribe:conversation` or `mill:conventions` and carries a load verb (same `_LOAD_VERB_RE`).
   2. A file with a directive naming `scribe:conversation` must contain the canonical phrase "load `scribe:prose`[,] then `scribe:conversation`".
      A file with a directive naming `mill:conventions` must contain the canonical three-skill phrase "load `scribe:prose`, then `scribe:conversation`, then `mill:conventions`".
-  3. New regression guard: no shipped file (SKILL.md files under `plugins/` and `.claude/skills/`, `plugins/mill/templates/`, `plugins/mill/agents/`, `plugins/mill/scripts/` Python, `doc/`, `CLAUDE.md`) names `mill:prose`, `mill:conversation`, `mill:code-quality`, `mill:code-comments`, `mill:testing` or `mill:handoff`.
+  3. New regression guard: no shipped file (every `*.md` under `plugins/` and `.claude/skills/` — not only `SKILL.md`, so companion files such as `mill-go-base/holistic-review.md` are covered — plus `*.py` under `plugins/mill/scripts/`, `*.md` under `doc/`, and `CLAUDE.md`) names `mill:prose`, `mill:conversation`, `mill:code-quality`, `mill:code-comments`, `mill:testing` or `mill:handoff`.
      The same guard also forbids the path forms `plugins/mill/skills/(prose|conversation|code-quality|code-comments|testing|handoff)/` and `plugins/(python|csharp|golang)/`, so a stale file-path citation (like `mdreflow.py`'s) is caught, not only `mill:<name>`.
      `_mill/` is excluded (task working state), and the test file excludes itself.
 - Keep the existing in-memory `check_text` cases, re-expressed with scribe names, plus cases for the three-skill phrase and the forbidden-name guard; keep the tree-walk case.
@@ -133,9 +135,14 @@ Mentions without a load verb:
   - Where a `*-comments` skill restates a generic comment rule that `scribe:code-quality` states differently (notably the file-header rule, which scribe settled as "skip when the file is the only one in its directory"), drop the restatement and keep only the language mechanics (placement, syntax, tooling), mirroring how scribe's `golang-comments` builds on `code-quality`.
   - `python-testing` ~14 / `csharp-testing` ~15 "See `@code:testing`" → "See `scribe:testing`".
   - `csharp-build` ~23 "A long mill-orchestrated ..." and ~29 "(mill-go verify, git-commit lint, any pass/fail check)" → orchestrator-neutral wording ("a long orchestrated session", "(a verify step, a pre-commit lint, any pass/fail check)").
-  - Final check: `grep -nE "mill|millhouse|_mill|plugins/|@code:" ` over the six new files returns nothing.
+  - `python-build` import-ordering example (~lines 51-54: `from solgt.timeseries import convert_date_to_t`, `import utils_config`) and ~71 "(e.g., `utils_config.py`)" are from a specific project → genericise to neutral names (e.g. `from mypackage.timeseries import to_period_index`, `import project_config`, "(e.g., `project_config.py`)"), keeping the ordering rule the example illustrates.
+  - Final check, two parts: `grep -nE "mill|millhouse|_mill|plugins/|@code:|solgt|utils_config"` over the six new files returns nothing;
+    and a read-through of each file for any other identifier naming a specific repo, package, or path (the grep cannot know every project name).
 - Add six rows to `plugins/scribe/skills/INDEX.md`, grouped like the golang rows, using each skill's frontmatter description.
 - Version bump `1.0.0` → `1.1.0` in `plugins/scribe/.claude-plugin/plugin.json` and in the `scribe` entry of `/home/knatte/Code/scribe/.claude-plugin/marketplace.json` (both the marketplace-level `version` and the plugin entry); extend both `description` strings to mention Python and C# mechanics.
+- Tag the release: after the version-bump commit, `git -C /home/knatte/Code/scribe tag v1.1.0` and push the tag with the branch (`git -C /home/knatte/Code/scribe push --follow-tags`, or push the tag explicitly).
+  Tag regardless of what the docs say about range resolution; it is cheap and makes `^1.1.0` resolvable if Claude Code resolves ranges against tags.
+  If the docs name a different tag format for dependency resolution, use that format.
 - Commit in the scribe repo with `git -C /home/knatte/Code/scribe add ... && git -C /home/knatte/Code/scribe commit -m "..."`, then `git -C /home/knatte/Code/scribe push`. Never `cd`.
 - Ordering: the scribe change is its own first batch and must be pushed before millhouse's language plugins are deleted, so there is never a published state where the skills exist nowhere.
 - Rationale: brief mandates it; scribe's `golang-*` are the precedent.
@@ -159,6 +166,8 @@ Mentions without a load verb:
   1. If `scribe@scribe` is in `installed_plugins.json`, run `claude plugin marketplace update scribe`, then `claude plugin update scribe@scribe`.
      A failing command prints a `WARNING:` line and the script continues (same tolerance as the existing `uv sync` step).
   2. Re-read `installed_plugins.json` and compare the installed scribe version against the minimum in mill's `plugins/mill/.claude-plugin/plugin.json` `dependencies` entry (read from the manifest, never a second hard-coded copy).
+     Derive the minimum from the range by stripping a leading operator (`^`, `~`, `>=`, `=`) and parsing the remainder as a dotted integer tuple; compare tuples.
+     When the dependency entry carries no version (the bare `"scribe@scribe"` fallback), skip the comparison; step 1 and step 3 still run.
      Below the minimum → print `WARNING: scribe@scribe is <v>, mill needs <min> -- run 'claude plugin marketplace update scribe' and 'claude plugin update scribe@scribe'.`
   3. If `scribe@scribe` is not installed at all → print the two install commands (`/plugin marketplace add Knatte18/scribe`, `/plugin install scribe@scribe`).
   The plan confirms the exact `claude plugin marketplace update` / `claude plugin update` CLI syntax (`claude plugin --help`) before writing it.
