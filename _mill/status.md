@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: scribe-migration
 branch: hanf/scribe-migration
-plan: null
+plan: _mill/plan
 parent_branch: main
 parent_thread: MH:orch
 task: Migrate mill's generic skills to the shared scribe plugin
@@ -20,4 +20,5 @@ discussion-fix-r2  '2026-09-29T13:02:56Z'
 discussion-fix-r3  '2026-09-29T13:05:25Z'
 discussion-fix-r4  '2026-09-29T13:07:04Z'
 discussed  '2026-09-29T13:07:04Z'
+planning  '2026-09-29T13:14:38Z'
 ```
