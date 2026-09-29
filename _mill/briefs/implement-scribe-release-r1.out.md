@@ -1,0 +1,3 @@
+Batch scribe-release complete: 2 of 2 cards committed (scribe 1.1.0 released, tagged scribe--v1.1.0 and pushed; mill manifests now depend on scribe ^1.1.0; plugins/golang, csharp and python removed with their marketplace entries). Verify (test-agents-defs.py) passes; claude plugin validate passes for plugins/mill, the millhouse marketplace and the scribe repo. My first delete attempt included `rm -rf` and was refused by the auto-mode classifier before anything ran; a retry with only `git rm -r` sufficed and left no leftovers.
+
+{"status":"success","commit_sha":"1ac39b1436cd18a719ebd2565661fd6d59ae4ac8","session_id":"fe85564d-0ed0-49a9-b2c3-b20c97686428","cards_done":[1,2]}
