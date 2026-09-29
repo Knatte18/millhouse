@@ -6,6 +6,7 @@
   "owner": {
     "name": "Knatte18"
   },
+  "allowCrossMarketplaceDependenciesOn": ["scribe"],
   "plugins": [
     {
       "name": "mill",
