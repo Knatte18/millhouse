@@ -58,6 +58,8 @@ _mill/   ← status.md, discussion.md, plan/, reviews/
   any *dispatched* mill-go/mill-merge/mill-plan invocation until the plugin cache is refreshed —
   those dispatches read `${CLAUDE_PLUGIN_ROOT}`, a frozen copy, not the dev tree.
   `./update-plugins.sh`, run from the hub root, is the existing mechanism to force that refresh.
+  It also refreshes `scribe@scribe`, mill's declared dependency, before syncing,
+  and lists `<name>@millhouse` installs no longer in `marketplace.json` with the uninstall command.
 - **Working state never goes to wiki.** `_mill/` lives on the task branch.
   Wiki holds only `Home.md`.
 - **Never cite `_mill/discussion.md` (or any other `_mill/`-rooted path) from a permanent doc.**
@@ -94,8 +96,8 @@ mill-plan auto-prepends the prefix on validator failure for Python projects.
 - `mill-config.yaml` hub file and plugin template must stay in sync — template seeds new hubs.
 - `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache entry, never the dev tree.
   Use it for all intra-plugin paths.
-- Ad-hoc `dotnet build`/`dotnet test` (when `csharp-build` isn't loaded): pass `--nologo -clp:ErrorsOnly` and never pipe the gating invocation to `grep`/`tail` — it masks dotnet's exit code.
-- Ad-hoc Python lint/format checks (when a project-specific `python-build` override isn't in place): use `uvx ruff check .` — an ephemeral, non-project-mutating invocation.
+- Ad-hoc `dotnet build`/`dotnet test` (when `scribe:csharp-build` isn't loaded): pass `--nologo -clp:ErrorsOnly` and never pipe the gating invocation to `grep`/`tail` — it masks dotnet's exit code.
+- Ad-hoc Python lint/format checks (when a project-specific `scribe:python-build` override isn't in place): use `uvx ruff check .` — an ephemeral, non-project-mutating invocation.
   Never use `uv add`/`uv sync` to install a lint tool for a one-off check.
 - **Never use `sed`** — in this repo or any script/prompt it generates for a dispatched sub-agent (implementer/reviewer/fixer).
   It triggers a permission prompt on every invocation, which blocks unattended/autonomous runs.

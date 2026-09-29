@@ -1,11 +1,11 @@
 """Unit tests for _agent_dispatch.language_skills_directive.
 
 Covers:
-  - Go-only files: detects golang-comments, golang-testing, code-quality
-  - Python-only files: detects python-comments, python-testing, code-quality
-  - C#-only files: detects csharp-comments, csharp-testing, code-quality
-  - Mixed languages: both sets present, code-quality once
-  - Non-recognized languages (md, yaml): prose and code-quality only
+  - Go-only files: detects scribe:golang-comments, scribe:golang-testing, scribe:code-quality
+  - Python-only files: detects scribe:python-comments, scribe:python-testing, scribe:code-quality
+  - C#-only files: detects scribe:csharp-comments, scribe:csharp-testing, scribe:code-quality
+  - Mixed languages: both sets present, scribe:code-quality once
+  - Non-recognized languages (md, yaml): scribe:prose and scribe:code-quality only
   - Context: vs Edits/Creates: Context files excluded from detection
   - Rendering: directive renders into both implementer and fixer briefs
   - Tools section: both briefs include Skill in Available tools
@@ -55,55 +55,55 @@ depends-on: []
 
 
 def test_go_files_only() -> None:
-    """Batch with only .go files detects golang-comments, golang-testing, code-quality."""
+    """Batch with only .go files detects scribe:golang-comments, scribe:golang-testing, code-quality."""
     with tempfile.TemporaryDirectory() as tmp:
         batch_path = _write_batch_file(Path(tmp), edits="`foo.go`, `bar.go`")
         directive = _agent_dispatch.language_skills_directive(batch_path)
 
         assert "## Required skills" in directive, "Missing Required skills heading"
-        assert "`golang-comments`" in directive, "Missing golang-comments"
-        assert "`golang-testing`" in directive, "Missing golang-testing"
-        assert "`code-quality`" in directive, "Missing code-quality"
-        assert "`prose`" in directive, "Missing prose"
+        assert "`scribe:golang-comments`" in directive, "Missing scribe:golang-comments"
+        assert "`scribe:golang-testing`" in directive, "Missing scribe:golang-testing"
+        assert "`scribe:code-quality`" in directive, "Missing code-quality"
+        assert "`scribe:prose`" in directive, "Missing prose"
         assert "Go" in directive, "Missing 'Go' language name"
-        assert "`python-comments`" not in directive, "Should not have python-comments"
+        assert "`scribe:python-comments`" not in directive, "Should not have scribe:python-comments"
         print("PASS test_go_files_only")
 
 
 def test_python_files_only() -> None:
-    """Batch with only .py files detects python-comments, python-testing, code-quality."""
+    """Batch with only .py files detects scribe:python-comments, scribe:python-testing, code-quality."""
     with tempfile.TemporaryDirectory() as tmp:
         batch_path = _write_batch_file(Path(tmp), edits="`script.py`, `module.py`")
         directive = _agent_dispatch.language_skills_directive(batch_path)
 
         assert "## Required skills" in directive, "Missing Required skills heading"
-        assert "`python-comments`" in directive, "Missing python-comments"
-        assert "`python-testing`" in directive, "Missing python-testing"
-        assert "`code-quality`" in directive, "Missing code-quality"
-        assert "`prose`" in directive, "Missing prose"
+        assert "`scribe:python-comments`" in directive, "Missing scribe:python-comments"
+        assert "`scribe:python-testing`" in directive, "Missing scribe:python-testing"
+        assert "`scribe:code-quality`" in directive, "Missing code-quality"
+        assert "`scribe:prose`" in directive, "Missing prose"
         assert "Python" in directive, "Missing 'Python' language name"
-        assert "`golang-comments`" not in directive, "Should not have golang-comments"
+        assert "`scribe:golang-comments`" not in directive, "Should not have scribe:golang-comments"
         print("PASS test_python_files_only")
 
 
 def test_csharp_files_only() -> None:
-    """Batch with only .cs files detects csharp-comments, csharp-testing, code-quality."""
+    """Batch with only .cs files detects scribe:csharp-comments, scribe:csharp-testing, code-quality."""
     with tempfile.TemporaryDirectory() as tmp:
         batch_path = _write_batch_file(Path(tmp), edits="`Program.cs`, `Utils.cs`")
         directive = _agent_dispatch.language_skills_directive(batch_path)
 
         assert "## Required skills" in directive, "Missing Required skills heading"
-        assert "`csharp-comments`" in directive, "Missing csharp-comments"
-        assert "`csharp-testing`" in directive, "Missing csharp-testing"
-        assert "`code-quality`" in directive, "Missing code-quality"
-        assert "`prose`" in directive, "Missing prose"
+        assert "`scribe:csharp-comments`" in directive, "Missing scribe:csharp-comments"
+        assert "`scribe:csharp-testing`" in directive, "Missing scribe:csharp-testing"
+        assert "`scribe:code-quality`" in directive, "Missing code-quality"
+        assert "`scribe:prose`" in directive, "Missing prose"
         assert "C#" in directive, "Missing 'C#' language name"
-        assert "`golang-comments`" not in directive, "Should not have golang-comments"
+        assert "`scribe:golang-comments`" not in directive, "Should not have scribe:golang-comments"
         print("PASS test_csharp_files_only")
 
 
 def test_mixed_languages() -> None:
-    """Batch with mixed .go and .py files detects both sets; code-quality once."""
+    """Batch with mixed .go and .py files detects both sets; scribe:code-quality once."""
     with tempfile.TemporaryDirectory() as tmp:
         batch_path = _write_batch_file(
             Path(tmp),
@@ -114,16 +114,16 @@ def test_mixed_languages() -> None:
 
         assert "## Required skills" in directive, "Missing Required skills heading"
         # Go skills
-        assert "`golang-comments`" in directive, "Missing golang-comments"
-        assert "`golang-testing`" in directive, "Missing golang-testing"
+        assert "`scribe:golang-comments`" in directive, "Missing scribe:golang-comments"
+        assert "`scribe:golang-testing`" in directive, "Missing scribe:golang-testing"
         # Python skills
-        assert "`python-comments`" in directive, "Missing python-comments"
-        assert "`python-testing`" in directive, "Missing python-testing"
+        assert "`scribe:python-comments`" in directive, "Missing scribe:python-comments"
+        assert "`scribe:python-testing`" in directive, "Missing scribe:python-testing"
         # code-quality appears exactly once
-        count = directive.count("`code-quality`")
+        count = directive.count("`scribe:code-quality`")
         assert count == 1, f"code-quality should appear once, got {count}"
         # prose appears exactly once
-        count_prose = directive.count("`prose`")
+        count_prose = directive.count("`scribe:prose`")
         assert count_prose == 1, f"prose should appear once, got {count_prose}"
         # Language names mentioned
         assert "Go" in directive, "Missing 'Go' language name"
@@ -138,11 +138,11 @@ def test_no_recognized_languages() -> None:
         directive = _agent_dispatch.language_skills_directive(batch_path)
 
         assert "## Required skills" in directive, "Missing Required skills heading"
-        assert "`code-quality`" in directive, "Missing code-quality"
-        assert "`prose`" in directive, "Missing prose"
-        assert "`python-comments`" not in directive, "Should not have python-comments"
-        assert "`golang-comments`" not in directive, "Should not have golang-comments"
-        assert "`csharp-comments`" not in directive, "Should not have csharp-comments"
+        assert "`scribe:code-quality`" in directive, "Missing code-quality"
+        assert "`scribe:prose`" in directive, "Missing prose"
+        assert "`scribe:python-comments`" not in directive, "Should not have scribe:python-comments"
+        assert "`scribe:golang-comments`" not in directive, "Should not have scribe:golang-comments"
+        assert "`scribe:csharp-comments`" not in directive, "Should not have scribe:csharp-comments"
         print("PASS test_no_recognized_languages")
 
 
@@ -158,11 +158,11 @@ def test_context_excluded() -> None:
 
         assert "## Required skills" in directive, "Missing Required skills heading"
         # Should detect Python from Edits
-        assert "`python-comments`" in directive, "Missing python-comments"
-        assert "`python-testing`" in directive, "Missing python-testing"
-        assert "`prose`" in directive, "Missing prose"
+        assert "`scribe:python-comments`" in directive, "Missing scribe:python-comments"
+        assert "`scribe:python-testing`" in directive, "Missing scribe:python-testing"
+        assert "`scribe:prose`" in directive, "Missing prose"
         # Should NOT detect Go from Context
-        assert "`golang-comments`" not in directive, "Should not have golang-comments (Context is excluded)"
+        assert "`scribe:golang-comments`" not in directive, "Should not have scribe:golang-comments (Context is excluded)"
         assert "Python" in directive, "Missing 'Python' language name"
         assert "Go" not in directive, "Should not mention 'Go' (Context is excluded)"
         print("PASS test_context_excluded")
@@ -197,7 +197,7 @@ def test_render_implementer_brief() -> None:
 
         # Check directive content appears
         assert "## Required skills" in rendered, "Required skills heading not in rendered template"
-        assert "python-comments" in rendered, "python-comments not in rendered template"
+        assert "scribe:python-comments" in rendered, "scribe:python-comments not in rendered template"
         # Check Skill is in Tools section
         assert "Skill" in rendered, "Skill not in rendered template"
         tools_section = rendered[rendered.find("## Tools"):rendered.find("##", rendered.find("## Tools") + 1)]
@@ -240,8 +240,8 @@ def _write_batch_file_with_moves(
 def test_move_only_batch_detects_go_language() -> None:
     """A batch with only Moves: entries (no Edits/Creates) detects Go skills from move paths.
 
-    This is the key regression guard for Card 22: the implementer must receive golang-comments and
-    golang-testing even when the batch has zero Edits/Creates entries and the only touched files
+    This is the key regression guard for Card 22: the implementer must receive scribe:golang-comments and
+    scribe:golang-testing even when the batch has zero Edits/Creates entries and the only touched files
     appear as move endpoints.
     """
     with tempfile.TemporaryDirectory() as tmp:
@@ -257,21 +257,21 @@ def test_move_only_batch_detects_go_language() -> None:
         directive = _agent_dispatch.language_skills_directive(batch_path)
 
         assert "## Required skills" in directive, "Missing Required skills heading"
-        assert "`golang-comments`" in directive, (
-            "golang-comments missing from Move-only Go batch"
+        assert "`scribe:golang-comments`" in directive, (
+            "scribe:golang-comments missing from Move-only Go batch"
         )
-        assert "`golang-testing`" in directive, (
-            "golang-testing missing from Move-only Go batch"
+        assert "`scribe:golang-testing`" in directive, (
+            "scribe:golang-testing missing from Move-only Go batch"
         )
-        assert "`code-quality`" in directive, "Missing code-quality"
-        assert "`prose`" in directive, "Missing prose"
+        assert "`scribe:code-quality`" in directive, "Missing code-quality"
+        assert "`scribe:prose`" in directive, "Missing prose"
         assert "Go" in directive, "Missing 'Go' language name in directive"
         # Python/C# skills must not appear when no Python/C# files are involved.
-        assert "`python-comments`" not in directive, (
-            "python-comments must not appear in a Go-only Move batch"
+        assert "`scribe:python-comments`" not in directive, (
+            "scribe:python-comments must not appear in a Go-only Move batch"
         )
-        assert "`csharp-comments`" not in directive, (
-            "csharp-comments must not appear in a Go-only Move batch"
+        assert "`scribe:csharp-comments`" not in directive, (
+            "scribe:csharp-comments must not appear in a Go-only Move batch"
         )
         print("PASS test_move_only_batch_detects_go_language")
 

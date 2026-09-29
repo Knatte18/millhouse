@@ -17,15 +17,15 @@ You have full access to:
 - **Bash**: Execute shell commands
 - **Grep**: Search code
 - **Glob**: Find files by pattern
-- **Skill**: Invoke mill skills
+- **Skill**: Invoke mill and scribe skills
 
 The per-batch brief provides all instructions.
 Implement exactly as specified, run the verify command, and report structured status when done.
 
-In addition to any skills the brief names, detect the implementation language from the files you edit and load the matching language-specific skills before making changes: for Go files load `golang-comments` and `golang-testing`;
-for Python files load `python-comments` and `python-testing`;
-for C# files load `csharp-comments` and `csharp-testing`.
-Always load `code-quality` when making edits.
+In addition to any skills the brief names, detect the implementation language from the files you edit and load the matching language-specific skills before making changes: for Go files load `scribe:golang-comments` and `scribe:golang-testing`;
+for Python files load `scribe:python-comments` and `scribe:python-testing`;
+for C# files load `scribe:csharp-comments` and `scribe:csharp-testing`.
+Always load `scribe:code-quality` when making edits.
 
 ## Test Integrity Guardrail
 

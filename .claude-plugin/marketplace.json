@@ -6,10 +6,11 @@
   "owner": {
     "name": "Knatte18"
   },
+  "allowCrossMarketplaceDependenciesOn": ["scribe"],
   "plugins": [
     {
       "name": "mill",
-      "description": "Task orchestration, code quality, git workflow, and documentation for Claude Code",
+      "description": "Task orchestration, git workflow, and documentation for Claude Code",
       "version": "2.0.0",
       "author": {
         "name": "Knatte18"
@@ -25,36 +26,6 @@
         "name": "Knatte18"
       },
       "source": "./plugins/codeguide",
-      "category": "productivity"
-    },
-    {
-      "name": "python",
-      "description": "Python build, comments, and testing conventions",
-      "version": "1.0.0",
-      "author": {
-        "name": "Knatte18"
-      },
-      "source": "./plugins/python",
-      "category": "productivity"
-    },
-    {
-      "name": "csharp",
-      "description": "C# build, comments, and testing conventions",
-      "version": "1.0.0",
-      "author": {
-        "name": "Knatte18"
-      },
-      "source": "./plugins/csharp",
-      "category": "productivity"
-    },
-    {
-      "name": "golang",
-      "description": "Go build, comments, and testing conventions",
-      "version": "1.0.0",
-      "author": {
-        "name": "Knatte18"
-      },
-      "source": "./plugins/golang",
       "category": "productivity"
     },
     {

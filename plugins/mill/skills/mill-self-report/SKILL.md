@@ -72,7 +72,7 @@ Then exit silently — no toast, no Slack ping, no GH issue, no prompt.
 Proceed directly to Step 5 with all distilled candidates selected (equivalent to the user having typed `all`).
 Step 6 (the summary line) always runs regardless of mode.
 
-**Otherwise** (no argument or free-text steering argument): print the candidates as a numbered text list per `mill:conversation` rules (no `AskUserQuestion`):
+**Otherwise** (no argument or free-text steering argument): print the candidates as a numbered text list per `scribe:conversation` rules (no `AskUserQuestion`):
 
 ```
 1) <title-1>

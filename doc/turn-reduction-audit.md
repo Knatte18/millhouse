@@ -62,7 +62,7 @@ and preloads a fixed skill set once per session in its "## Driver preamble" (a s
 batch, not a repeated shape). Both files were re-read for this audit (not copied from
 `_mill/discussion.md`'s prior confirmation on faith) and confirm the same conclusion.
 
-- **Entry Step 0** (lines 81-83) — load `mill:prose`/`mill:conversation` via the Skill tool —
+- **Entry Step 0** (lines 81-83) — load `scribe:prose`/`scribe:conversation`/`mill:conventions` via the Skill tool —
   **Excluded**. A Skill-tool load is not a scriptable Python call; the tool call itself is the
   mechanism.
 - **Entry step 1** (lines 85-89) — resolve `git_root`/`wiki_path` via `_paths` calls — **Mechanical/
@@ -225,7 +225,7 @@ batch, not a repeated shape). Both files were re-read for this audit (not copied
 
 ## mill-plan
 
-- **Entry Step 0** (lines 16-18) — load `mill:prose`/`mill:conversation` — **Excluded**. Skill-tool
+- **Entry Step 0** (lines 16-18) — load `scribe:prose`/`scribe:conversation`/`mill:conventions` — **Excluded**. Skill-tool
   load, same reasoning as `mill-start`'s Entry Step 0.
 - **Entry Step 0.5: parse arguments** (lines 20-31) — token-walk `$ARGUMENTS` for `--revise`/
   `--approve`, halt on both or on an unknown token — **Mechanical/collapsible**. Pure deterministic
@@ -474,7 +474,7 @@ would need to preserve per call site, not collapse into one generic wrapper.
 - **Step 0: verify `CLAUDE_PLUGIN_ROOT`** (lines 35-46) — a one-line env-var guard —
   **Mechanical/collapsible**. Trivial, already effectively zero-turn (a guard clause inside a Bash
   block that runs anyway).
-- **Step 0b: load `mill:prose`/`mill:conversation`** (lines 48-50) — **Excluded**. Skill-tool load,
+- **Step 0b: load `scribe:prose`/`scribe:conversation`/`mill:conventions`** (lines 48-50) — **Excluded**. Skill-tool load,
   same reasoning as `mill-start`'s Entry Step 0.
 - **Entry steps 1-4.5 (resolve paths, load config, read slug, acquire builder lock, Path Setup)**
   (lines 52-88) — **Mechanical/collapsible**. Current behavior: 5 sequential deterministic

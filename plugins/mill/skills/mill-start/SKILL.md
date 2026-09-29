@@ -22,7 +22,7 @@ The bare `--auto` flag is the only supported form;
 
 **Phase: Discuss — `--auto` changes:**
 
-- Every operator prompt MUST be formatted as a numbered-options list per the `mill:conversation` rule "the recommended option, if any, MUST be option 1".
+- Every operator prompt MUST be formatted as a numbered-options list per the `scribe:conversation` rule "the recommended option, if any, is option 1".
   Free-text questions are forbidden — the SKILL must coerce any candidate question into options.
 - Instead of waiting for operator input, the assistant immediately auto-picks option `1)` (the recommendation).
 - Each auto-pick is appended to discussion.md's `## Q&A log` section.
@@ -85,9 +85,9 @@ Round 1 under `--orch` is a human substitute, not the automated reviewer `min_ro
 
 ## Entry
 
-**Step 0: Load `mill:prose`, then `mill:conversation`.**
-Load both skills via the Skill tool, unconditionally, immediately — before any other Entry step or phase; `mill:conversation` builds on `mill:prose`, so load it first.
-Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depends on `mill:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before the first prompt can be built.
+**Step 0: Load `scribe:prose`, then `scribe:conversation`, then `mill:conventions`.**
+Load all three skills via the Skill tool, unconditionally, immediately — before any other Entry step or phase; `scribe:conversation` builds on `scribe:prose`, and `mill:conventions` builds on both, so load them in that order.
+Every operator-facing prompt in Phase: Discuss and Phase: Discussion Review depends on `scribe:conversation`'s numbered-options rule (banning `AskUserQuestion`) being active, so it must be loaded before the first prompt can be built.
 
 1. Resolve and bind the path variables:
    - `git_root = _paths.resolve_git_root()`
@@ -404,7 +404,7 @@ If not `converged` and `round >= max_review_rounds`: run the branch's full termi
    Routing here is on severity alone: whether a finding is presented to the operator as a gap in this step depends only on its `BLOCKING` severity, never on its class.
    Class never enters this SKILL's routing decision — the discussion stage's `blocking_classes` ceiling has already produced exactly the intended routing set by the time this file is written, so duplicating that logic here would only risk diverging from it.
    Present gaps to the user in **sequential batches of at most 5 gaps per batch**.
-   Each gap is formatted as a numbered question whose resolution options follow the `mill:conversation` rule — numbered text list, the recommended option is option 1 (the SKILL must use its judgment + context to propose a recommended resolution and 1–3 distinct alternatives).
+   Each gap is formatted as a numbered question whose resolution options follow the `scribe:conversation` rule — numbered text list, the recommended option is option 1 (the SKILL must use its judgment + context to propose a recommended resolution and 1–3 distinct alternatives).
    Free-text gap prompts are forbidden;
    the SKILL must coerce every gap into options form, just as the auto-mode rule does for interview questions in Phase: Discuss.
    Wait for the user to answer every gap in the current batch before presenting the next batch.

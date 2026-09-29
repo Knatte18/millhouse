@@ -26,8 +26,8 @@ All Bash snippets below assume the current working directory is this repo's hub 
 
 ## Entry
 
-**Step 0: Load `mill:prose`, then `mill:conversation`.**
-Load both skills via the Skill tool, unconditionally, immediately — before any other Entry step. `mill:conversation` builds on `mill:prose`, so load it first.
+**Step 0: Load `scribe:prose`, then `scribe:conversation`, then `mill:conventions`.**
+Load all three skills via the Skill tool, unconditionally, immediately — before any other Entry step. `scribe:conversation` builds on `scribe:prose`, and `mill:conventions` builds on both, so load them in that order.
 
 **Step 0.5 — Parse arguments.**
 Read `$ARGUMENTS`. `--count <N>` sets the pool size; a bare positive integer with no flag is accepted as shorthand for the same thing. Default `POOL_SIZE = 8` when omitted. Halt with a usage error on a non-positive or non-integer value.
@@ -82,7 +82,7 @@ You are driving mill-start and then mill-plan to completion for one mill v2 task
 Slug: {SLUG}
 Worktree path: /home/knatte/Code/millhouse/wts/{SLUG}
 
-All work happens inside that worktree. Do not touch /home/knatte/Code/millhouse/wts/millhouse (the hub/parent) or any other task worktree -- this repo enforces worktree isolation (see its CLAUDE.md and the mill:conversation skill, which mill-start loads itself as its own first step; it bans editing, committing, or cd-ing into the parent from a child worktree).
+All work happens inside that worktree. Do not touch /home/knatte/Code/millhouse/wts/millhouse (the hub/parent) or any other task worktree -- this repo enforces worktree isolation (see its CLAUDE.md and the `mill:conventions` skill, which mill-start loads itself as its own first step; it bans editing, committing, or cd-ing into the parent from a child worktree).
 
 The worktree was already created by mill-spawn: branch, junctions, and _mill/status.md already exist. Do not re-run mill-spawn or mill-claim.
 
@@ -101,7 +101,7 @@ mill-start's Phase: Discuss is normally a live conversation with a human to shap
 2. Treat that body as the requirements source a human would otherwise have given you in conversation. Where it already names a concrete fix, use it as your discussion's technical approach unless you find, while reading the actual current code, that it's wrong or outdated -- reading the real code takes priority over trusting the task body.
 3. Where the task bundles several source items, cover each one's fix in the discussion -- don't silently drop any.
 4. Where a genuine design decision is open, make the most defensible call yourself, state it plainly as an assumption in discussion.md, and proceed. Do not halt waiting for a human to resolve it.
-5. Any operator-facing prompt mill-start's or mill-plan's phases would normally raise (per the mill:conversation numbered-options convention): resolve it by picking option 1 (the recommended option) yourself, and note that you did so autonomously.
+5. Any operator-facing prompt mill-start's or mill-plan's phases would normally raise (per the `scribe:conversation` numbered-options convention): resolve it by picking option 1 (the recommended option) yourself, and note that you did so autonomously.
 
 ## Genuine halts -- stop and report, don't push through
 

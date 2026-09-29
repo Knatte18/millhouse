@@ -35,6 +35,7 @@ Produces a working `.millhouse/` + wiki + container layout in the current workin
 - `uv` is installed (`uv --version` exits 0); install via `irm https://astral.sh/uv/install.ps1 | iex` (Windows/PowerShell) or `curl -LsSf https://astral.sh/uv/install.sh | sh` (POSIX)
 - `${CLAUDE_PLUGIN_ROOT}/scripts/` contains `_junction.py`, `_subprocess_util.py`, `_render.py`, `_setup.py`
 - `${CLAUDE_PLUGIN_ROOT}/templates/config.local.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-config.yaml`, `${CLAUDE_PLUGIN_ROOT}/templates/mill-agents.yaml`, and `${CLAUDE_PLUGIN_ROOT}/templates/Home.md` exist
+- `scribe@scribe` is installed and enabled — mill declares it as a dependency and fails to load without it; if the `scribe` marketplace is not yet added on this machine, run `/plugin marketplace add Knatte18/scribe` and `/plugin install scribe@scribe` before installing mill
 
 ## Layout assumed
 
@@ -256,7 +257,7 @@ This prevents downstream `KeyError` in mill-spawn when an older mill-config.yaml
    PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "from pathlib import Path; import yaml, _setup; from _paths import resolve_short_name; cfg = yaml.safe_load(Path(r'<cwd>/mill-config.yaml').read_text(encoding='utf-8')) or {}; derived = resolve_short_name(cfg, '<repo-name>'); print(derived, bool(_setup.SHORT_NAME_RE.match(derived)))"
    ```
 
-3. Prompt the operator per `mill:conversation`'s numbered-list rule.
+3. Prompt the operator per `scribe:conversation`'s numbered-list rule.
    When `derived` matches: `1) <derived> (Recommended) — derived from the repo name` and `2) Other — type a 2-4 character alphanumeric short name`.
    When it does not match: no recommended option; ask only for a typed value.
    The value becomes the lower-cased prefix of every Claude Code session name (`<short>:<phase>` on the hub, `<short>:<slug>:<phase>` in worktrees) and stays verbatim in the VS Code window title.
