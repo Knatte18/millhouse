@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planning
+phase: plan-review-r1
 slug: scribe-migration
 branch: hanf/scribe-migration
 plan: _mill/plan
@@ -21,4 +21,5 @@ discussion-fix-r3  '2026-09-29T13:05:25Z'
 discussion-fix-r4  '2026-09-29T13:07:04Z'
 discussed  '2026-09-29T13:07:04Z'
 planning  '2026-09-29T13:14:38Z'
+plan-review-r1  '2026-09-29T13:18:39Z'
 ```
