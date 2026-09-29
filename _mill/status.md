@@ -39,7 +39,9 @@ batches:
     commit_sha: 1ac39b1436cd18a719ebd2565661fd6d59ae4ac8
     verify_baseline_failures: []
   - name: mill-skill-references
-    state: pending
+    state: running
+    implementer_session: 7033047f-961a-4960-93ba-73776e567360
+    start_sha: f38ebcfcafa969d6a701e13a3591063c224cd542
     verify_baseline_failures: []
   - name: update-plugins
     state: pending
