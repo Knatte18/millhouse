@@ -43,3 +43,9 @@ batches:
     state: pending
     verify_baseline_failures: []
 ```
+
+## Inferred-success log
+
+```text
+'2026-09-29T13:24:09Z'  scribe-release  round 1
+```
