@@ -133,7 +133,7 @@ If already up to date or merge succeeds cleanly: continue.
 
 ### 5. Verify
 
-Detect the project language (see `@mill:workflow` Language Detection) and run the build/test step from the matching `{lang}-build` skill.
+Detect the project language (see `@mill:workflow` Language Detection) and run the build/test step from the matching `scribe:{lang}-build` skill.
 
 If no verify command is found, emit a visible warning:
 

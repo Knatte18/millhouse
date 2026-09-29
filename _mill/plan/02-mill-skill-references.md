@@ -154,6 +154,7 @@ none of these cards restructures a skill beyond the sentence being changed.
   - `plugins/mill/skills/mill-self-report/SKILL.md`
   - `plugins/mill/skills/ask-thread/SKILL.md`
   - `plugins/mill/skills/git-commit/SKILL.md`
+  - `plugins/mill/skills/git-pr/SKILL.md`
   - `plugins/mill/skills/workflow/SKILL.md`
   - `plugins/mill/skills/mill-go2/SKILL.md`
   - `plugins/mill/templates/review-output.schema.md`
