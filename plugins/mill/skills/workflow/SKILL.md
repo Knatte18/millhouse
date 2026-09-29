@@ -19,14 +19,15 @@ Use the appropriate skill based on the current activity:
 
 | Situation | Skill |
 |-----------|-------|
-| Before editing code | `@mill:code-quality` |
+| Before editing code | `@scribe:code-quality` |
 | When running shell commands | `@mill:cli` |
 | For project-specific style rules | `@mill:linting` |
-| When writing or reviewing tests | `@mill:testing` (+ language-specific `{lang}-testing`) |
-| For language-specific build, test, or comments | Detect language, then use `@{lang}:{lang}-*` (see below) |
+| When writing or reviewing tests | `@scribe:testing` (+ language-specific `scribe:{lang}-testing`) |
+| For language-specific build, test, or comments | Detect language, then use `@scribe:{lang}-*` (see below) |
 | For all git operations | `@mill:git-workflow` |
-| For writing style — any text output | `@mill:prose` |
-| For response style guidelines | `@mill:conversation` |
+| For writing style — any text output | `@scribe:prose` |
+| For response style guidelines | `@scribe:conversation` |
+| For mill-specific operating rules (new-thread prompts, `_mill/` state, worktree isolation) | `@mill:conventions` |
 
 ---
 
@@ -71,8 +72,8 @@ Detect the project language from marker files in the working directory and use t
 
 | Marker files | Language | Skills |
 |-------------|----------|--------|
-| `pyproject.toml`, `setup.py`, `setup.cfg` | Python | `@python:python-build`, `python-comments`, `python-testing` |
-| `.csproj`, `.sln` | C# | `@csharp:csharp-build`, `csharp-comments`, `csharp-testing` |
-| `go.mod` | Go | `@golang:golang-build`, `golang-comments`, `golang-testing` |
+| `pyproject.toml`, `setup.py`, `setup.cfg` | Python | `@scribe:python-build`, `scribe:python-comments`, `scribe:python-testing` |
+| `.csproj`, `.sln` | C# | `@scribe:csharp-build`, `scribe:csharp-comments`, `scribe:csharp-testing` |
+| `go.mod` | Go | `@scribe:golang-build`, `scribe:golang-comments`, `scribe:golang-testing` |
 
 If multiple languages are present, use the skills matching the files being edited.

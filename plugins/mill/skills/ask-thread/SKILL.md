@@ -45,7 +45,7 @@ PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}
 - Otherwise remember `target`, run Step 0 once, and print one line that direct mode is on and questions go to `<target>`.
 
 Direct mode lasts for the rest of the session until it ends or the operator says stop, and binds skills loaded before or after it.
-Whenever the session would ask the operator a question (a `mill:conversation` numbered-options menu, a free-text question in prose, or `AskUserQuestion` from a non-mill skill), send the questions to the target instead, in batches of at most 5 (Steps 1-5).
+Whenever the session would ask the operator a question (a `scribe:conversation` numbered-options menu, a free-text question in prose, or `AskUserQuestion` from a non-mill skill), send the questions to the target instead, in batches of at most 5 (Steps 1-5).
 Each question is numbered, numbers continue across batches for the whole session, and each carries the asker's recommended answer first and lists the alternatives.
 
 Harness permission prompts are not covered.

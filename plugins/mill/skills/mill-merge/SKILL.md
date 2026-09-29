@@ -52,7 +52,7 @@ Re-run the script with `resume` (`--merged-in`) appended.
 ## Callback: confirm-parent
 
 The `report` already holds the operator message.
-Ask with a numbered list per `mill:conversation`:
+Ask with a numbered list per `scribe:conversation`:
 
 1. Proceed against `<data.candidate>` (Recommended)
 2. Halt
