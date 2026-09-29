@@ -86,6 +86,7 @@ Everything else in mill's `conversation` (response style, tone, user choices, fi
   Sites: `plugins/mill/skills/mill-start/SKILL.md` (Entry Step 0), `plugins/mill/skills/mill-plan/SKILL.md` (Entry Step 0), `plugins/mill/skills/mill-go-base/SKILL.md` (Step 0b), `.claude/skills/mill-pool/SKILL.md` (Step 0).
   Each site's follow-on sentence ("`mill:conversation` builds on `mill:prose`, so load it first" / the defensive-load explanation / mill-start's numbered-options justification) is rewritten to name the scribe skills and to say `mill:conventions` builds on both.
 - `plugins/mill/skills/mill-go2/SKILL.md` line 16 preloads `mill:code-quality` and `mill:prose` for forks → `scribe:code-quality` and `scribe:prose`.
+  The same line's per-language trios (`python:python-{build,comments,testing}`, `csharp:csharp-{build,comments,testing}`, `golang:golang-{build,comments,testing}`) → `scribe:python-*`, `scribe:csharp-*`, `scribe:golang-*`.
 - Rationale: scribe's SessionStart hook only asks to load scribe skills; a skill that writes its own agent instructions must still name what it needs (scribe's `INDEX.md` says so).
 - Rejected: relying on the SessionStart hook alone — it cannot force-load, and dispatched workers may not honour it.
 
@@ -103,6 +104,9 @@ Mentions without a load verb:
 - CLAUDE.md: `csharp-build` → `scribe:csharp-build`, `python-build` → `scribe:python-build` in the two Conventions bullets.
 - `plugins/mill/skills/mill-plan/SKILL.md` ~262 "`csharp-build` defines no lint command" → `scribe:csharp-build`.
 - `plugins/mill/skills/git-commit/SKILL.md` "`{lang}-build` skill" → `scribe:{lang}-build`.
+- Bare skill-name mentions of the deleted skills in mill-owned files — e.g. `plugins/mill/templates/review-output.schema.md` ~68 "per `prose`'s Markdown section" — are qualified to the scribe skill (`scribe:prose`'s Markdown section; `code-comments` → `scribe:code-quality`'s Comments section).
+  Find them with `grep -rnE "\`(prose|conversation|code-quality|code-comments|testing|handoff)\`" plugins/mill .claude/skills doc CLAUDE.md` and review each hit (a word like "prose" in running text is not a skill reference and stays).
+  The forbidden-name guard does not cover bare names — the false-positive rate on ordinary words is too high — so this sweep is a one-time grep-and-review.
 - Deleted `mill:handoff`: no caller references it by qualified name; users invoke `/handoff`, now served by `scribe:handoff`.
 
 ### load-directive-test
@@ -114,6 +118,8 @@ Mentions without a load verb:
   3. New regression guard: no shipped file (every `*.md` under `plugins/` and `.claude/skills/` — not only `SKILL.md`, so companion files such as `mill-go-base/holistic-review.md` are covered — plus `*.py` under `plugins/mill/scripts/`, `*.md` under `doc/`, and `CLAUDE.md`) names `mill:prose`, `mill:conversation`, `mill:code-quality`, `mill:code-comments`, `mill:testing` or `mill:handoff`.
      The same guard also forbids the path forms `plugins/mill/skills/(prose|conversation|code-quality|code-comments|testing|handoff)/` and `plugins/(python|csharp|golang)/`, so a stale file-path citation (like `mdreflow.py`'s) is caught, not only `mill:<name>`.
      `_mill/` is excluded (task working state), and the test file excludes itself.
+- File scope for rules 1-2 (load-order check): widen the existing tree-walk (`plugins/*/skills/**/SKILL.md`, `plugins/mill/templates/*.md`) to also include `.claude/skills/**/SKILL.md`, since `.claude/skills/mill-pool/SKILL.md` is a named load-order site; drop the current "Excludes `.claude/skills/`" docstring clause.
+  Rule 3 uses its own, wider file set listed above.
 - Keep the existing in-memory `check_text` cases, re-expressed with scribe names, plus cases for the three-skill phrase and the forbidden-name guard; keep the tree-walk case.
 - Rationale: brief requires the test enforce the new order; the forbidden-name guard makes the migration's completeness mechanically checked instead of grep-once.
 
@@ -165,7 +171,7 @@ Mentions without a load verb:
 - Decision: add a scribe step to both `update-plugins.sh` and `update-plugins.ps1`, run before the millhouse sync loop:
   1. If `scribe@scribe` is in `installed_plugins.json`, run `claude plugin marketplace update scribe`, then `claude plugin update scribe@scribe`.
      A failing command prints a `WARNING:` line and the script continues (same tolerance as the existing `uv sync` step).
-  2. Re-read `installed_plugins.json` and compare the installed scribe version against the minimum in mill's `plugins/mill/.claude-plugin/plugin.json` `dependencies` entry (read from the manifest, never a second hard-coded copy).
+  2. Re-read `installed_plugins.json` and compare the installed scribe version (each key maps to a list of per-scope install records carrying `version`; use the lowest `version` across the list, so any stale scope triggers the warning) against the minimum in mill's `plugins/mill/.claude-plugin/plugin.json` `dependencies` entry (read from the manifest, never a second hard-coded copy).
      Derive the minimum from the range by stripping a leading operator (`^`, `~`, `>=`, `=`) and parsing the remainder as a dotted integer tuple; compare tuples.
      When the dependency entry carries no version (the bare `"scribe@scribe"` fallback), skip the comparison; step 1 and step 3 still run.
      Below the minimum → print `WARNING: scribe@scribe is <v>, mill needs <min> -- run 'claude plugin marketplace update scribe' and 'claude plugin update scribe@scribe'.`
@@ -193,6 +199,9 @@ CLAUDE.md's existing `./update-plugins.sh` bullet gains one clause: the script a
   - From the same docs, the plan also confirms what happens when a mill install cannot resolve the dependency (the `scribe` marketplace not added on that machine): hard install failure or warning.
     Either way the dependency stays — mill does not work without scribe's skills — but the `mill-setup` precondition text must describe the actual behaviour: on hard failure, "add the scribe marketplace before installing mill"; on warning, "mill installs, but its skills reference `scribe:*`; add and install scribe".
     The same wording goes into the `update-plugins` not-installed message (scribe-refresh step 3).
+- mill's version stays `2.0.0` in both `plugins/mill/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, deliberately.
+  `update-plugins.{sh,ps1}` sync into `~/.claude/plugins/cache/millhouse/<name>/<version>` taken from `marketplace.json` and skip when that directory does not exist, and `MILL_PYTHON` points into the `2.0.0` cache venv; a bump would make the next sync skip mill until a manual reinstall.
+  Machines that install mill via `claude plugin install`/`update` rather than `update-plugins` are not this repo's deployment path today.
 - `mill-setup`: no runtime check (brief: "use that if it exists, the check otherwise").
   Add one Preconditions bullet to `plugins/mill/skills/mill-setup/SKILL.md`: "`scribe@scribe` is installed and enabled (mill declares it as a dependency; if the `scribe` marketplace is not yet added: `/plugin marketplace add Knatte18/scribe`, then `/plugin install scribe@scribe`)."
 - Rationale: the manifest mechanism installs/enables scribe at mill install time; a hand-rolled check duplicates it.
@@ -211,7 +220,9 @@ CLAUDE.md's existing `./update-plugins.sh` bullet gains one clause: the script a
 - Language-skill references: `grep -rnE "(csharp|python|golang):|(csharp|python|golang)-(build|comments|testing)|code-comments"` outside the removed plugin directories — hits in `workflow/SKILL.md`, `mill-go2/SKILL.md`, `mill-plan/SKILL.md`, `git-commit/SKILL.md`, `agents/mill-implementer*.md`, `_agent_dispatch.py`, `test-language-skills-directive.py`, `pydocreflow.py`, `SKILLS.md`, CLAUDE.md.
 - Path references to the removed plugin dirs: `SKILLS.md` (regenerated), `pydocreflow.py`, `.claude-plugin/marketplace.json`.
 - `update-plugins.sh` derives `(name, version)` pairs from `.claude-plugin/marketplace.json` via an inline `python3 -c`; `update-plugins.ps1` is its Windows twin — edit both identically in behaviour.
-- `~/.claude/plugins/installed_plugins.json` has a top-level `plugins` object keyed `name@marketplace`.
+- `~/.claude/plugins/installed_plugins.json` has a top-level `plugins` object keyed `name@marketplace`; each value is a list of per-scope records (`scope`, `installPath`, `version`, `gitCommitSha`, ...).
+  Orphan detection only needs the key; the version check uses the lowest `version` in the list.
+- `update-plugins.sh` uses inline `python3 -c` for JSON; `update-plugins.ps1` is pure PowerShell (`ConvertFrom-Json`, `robocopy`) with no Python.
 - scribe repo layout: `/home/knatte/Code/scribe/.claude-plugin/marketplace.json`, `/home/knatte/Code/scribe/plugins/scribe/.claude-plugin/plugin.json`, `/home/knatte/Code/scribe/plugins/scribe/skills/<name>/SKILL.md`, `/home/knatte/Code/scribe/plugins/scribe/skills/INDEX.md`, `hooks/hooks.json`.
   Clean working tree, single commit `5e5179f`.
 - scribe's `code-quality` merges mill's `code-quality` and `code-comments`; its Comments section is the target for every "load code-comments first" pointer.
@@ -234,9 +245,16 @@ CLAUDE.md's existing `./update-plugins.sh` bullet gains one clause: the script a
 - Full unit suite via `run-all.py` (`PYTHONPATH= uv run --project plugins/mill ...`).
 - Manifest validity: `python3 -c "import json; json.load(open(...))"` over both marketplace files and both `plugin.json` files; `claude plugin validate` if available.
 - `update-plugins.{sh,ps1}`: no unit test (they shell out to `claude` and rsync into the real cache).
-  Keep the new version-comparison and orphan-detection logic in the inline Python the scripts already use; verify with `bash -n update-plugins.sh` and a side-by-side reading that both scripts behave identically.
+  In `update-plugins.sh`, put the new version-comparison and orphan-detection logic in the inline `python3 -c` style the script already uses.
+  In `update-plugins.ps1`, reimplement it natively in PowerShell (`ConvertFrom-Json` for both JSON files, strip the range operator, compare with `[version]`, orphan detection by key), matching the script's existing style.
+  Never run `update-plugins.sh` against the real `HOME` before merge: it rsyncs this worktree's unmerged `plugins/` into the live cache that sibling sessions read.
+  Verify instead:
+  - `bash -n update-plugins.sh`.
+  - Run it with `HOME` pointed at a fixture under `.scratch/` (e.g. `HOME="$PWD/.scratch/update-plugins-home" ./update-plugins.sh`), whose `.claude/plugins/installed_plugins.json` lists `python@millhouse` and no `scribe@scribe`, and whose `.claude/plugins/cache/` is empty — every millhouse plugin then prints "Skipped (not installed)", no rsync touches a real cache, and the output must show the scribe not-installed message and the `python@millhouse` orphan line.
+    A second fixture with `scribe@scribe` at `1.0.0` (run under `timeout 120`, since `claude` under an empty fixture `HOME` may not return promptly) must show the refresh attempt (a `WARNING:` if `claude` fails under the fixture `HOME`) followed by the below-minimum warning.
+  - For the `.ps1`: `pwsh -NoProfile -Command "[scriptblock]::Create((Get-Content -Raw update-plugins.ps1)) | Out-Null"` as a parse check when `pwsh` is available, plus a side-by-side reading against the `.sh`.
 - scribe repo: grep check from scribe-language-skills returns no hits; `INDEX.md` lists every directory under `plugins/scribe/skills/`.
-- Final repo-wide grep for `mill:(prose|conversation|code-quality|code-comments|testing|handoff)` and `(python|csharp|golang):` returns only intended hits (none outside `_mill/`).
+- Final repo-wide grep for `mill:(prose|conversation|code-quality|code-comments|testing|handoff)` and `(^|[^_[:alnum:]])(python|csharp|golang):(python|csharp|golang)-` returns no hits outside `_mill/` (the anchored second pattern excludes `mill_python:` and matches only plugin-qualified skill names).
 
 ## Follow-ups for scribe
 
