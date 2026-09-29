@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-mill-skill-references
+phase: approved-update-plugins
 slug: scribe-migration
 branch: hanf/scribe-migration
 plan: _mill/plan
@@ -27,6 +27,7 @@ planned  '2026-09-29T13:19:35Z'
 implementing  '2026-09-29T13:19:48Z'
 approved-scribe-release  '2026-09-29T13:24:22Z'
 approved-mill-skill-references  '2026-09-29T13:26:55Z'
+approved-update-plugins  '2026-09-29T13:28:25Z'
 ```
 
 ## Batches
@@ -46,9 +47,10 @@ batches:
     commit_sha: acdaa61ea88054d71fe43bf3ac3cac1feec8553f
     verify_baseline_failures: []
   - name: update-plugins
-    state: running
+    state: approved
     implementer_session: cd3cab67-b18d-4a0c-85c8-e6646cf66358
     start_sha: ae70770923b551ec55e5bde3abf7060ab382b67d
+    commit_sha: 5809b135d4bab94f551f8b2956e98cce2799484d
     verify_baseline_failures: []
 ```
 ## Inferred-success log
