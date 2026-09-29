@@ -32,9 +32,14 @@ implementing  '2026-09-29T13:19:48Z'
 ```yaml
 batches:
   - name: scribe-release
-    state: pending
+    state: running
+    implementer_session: fe85564d-0ed0-49a9-b2c3-b20c97686428
+    start_sha: 8380a05996979579add563644c6b796800442a44
+    verify_baseline_failures: []
   - name: mill-skill-references
     state: pending
+    verify_baseline_failures: []
   - name: update-plugins
     state: pending
+    verify_baseline_failures: []
 ```
