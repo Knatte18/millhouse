@@ -3,7 +3,7 @@
 ```yaml
 task: Migrate mill's generic skills to the shared scribe plugin
 slug: scribe-migration
-approved: false
+approved: true
 skip_checks: ["out-of-worktree-target"]
 discussion_sha: 066a35ba8f1dd278288c82f79a2cd684f6d51de0
 started: 20260929-131009
@@ -28,7 +28,7 @@ batches:
     name: mill-skill-references
     file: 02-mill-skill-references.md
     depends-on: [1]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-load-directive-convention.py test-language-skills-directive.py test-agents-defs.py test-mill-go-variants.py test-skills-index.py test-inplace.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-load-directive-convention.py test-language-skills-directive.py test-agents-defs.py test-mill-go-variants.py test-skills-index.py test-inplace.py test-skill-helper-drift.py test-guards.py
   - number: 3
     name: update-plugins
     file: 03-update-plugins.md

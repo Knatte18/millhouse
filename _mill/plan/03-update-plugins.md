@@ -33,6 +33,7 @@ Batch-local decision: the scripts print hints and warnings only; they never unin
   Keep the script's style: `set -euo pipefail`, JSON handled by inline `python3 -c` blocks, ASCII-only output.
   Define `INSTALLED_JSON="$HOME/.claude/plugins/installed_plugins.json"` and `MILL_MANIFEST="$SCRIPT_DIR/plugins/mill/.claude-plugin/plugin.json"` next to `MANIFEST_PATH`.
   Update the header comment to mention the scribe refresh and the orphan hint in one sentence each.
+  CLI syntax (confirmed from `claude plugin --help` during planning; re-run `claude plugin marketplace update --help`, `claude plugin update --help` and `claude plugin uninstall --help` before writing and adjust if they changed): `claude plugin marketplace update [name]`, `claude plugin update <plugin>`, `claude plugin uninstall <plugin>`.
 
   **Scribe step, before the sync loop.**
   1. If `INSTALLED_JSON` exists and its top-level `plugins` object has the key `scribe@scribe`: run `claude plugin marketplace update scribe`, then `claude plugin update scribe@scribe`.

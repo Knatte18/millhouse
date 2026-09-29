@@ -5,7 +5,7 @@ task: Migrate mill's generic skills to the shared scribe plugin
 batch: mill-skill-references
 number: 2
 cards: 9
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-load-directive-convention.py test-language-skills-directive.py test-agents-defs.py test-mill-go-variants.py test-skills-index.py test-inplace.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-load-directive-convention.py test-language-skills-directive.py test-agents-defs.py test-mill-go-variants.py test-skills-index.py test-inplace.py test-skill-helper-drift.py test-guards.py
 depends-on: [1]
 ```
 
@@ -163,7 +163,7 @@ none of these cards restructures a skill beyond the sentence being changed.
 - **Requirements:**
   - `mill-setup` ~259, `mill-merge` ~55, `mill-self-report` ~75, `ask-thread` ~48: `mill:conversation` -> `scribe:conversation`, rest of each sentence unchanged.
   - `mill-setup` `## Preconditions`: add a last bullet: "`scribe@scribe` is installed and enabled — mill declares it as a dependency and fails to load without it; if the `scribe` marketplace is not yet added on this machine, run `/plugin marketplace add Knatte18/scribe` and `/plugin install scribe@scribe` before installing mill".
-  - `git-commit` ~19: "the delegated `{lang}-build` skill" -> "the delegated `scribe:{lang}-build` skill".
+  - `git-commit` ~19: "the delegated `{lang}-build` skill" -> "the delegated `scribe:{lang}-build` skill", and "(e.g. golang-build's Tool Installation section" -> "(e.g. `scribe:golang-build`'s Tool Installation section".
   - `workflow` Skill Invocation Table: `@mill:code-quality` -> `@scribe:code-quality`;
     `@mill:testing` (+ language-specific `{lang}-testing`) -> `@scribe:testing` (+ language-specific `scribe:{lang}-testing`);
     the language-specific row's `@{lang}:{lang}-*` -> `@scribe:{lang}-*`;
@@ -215,6 +215,7 @@ none of these cards restructures a skill beyond the sentence being changed.
   - `_agent_dispatch.language_skills_directive`: base list `skills = ["`scribe:prose`", "`scribe:code-quality`"]`; per detected language append `` f"`scribe:{prefix}-comments`" `` and `` f"`scribe:{prefix}-testing`" ``.
     `LANG_MAP` prefixes stay `golang`/`python`/`csharp`.
     Docstring: "names the matching ``scribe:{lang}-comments`` and ``scribe:{lang}-testing`` skills plus ``scribe:prose`` and ``scribe:code-quality`` for all batches."
+    Module docstring (~51): "naming the required language skills plus prose and code-quality" -> "naming the required scribe language skills plus scribe:prose and scribe:code-quality".
   - `test-language-skills-directive.py`: qualify every expected name, positive and negative (a negative check on "`python-comments`" would pass vacuously once the output reads "`scribe:python-comments`"), including the `directive.count(...)` checks and the rendered-template check "python-comments" -> "scribe:python-comments".
     Update the module docstring's Covers list the same way.
     Scenarios stay as they are (Go-only, Python-only, C#-only, mixed, no-language, Context excluded, render, Move-only).
@@ -269,4 +270,5 @@ none of these cards restructures a skill beyond the sentence being changed.
 `test-agents-defs.py` (card 8's byte-identical implementer bodies),
 `test-mill-go-variants.py` (card 7's `mill-go2` preamble),
 `test-skills-index.py` (card 11's scanner, confirming it does not depend on the removed plugin directories),
-`test-inplace.py` (card 10's `_inplace.py` docstring edit).
+`test-inplace.py` (card 10's `_inplace.py` docstring edit),
+`test-skill-helper-drift.py` and `test-guards.py` (both scan shipped SKILL.md files, so they cover card 4's new `conventions` skill and the edited skills).
