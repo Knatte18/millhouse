@@ -48,7 +48,8 @@ if [ "$SCRIBE_INSTALLED" = "yes" ]; then
 import json, re
 
 def parse_version(text):
-    return tuple(int(part) for part in text.split('.'))
+    # A directory-sourced install records its version with a '-<hash>' suffix; strip it before parsing.
+    return tuple(int(part) for part in re.split(r'[-+]', text)[0].split('.'))
 
 installed = json.load(open('$INSTALLED_JSON'))['plugins']['scribe@scribe']
 lowest = min((parse_version(record['version']) for record in installed), default=None)

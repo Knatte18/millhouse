@@ -39,7 +39,8 @@ if ($scribeInstalled) {
         }
     }
 
-    $lowest = $installed.plugins.'scribe@scribe' | ForEach-Object { [version]$_.version } | Sort-Object | Select-Object -First 1
+    # A directory-sourced install records its version with a '-<hash>' suffix; strip it before parsing.
+    $lowest = $installed.plugins.'scribe@scribe' | ForEach-Object { [version]($_.version -replace '[-+].*$', '') } | Sort-Object | Select-Object -First 1
     $millManifest = Get-Content $millManifestPath -Raw | ConvertFrom-Json
     $scribeDependency = $millManifest.dependencies | Where-Object { $_.name -eq "scribe" -and $_.marketplace -eq "scribe" } | Select-Object -First 1
     if ($lowest -and $scribeDependency -and $scribeDependency.version) {
