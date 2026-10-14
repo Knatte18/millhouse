@@ -43,7 +43,7 @@ batches:
     name: merge-in
     file: 05-merge-in.md
     depends-on: [3]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-merge-in-subagent.py test-merge-in-subagent.py test-millpy-verify-run.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-merge-in-subagent.py test-merge-in-subagent.py test-millpy-verify-run.py test-implementer-common.py
   - number: 6
     name: skill-docs
     file: 06-skill-docs.md
@@ -83,6 +83,15 @@ batches:
   Batch 3 adds `_implementer_common._truncate_verify_output(text) -> str` (the existing 2000-char truncation, extracted), which batch 5 reuses.
 - **Rationale:** cards in different batches must agree on names without re-reading each other.
 - **Applies to:** all batches
+
+### Decision: holistic fixer replay budget
+
+- **Decision:** `millpy-fix.py` keeps its joined holistic replay (`_resolve_holistic_verify` joins every batch's `verify:` into one `(a) && (b) && ...` chain run as one command) and passes `verify_timeout_s * max(1, len(batch_verifies))` as that command's timeout.
+  The same scaled value also bounds the fixer's module-wide gate, which is only looser, never tighter.
+  The `## Verify log` row for that run carries the joined command cut to 300 characters.
+- **Rationale:** the discussion bounds each verify command; the joined chain is N commands in one process, so a flat per-command budget would false-time-out multi-batch plans.
+  Splitting the chain into per-batch runner calls would change `_forward_output`'s single-command contract, a larger change than this task needs.
+- **Applies to:** gate-callers
 
 ### Decision: every failure reason uses one shape
 
@@ -158,6 +167,7 @@ batches:
 - `plugins/mill/skills/mill-go-base/SKILL.md`
 - `plugins/mill/skills/mill-go-base/handoff.md`
 - `plugins/mill/skills/mill-merge-in/SKILL.md`
+- `plugins/mill/skills/mill-plan/SKILL.md`
 - `plugins/mill/skills/mill-quick/SKILL.md`
 - `plugins/mill/templates/mill-config.yaml`
 - `plugins/mill/unit_tests/test-cleanliness.py`

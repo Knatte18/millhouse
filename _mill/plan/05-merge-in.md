@@ -5,7 +5,7 @@ task: Instrument and bound the verify runner
 batch: merge-in
 number: 5
 cards: 2
-verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-merge-in-subagent.py test-merge-in-subagent.py test-millpy-verify-run.py
+verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-millpy-merge-in-subagent.py test-merge-in-subagent.py test-millpy-verify-run.py test-implementer-common.py
 depends-on: [3]
 ```
 
@@ -23,6 +23,7 @@ Batch-local decision: a launch failure (`exit_code is None`, not timed out) is a
   - `plugins/mill/scripts/_verify_run.py`
 - **Edits:**
   - `plugins/mill/scripts/millpy-merge-in-subagent.py`
+  - `plugins/mill/scripts/_implementer_common.py`
   - `plugins/mill/unit_tests/test-millpy-merge-in-subagent.py`
   - `plugins/mill/unit_tests/test-merge-in-subagent.py`
 - **Creates:** none
@@ -41,10 +42,11 @@ Batch-local decision: a launch failure (`exit_code is None`, not timed out) is a
   - Initial verify in `_run_verify_fix` (label `args.label`): when `_verify_stuck_envelope(run)` is not `None`, print it with `verify_runs` and `return 0` before any `emit_prepare` (prepare stage) or `_implementer_claude.run` (full stage) -- the fixer is never dispatched for a timeout or launch failure.
   - Re-verify in the finalize stage and the full-stage post-fix re-verify use label `f"{args.label}:post-fix"`; a timeout or launch failure there prints the same stuck envelope shape.
   - Every success or stuck envelope this file prints after a verify run carries `"verify_runs": [r.summary() for r in runs]` for the runs made in that invocation; the plain failure envelope's reason becomes `run.output.strip() + _verify_run.output_suffix(run)`.
-    The envelopes printed by the two prepare-envelope helpers this file already imports from `_implementer_common` are unchanged.
+    The two prepare-envelope helpers in `_implementer_common.py`, `emit_prepare(...)` and `emit_prepare_no_dispatch(...)`, each gain a keyword-only `verify_runs: list[dict] | None = None` parameter, added to the printed envelope as `"verify_runs"` when not `None` (docstrings updated; existing callers unchanged).
+    The verify-fix prepare stage passes `verify_runs=[r.summary() for r in runs]` to both, so a prepare-stage verify that passes or leads to dispatch still reports its timing.
   Tests: in `test-millpy-merge-in-subagent.py` and `test-merge-in-subagent.py`, replace the `subprocess.run` mocks that fake verify results with `_verify_run.run_verify` patches returning canned `VerifyRun` records (keep any `subprocess.run` / `_subprocess_util.run` mocks that serve git), preserving each case's intent.
   The two `_generous_terminal_env` dispatch cases (#1068) assert the `env=` keyword on the `run_verify` call instead of on `subprocess.run`.
-  New cases: prepare-stage timed-out initial verify prints a stuck envelope with `timed_out: true`, the `[verify timed out after <N>s: merge-in:...]` prefix and `verify_runs`, and `emit_prepare` is not called; full-stage timed-out initial verify never calls `_implementer_claude.run`; a finalize-stage post-fix timeout prints the stuck envelope; `--label` reaches `run_verify` and the post-fix run uses `<label>:post-fix`; a config with `pipeline.verify_timeout_minutes: 0` makes `main` return 1.
+  New cases: a prepare-stage verify that passes prints the no-dispatch envelope with `verify_runs`; one that fails prints the dispatch envelope with `verify_runs`; prepare-stage timed-out initial verify prints a stuck envelope with `timed_out: true`, the `[verify timed out after <N>s: merge-in:...]` prefix and `verify_runs`, and `emit_prepare` is not called; full-stage timed-out initial verify never calls `_implementer_claude.run`; a finalize-stage post-fix timeout prints the stuck envelope; `--label` reaches `run_verify` and the post-fix run uses `<label>:post-fix`; a config with `pipeline.verify_timeout_minutes: 0` makes `main` return 1.
 - **Commit:** `feat(verify): run merge-in verify through _verify_run, skip the fixer on timeout`
 
 ### Card 11: millpy-verify-run CLI
@@ -71,4 +73,4 @@ Batch-local decision: a launch failure (`exit_code is None`, not timed out) is a
 
 ## Batch Tests
 
-`verify:` runs `test-millpy-merge-in-subagent.py` and `test-merge-in-subagent.py` (both pass on this branch's base and are rewritten onto the `run_verify` seam) plus the new `test-millpy-verify-run.py`.
+`verify:` runs `test-millpy-merge-in-subagent.py` and `test-merge-in-subagent.py` (both pass on this branch's base and are rewritten onto the `run_verify` seam) plus the new `test-millpy-verify-run.py`, and `test-implementer-common.py` because card 10 adds a keyword parameter to `emit_prepare` / `emit_prepare_no_dispatch`.

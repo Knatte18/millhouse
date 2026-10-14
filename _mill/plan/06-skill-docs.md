@@ -27,6 +27,7 @@ Batch-local wording used in every card, quoted here once so all three cards say 
 - **Edits:**
   - `plugins/mill/skills/mill-go-base/SKILL.md`
   - `plugins/mill/skills/mill-go-base/handoff.md`
+  - `plugins/mill/skills/mill-plan/SKILL.md`
 - **Creates:** none
 - **Deletes:** none
 - **Moves:** none
@@ -40,6 +41,7 @@ Batch-local wording used in every card, quoted here once so all three cards say 
   - Change the snippet's call to `_done_gate.run_gate(gate_cmd, git_root, hub_root=hub_root)` (both the first run and the re-runs reuse this snippet).
   - Replace the paragraph beginning "Give this Bash-tool call the same extended 600000ms" with the background wording; note that the snippet's exit code arrives in the completion notification.
   - In the Fixer-dispatch check, before every lock-release/notify/halt on a still-`blocked` result (the step 2 still-blocked branch, its `retry`/`halt` sub-bullets, and step 3), add: when `git -C <worktree> status --porcelain -- <status_path>` is non-empty, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: keep verify log for blocked done gate"` and push, so the done gate's `## Verify log` rows are durable even though `phase: done` is not set.
+  In `plugins/mill/skills/mill-plan/SKILL.md`, the "Extended timeout for every validator self-run" paragraph ends with "This mirrors the finalize-stage timeout note in mill-go-base/SKILL.md."; that note no longer exists after this card, so delete that sentence (the validator self-run runs no verify command and keeps its 600000 ms Bash timeout).
 - **Commit:** `docs(mill-go): run verify-replaying calls in the background, keep done-gate verify rows`
 
 ### Card 13: mill-quick done gate runs in the background
