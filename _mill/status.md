@@ -59,7 +59,9 @@ batches:
     commit_sha: 089a654f57dc0a3792caddff90569f7685372ef4
     verify_baseline_failures: []
   - name: strict-verify-gates
-    state: pending
+    state: running
+    implementer_session: d3a3c3ed-e894-436a-9308-72d95b562869
+    start_sha: bf0f59252a52ef9e5a617806a7c94ff8da226c4a
     verify_baseline_failures: []
   - name: docs-and-comments
     state: pending
