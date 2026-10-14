@@ -52,7 +52,9 @@ batches:
     commit_sha: dd56e3a62ed68f2a8039c6ac192c1d82cbe84df9
     verify_baseline_failures: []
   - name: status-and-module-removal
-    state: pending
+    state: running
+    implementer_session: e4577e31-3687-4140-8727-17131b6baf45
+    start_sha: 21747e3eb159e0af1e8110bd8ef2f465469a9498
     verify_baseline_failures: []
   - name: strict-verify-gates
     state: pending
