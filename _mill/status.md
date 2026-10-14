@@ -73,4 +73,5 @@ batches:
 '2026-10-14T09:33:42Z'  fix-finalize-strict  round 1
 '2026-10-14T09:36:05Z'  merge-in-recompute-removal  round 1
 '2026-10-14T09:38:40Z'  status-and-module-removal  round 1
+'2026-10-14T09:45:10Z'  strict-verify-gates  round 1
 ```
