@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implementer-gates
+phase: approved-gate-callers
 slug: verify-runner-instrumentation
 branch: hanf/verify-runner-instrumentation
 plan: _mill/plan
@@ -30,6 +30,7 @@ implementing  '2026-10-14T11:46:22Z'
 approved-verify-run-core  '2026-10-14T11:57:36Z'
 approved-cleanliness-status-exclusion  '2026-10-14T11:59:37Z'
 approved-implementer-gates  '2026-10-14T12:24:46Z'
+approved-gate-callers  '2026-10-14T12:28:15Z'
 ```
 
 ## Batches
@@ -52,9 +53,10 @@ batches:
     start_sha: 93f73f6a55d5e2537539fc10d130948a3873283f
     commit_sha: 52c834bd13a70bc9aef222ff995f944f1630b499
   - name: gate-callers
-    state: running
+    state: approved
     implementer_session: 986608fd-c44f-4d9b-b9ce-047967db8b3f
     start_sha: 1808f246899408f80123a9d7ae8e54c97abd2f17
+    commit_sha: 14f3b4dc50d497c2d0288881cc11fd5229c82231
   - name: merge-in
     state: pending
   - name: skill-docs
