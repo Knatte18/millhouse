@@ -4,9 +4,7 @@ import contextlib
 import html
 import io
 import json
-import os
 import re
-import shutil
 import subprocess
 import sys
 import _agent_dispatch

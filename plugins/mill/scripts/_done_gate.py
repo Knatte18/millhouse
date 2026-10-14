@@ -46,41 +46,7 @@ from pathlib import Path
 import _config
 import _paths
 import _verify_run
-from _implementer_common import _extract_failure_signatures
-
-
-def _build_truncated_reason(out: str) -> str:
-    """
-    Build the captured-output `reason` string for a failed gate run.
-
-    Mirrors `_implementer_common._run_verify_gate`'s existing truncation-enrichment shape:
-    when `out` fits within the 2000-character tail kept for the human-facing reason, it is returned
-    unchanged.
-    Otherwise the omitted prefix is scanned for failure-marker lines (via
-    `_extract_failure_signatures`) so a failure line pushed out of a blind tail-truncation by later
-    passing-noise (e.g. alphabetically-earlier `ok` package lines in a `go test ./...` run) is still
-    recoverable, per GitHub #1020.
-
-    Args:
-        out: The stripped, combined stdout+stderr of a failed gate run.
-
-    Returns:
-        `out` unchanged when its length is at most 2000 characters.
-        Otherwise an omitted-content marker -- naming the omitted character count, plus up to 20
-        extracted failure-marker lines recovered from the omitted portion when any exist -- followed
-        by the last 2000 characters of `out`.
-    """
-    if len(out) <= 2000:
-        return out
-
-    tail = out[-2000:]
-    omitted = out[:-2000]
-    fail_lines = _extract_failure_signatures(omitted)[:20]
-    marker = f"[... {len(omitted)} earlier chars omitted"
-    if fail_lines:
-        marker += "; earlier failures:\n" + "\n".join(fail_lines)
-    marker += " ...]\n"
-    return marker + tail
+from _implementer_common import _truncate_verify_output
 
 
 def _run_gate_command(
@@ -120,14 +86,14 @@ def _run_gate_command(
     if run.timed_out:
         reason = (
             _verify_run.timeout_prefix(run)
-            + _build_truncated_reason(run.output.strip())
+            + _truncate_verify_output(run.output.strip())
             + _verify_run.output_suffix(run)
         )
         return {"result": "blocked", "reason": reason, "verify_runs": verify_runs}
     if run.exit_code is None:
         return {"result": "blocked", "reason": run.output, "verify_runs": verify_runs}
     if run.exit_code != 0:
-        reason = _build_truncated_reason(run.output.strip()) + _verify_run.output_suffix(run)
+        reason = _truncate_verify_output(run.output.strip()) +_verify_run.output_suffix(run)
         return {"result": "blocked", "reason": reason, "verify_runs": verify_runs}
     return {"result": "ok", "verify_runs": verify_runs}
 

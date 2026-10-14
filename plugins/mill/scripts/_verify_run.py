@@ -300,7 +300,9 @@ def run_verify(
         outcome = "timeout" if timed_out else exit_code
 
     _emit_marker(
-        verify_dir, f"END {label_field} exit={outcome} wall={wall_s:.1f}s output={output_path}"
+        verify_dir,
+        f"END {label_field} exit={outcome} wall={wall_s:.1f}s "
+        f"output={_status.normalize_log_field(str(output_path))}",
     )
     first_run_marker.touch()
 
@@ -316,7 +318,10 @@ def run_verify(
                 cmd=cmd,
             )
         except Exception as exc:
-            print(f"[verify] could not write Verify log row: {exc}", file=sys.stderr, flush=True)
+            reason = _status.normalize_log_field(str(exc))
+            print(
+                f"[verify] could not write Verify log row: {reason}", file=sys.stderr, flush=True
+            )
     else:
         print(
             f"[verify] no status.md -- Verify log row skipped for {label_field}",
