@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-docs-and-comments
+phase: holistic-reviewing
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
 plan: _mill/plan
@@ -30,6 +30,7 @@ approved-merge-in-recompute-removal  '2026-10-14T09:36:06Z'
 approved-status-and-module-removal  '2026-10-14T09:38:41Z'
 approved-strict-verify-gates  '2026-10-14T09:45:11Z'
 approved-docs-and-comments  '2026-10-14T09:47:26Z'
+holistic-reviewing  '2026-10-14T09:47:37Z'
 ```
 
 ## Batches
