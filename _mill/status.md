@@ -58,4 +58,5 @@ batches:
 
 ```text
 '2026-10-14T09:31:32Z'  implement-stage-removal  round 1
+'2026-10-14T09:33:42Z'  fix-finalize-strict  round 1
 ```
