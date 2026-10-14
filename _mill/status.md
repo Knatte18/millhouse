@@ -58,7 +58,9 @@ batches:
     start_sha: 1808f246899408f80123a9d7ae8e54c97abd2f17
     commit_sha: 14f3b4dc50d497c2d0288881cc11fd5229c82231
   - name: merge-in
-    state: pending
+    state: running
+    implementer_session: b839645d-4ace-4c72-a21f-71f5521c9ce7
+    start_sha: b253b57b86e8783a2e847eeaf11a7652b0ce13e3
   - name: skill-docs
     state: pending
 ```
