@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
 plan: _mill/plan
@@ -23,4 +23,23 @@ planning  '2026-10-14T09:21:02Z'
 plan-review-r1  '2026-10-14T09:25:17Z'
 plan-fix-r1  '2026-10-14T09:26:07Z'
 planned  '2026-10-14T09:26:17Z'
+implementing  '2026-10-14T09:26:29Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: implement-stage-removal
+    state: pending
+  - name: fix-finalize-strict
+    state: pending
+  - name: merge-in-recompute-removal
+    state: pending
+  - name: status-and-module-removal
+    state: pending
+  - name: strict-verify-gates
+    state: pending
+  - name: docs-and-comments
+    state: pending
 ```
