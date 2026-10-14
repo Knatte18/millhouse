@@ -15,6 +15,8 @@ import time
 import unittest.mock
 from pathlib import Path
 
+import yaml
+
 HUB = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
@@ -383,7 +385,18 @@ def test_summary_and_helpers() -> None:
     check("output_suffix: empty without output_path", _verify_run.output_suffix(record) == "")
 
 
+def test_config_sync() -> None:
+    for path in (HUB / "mill-config.yaml", HUB / "plugins" / "mill" / "templates" / "mill-config.yaml"):
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        check(
+            f"config sync: {path.name} in {path.parent.name} carries the default timeout key",
+            data["pipeline"]["verify_timeout_minutes"] == _verify_run.DEFAULT_TIMEOUT_MINUTES,
+            str(path),
+        )
+
+
 def main() -> int:
+    test_config_sync()
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         test_pipe_trap(tmp)
