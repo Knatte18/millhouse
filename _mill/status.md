@@ -31,15 +31,22 @@ implementing  '2026-10-14T09:26:29Z'
 ```yaml
 batches:
   - name: implement-stage-removal
-    state: pending
+    state: running
+    implementer_session: c0dc2aa7-a2ec-4571-8a7b-7efac97023c8
+    start_sha: f38728307b5d80dffa1a232333c39694b7b94e56
+    verify_baseline_failures: []
   - name: fix-finalize-strict
     state: pending
+    verify_baseline_failures: []
   - name: merge-in-recompute-removal
     state: pending
+    verify_baseline_failures: []
   - name: status-and-module-removal
     state: pending
+    verify_baseline_failures: []
   - name: strict-verify-gates
     state: pending
+    verify_baseline_failures: []
   - name: docs-and-comments
     state: pending
 ```
