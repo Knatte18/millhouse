@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-cleanliness-status-exclusion
+phase: approved-implementer-gates
 slug: verify-runner-instrumentation
 branch: hanf/verify-runner-instrumentation
 plan: _mill/plan
@@ -29,6 +29,7 @@ planned  '2026-10-14T11:46:04Z'
 implementing  '2026-10-14T11:46:22Z'
 approved-verify-run-core  '2026-10-14T11:57:36Z'
 approved-cleanliness-status-exclusion  '2026-10-14T11:59:37Z'
+approved-implementer-gates  '2026-10-14T12:24:46Z'
 ```
 
 ## Batches
@@ -46,9 +47,10 @@ batches:
     start_sha: 167d652cf646b2f5e64cd9ce201172e5c1ea6559
     commit_sha: 386b47e08889f9f204e6f5ffc94233ad05727db2
   - name: implementer-gates
-    state: running
+    state: approved
     implementer_session: 38265f2d-e006-438c-be40-c56fe2de5733
     start_sha: 93f73f6a55d5e2537539fc10d130948a3873283f
+    commit_sha: 52c834bd13a70bc9aef222ff995f944f1630b499
   - name: gate-callers
     state: pending
   - name: merge-in
