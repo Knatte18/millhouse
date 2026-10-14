@@ -75,7 +75,7 @@ No verify site is switched over yet; batches 3-5 consume `_verify_run.run_verify
     1. `verify_dir = git_root / ".scratch" / "verify"` (created with parents). `first_run = not (verify_dir / "first-run.done").exists()`.
     2. Output file `verify_dir / f"{_timestamp.now_utc_compact()}-{_paths.sanitize_filename_component(label)}.out"`; when that name already exists, append `-2`, `-3`, ... before `.out`.
     3. Child env: copy of `env` (or `os.environ`), then set `PYTHONIOENCODING=utf-8`, `MSBUILDDISABLENODEREUSE=1`, `DOTNET_CLI_USE_MSBUILD_SERVER=0` for every command.
-    4. Argv: `"posix"` -> `_posix_shell_run_args(cmd)` passed to `Popen` as-is; `"native"` -> `Popen(cmd, shell=True)`.
+    4. Argv: `"posix"` -> `run_args, run_kwargs = _posix_shell_run_args(cmd)`, then `Popen(run_args, **run_kwargs, ...)`; `"native"` -> `Popen(cmd, shell=True, ...)`.
        `Popen` gets `cwd=cwd`, `stdin=subprocess.DEVNULL`, `stdout=<output file opened "wb">`, `stderr=subprocess.STDOUT`, and its own process group: `creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW` when `os.name == "nt"`, else `start_new_session=True`.
     5. Write `START <label> first_run=<true|false> timeout=<int>s cwd=<cwd> cmd=<cmd>`; start a daemon heartbeat thread writing `HEARTBEAT <label> elapsed=<int>s cmd=<cmd>` every `HEARTBEAT_INTERVAL_S`, stopped and joined in a `finally` (mirror `millpy-bg.py`'s `_heartbeat` Event pattern).
     6. `proc.wait(timeout=timeout_s)`; on `subprocess.TimeoutExpired` kill the tree with no terminate step -- `subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)` on Windows, `os.killpg(proc.pid, signal.SIGKILL)` on POSIX (ignore `ProcessLookupError`) -- then `proc.wait(timeout=10)` ignoring a second `TimeoutExpired`; set `timed_out=True`, `exit_code=None`.
@@ -96,6 +96,8 @@ No verify site is switched over yet; batches 3-5 consume `_verify_run.run_verify
   - Output: stdout and stderr of the child both appear in `output`, and `output_path` exists.
   - Decoding: a child writing invalid UTF-8 bytes yields `output` containing `�`, no exception.
   - Launch failure: a nonexistent `cwd` returns a `VerifyRun` with `exit_code is None`, `timed_out is False`.
+  - Programmer errors: `cwd=None` and `shell_mode="bogus"` each raise `ValueError`.
+  - Live-log failure: with `.scratch/verify/verify.log` made unwritable (e.g. a directory created at that path), a passing run still returns `exit_code == 0`.
   - Status row: with a temp status file, one `## Verify log` row is appended per run; with `status_path=None` no file is written and stderr carries the skip note.
   - Shell mode: the three moved `_posix_shell_run_args` cases, plus `"native"` building a `shell=True` call (patch `_verify_run.subprocess.Popen` and inspect its call args).
   - `timeout_seconds`: absent key -> 1200.0; `{"verify_timeout_minutes": 5}` -> 300.0; `0`, `-1`, `"x"`, `None` and `True` each raise `ValueError` naming the key.

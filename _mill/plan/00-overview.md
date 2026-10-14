@@ -3,7 +3,7 @@
 ```yaml
 task: Instrument and bound the verify runner
 slug: verify-runner-instrumentation
-approved: false
+approved: true
 started: 20261014-112550
 parent_branch: main
 root: ""
@@ -135,6 +135,7 @@ batches:
 - **Decision:** batch 1 card 3 adds `pipeline.verify_timeout_minutes: 20` to the hub `mill-config.yaml`; the plan carries `skip_checks: ["wiki-config-mutation"]`.
 - **Rationale:** the key is additive and `_verify_run.timeout_seconds` defaults to the same value when it is absent.
   This task's own mill-go runs from the deployed plugin copy, which has no reader for the key yet, so the key is inert until a deploy, and identical in effect afterwards.
+  Until that deploy, `_config.load_config`'s unknown-key check (the deployed template lacks the key) prints a non-fatal `[config] unknown key: pipeline.verify_timeout_minutes` line to stderr on each config load; that line is expected, not a regression.
 - **Applies to:** verify-run-core
 
 ### Decision: no done_gate or lint recommendation
