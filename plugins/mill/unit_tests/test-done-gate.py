@@ -10,7 +10,7 @@ It also covers `_done_gate.run_gate` -- the Handoff-time gate call --
 including its success, Windows-only dotnet-build-server-shutdown cleanup, and failure paths,
 mocking `subprocess.run` and `platform.system` throughout.
 
-Follows `test-verify-baseline.py`'s style: a single `main() -> int` function with inline numbered
+Uses the inline-case style: a single `main() -> int` function with inline numbered
 cases, `PASS`/`FAIL` prints, an accumulated error count, and `sys.exit(main())` at the bottom.
 """
 

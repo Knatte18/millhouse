@@ -133,7 +133,6 @@ pipeline:
   auto_report: true
   done_gate: null  # Repo-wide check command run from git_root before marking done; null = disabled. Default to including the language's lint command (e.g. golangci-lint run, ruff check .) ONLY after first confirming that command exits 0 against the current worktree tip -- never set this to a command that is currently failing on pre-existing debt. e.g. "go test ./... && golangci-lint run" or "dotnet test". (#561, #861)
   done_gate_baseline_preflight: false  # Opt-in Prepare-phase done_gate baseline capture for self-capturing regression suites; see done_gate above. (#650)
-  baseline_verify_timeout_minutes: null  # Per-run wall-clock ceiling (minutes) for every verify command --stage baseline runs (module-wide, per-batch); null = no ceiling. A timeout is treated as "computation failed, leave the baseline unset", the same fail-safe as any other infrastructure failure, so a hung test runner cannot block the pre-flight indefinitely before batch 1 dispatches. (#1101)
   max_cards_per_batch: 10  # batch-oversized validator gate (#371)
   max_batch_context_tokens: 120000  # batch-oversized validator gate (#371)
   entry_wait: true  # master on/off switch for the mill-go/mill-plan entry-gate blocking wait; see _phase_wait.py

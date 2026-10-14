@@ -269,7 +269,7 @@ def _is_retryable_lock_error(exc: OSError) -> bool:
     remove_safe's rmtree-fallback retries with backoff.
 
     Covers WinError 145 (directory not empty) and WinError 32 (sharing violation, e.g. a
-    lingering dotnet testhost/MSBuild file handle left over from a ``--stage baseline`` verify
+    lingering dotnet testhost/MSBuild file handle left over from a verify
     run, GitHub #1032).
 
     Args:

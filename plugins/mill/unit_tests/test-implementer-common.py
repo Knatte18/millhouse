@@ -32,7 +32,6 @@ from _implementer_common import (  # noqa: E402
     _go_build_tag_retiering_stuck,
     _is_valid_commit_sha,
     _extract_failure_signatures,
-    _normalize_failure_signature,
     _fixer_logic_ancestor_override,
 )
 import _cleanliness  # noqa: E402
@@ -3448,59 +3447,7 @@ def main() -> int:
             print(f"FAIL: case 58 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 59: module_verify_baseline="pre-existing-failures" with a failing module_wide_verify_cmd -- the module-wide gate is skipped entirely (never invoked), the batch gate's own pass/fail is unaffected, and the overall result is success, not stuck/verify.
-    # subprocess.run is spied on (real calls still execute via side_effect, so git plumbing inside _forward_output keeps working) so we can assert the module-wide command string never appears in any recorded call.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
-        _cleanliness.capture_snapshot(project_root, snapshot_path)
-        subprocess.run(
-            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
-            check=True,
-            capture_output=True,
-        )
-        agent_output = (
-            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
-        )
-        real_run = subprocess.run
-        with unittest.mock.patch(
-            "_implementer_common.subprocess.run", side_effect=real_run
-        ) as mock_run:
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    agent_output,
-                    project_root,
-                    start_sha=base_sha,
-                    snapshot_path=snapshot_path,
-                    verify_cmd="exit 0",
-                    module_wide_verify_cmd="exit 1",
-                    module_verify_baseline="pre-existing-failures",
-                )
-            )
-        try:
-            data = json.loads(captured.strip())
-            assert data["status"] == "success", (
-                f"case 59: expected success, got {data}"
-            )
-            # Confirm the module-wide command ("exit 1") was never handed to subprocess.run -- only git plumbing and the batch gate's "exit 0" should appear in the recorded call history.
-            for call in mock_run.call_args_list:
-                call_args = call.args[0] if call.args else []
-                flattened = (
-                    call_args if isinstance(call_args, str) else " ".join(call_args)
-                )
-                assert "exit 1" not in flattened, (
-                    f"case 59: module-wide command invoked unexpectedly: {flattened!r}"
-                )
-            print(
-                "PASS: case 59 - pre-existing-failures baseline skips module-wide"
-                " gate entirely (never invoked), overall success"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 59 ({exc}) captured={captured!r}", file=sys.stderr)
-            errors += 1
-
-    # Case 60: module_verify_baseline="clean" -- the module-wide gate runs exactly as it did before this parameter existed.
+    # Case 60: the module-wide gate runs strictly when configured.
     # Mirrors Case 30 (batch passes, module-wide fails -> stuck/verify with "[module-wide verify]" prefix) and Case 31 (module-wide passes -> overall success/None).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
@@ -3530,7 +3477,6 @@ def main() -> int:
                 snapshot_path=snapshot_path,
                 verify_cmd="exit 0",
                 module_wide_verify_cmd="exit 1",
-                module_verify_baseline="clean",
             )
         )
         try:
@@ -3546,7 +3492,7 @@ def main() -> int:
                 f"case 60a: expected commit_sha={new_head}, got {data}"
             )
             print(
-                "PASS: case 60a - clean baseline: module-wide gate still runs and"
+                "PASS: case 60a - module-wide gate still runs and"
                 " fails -> stuck/verify with prefix (matches Case 30)"
             )
         except Exception as exc:
@@ -3555,89 +3501,15 @@ def main() -> int:
         # Case 31 mirror: both gates pass -> no demotion.
         try:
             result = _run_verify_gates(
-                project_root, "exit 0", "exit 0", module_verify_baseline="clean"
+                project_root, "exit 0", "exit 0"
             )
             assert result is None, f"case 60b: expected None (both pass), got {result}"
             print(
-                "PASS: case 60b - clean baseline: module-wide gate runs and passes"
+                "PASS: case 60b - module-wide gate runs and passes"
                 " -> overall success (matches Case 31)"
             )
         except Exception as exc:
             print(f"FAIL: case 60b ({exc})", file=sys.stderr)
-            errors += 1
-
-    # Case 61: module_verify_baseline=None (the default, not yet computed) -- identical behavior to Case 60 ("clean"): the module-wide gate still runs strictly.
-    # This is the fail-safe-toward-strict default.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
-        try:
-            # Batch passes, module-wide fails -> stuck/verify with prefix.
-            result = _run_verify_gates(
-                project_root, "exit 0", "exit 1", module_verify_baseline=None
-            )
-            assert result is not None, f"case 61a: expected stuck dict, got {result}"
-            assert result["stuck_type"] == "verify", (
-                f"case 61a: expected stuck_type=verify, got {result}"
-            )
-            assert "[module-wide verify]" in result.get("reason", ""), (
-                f"case 61a: expected '[module-wide verify]' prefix in reason, got {result}"
-            )
-            # Batch passes, module-wide also passes -> no demotion.
-            result = _run_verify_gates(
-                project_root, "exit 0", "exit 0", module_verify_baseline=None
-            )
-            assert result is None, f"case 61b: expected None (both pass), got {result}"
-            print(
-                "PASS: case 61 - module_verify_baseline=None (default) behaves"
-                " identically to 'clean' -- strict fail-safe default"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 61 ({exc})", file=sys.stderr)
-            errors += 1
-
-    # Case 62: backward-compatibility guard -- calling _forward_output without passing module_verify_baseline at all (kwarg omitted) behaves identically to Case 61 (defaults to None, module-wide gate runs strictly).
-    # Confirms no existing caller (e.g.
-    # millpy-fix.py) changes behavior from this batch alone.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        base_sha = _setup_fixture(project_root)
-        snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-test.txt"
-        _cleanliness.capture_snapshot(project_root, snapshot_path)
-        subprocess.run(
-            ["git", "-C", str(project_root), "commit", "--allow-empty", "-m", "second"],
-            check=True,
-            capture_output=True,
-        )
-        agent_output = (
-            '{"status":"success","commit_sha":"abc","session_id":"test-session"}\n'
-        )
-        # module_verify_baseline intentionally omitted -- exercises the default.
-        rc, captured = _capture_stdout(
-            lambda: _forward_output(
-                agent_output,
-                project_root,
-                start_sha=base_sha,
-                snapshot_path=snapshot_path,
-                verify_cmd="exit 0",
-                module_wide_verify_cmd="exit 1",
-            )
-        )
-        try:
-            data = json.loads(captured.strip())
-            assert data["status"] == "stuck", f"case 62: expected stuck, got {data}"
-            assert data["stuck_type"] == "verify", (
-                f"case 62: expected stuck_type=verify, got {data}"
-            )
-            assert "[module-wide verify]" in data.get("reason", ""), (
-                f"case 62: expected '[module-wide verify]' prefix in reason, got {data}"
-            )
-            print(
-                "PASS: case 62 - module_verify_baseline omitted entirely (existing"
-                " caller shape) -> module-wide gate still runs strictly"
-            )
-        except Exception as exc:
-            print(f"FAIL: case 62 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
     # Case 63: #605 regression -- finalize_from_output unescapes HTML entities in the agent-output file before delegating to _forward_output.
@@ -4879,198 +4751,74 @@ def main() -> int:
         print(f"FAIL: case 71a ({exc})", file=sys.stderr)
         errors += 1
 
-    # Case 71c (#1060) -- _extract_failure_signatures returncode-driven synthesis.
-    try:
-        non_test_output = "go: vet failed\nexit status 1\n"
-        synthesized = _extract_failure_signatures(non_test_output, returncode=1)
-        assert synthesized == ["NONZERO_EXIT: exit 1: go: vet failed"], (
-            f"expected a single synthetic NONZERO_EXIT signature, got {synthesized}"
-        )
-        assert _extract_failure_signatures(non_test_output, returncode=0) == [], (
-            "returncode=0 must never synthesize a signature, even with no recognized markers"
-        )
-        assert _extract_failure_signatures(non_test_output) == [], (
-            "omitting returncode (default None) must never synthesize a signature"
-        )
-        # A recognized FAIL-format line already present means no synthesis is needed.
-        go_line = "--- FAIL: TestFoo (0.00s)"
-        assert _extract_failure_signatures(f"{go_line}\n", returncode=1) == [go_line], (
-            "a non-empty match set must never get a synthetic signature appended"
-        )
-        # Truncation to 200 characters, and the "(no output)" fallback for a blank first line.
-        long_line = "x" * 250
-        truncated = _extract_failure_signatures(long_line, returncode=2)
-        assert truncated == [f"NONZERO_EXIT: exit 2: {'x' * 200}"], (
-            f"expected the first line truncated to 200 characters, got {truncated}"
-        )
-        assert _extract_failure_signatures("   \n\n", returncode=1) == [
-            "NONZERO_EXIT: exit 1: (no output)"
-        ], "expected the '(no output)' fallback when every line is blank"
-        print(
-            "PASS: case 71c - _extract_failure_signatures synthesizes a stable"
-            " NONZERO_EXIT signature only for a non-zero returncode with no"
-            " recognized FAIL-format lines"
-        )
-    except Exception as exc:
-        print(f"FAIL: case 71c ({exc})", file=sys.stderr)
-        errors += 1
-
-    # Case 71b -- _normalize_failure_signature direct coverage.
-    try:
-        assert _normalize_failure_signature(
-            "--- FAIL: TestFoo (0.00s)"
-        ) == _normalize_failure_signature("--- FAIL: TestFoo (1.23s)"), (
-            "Go per-test durations must normalize to the same signature"
-        )
-        assert _normalize_failure_signature(
-            "FAIL\tgithub.com/pkg\t0.123s"
-        ) == _normalize_failure_signature("FAIL\tgithub.com/pkg\t0.456s"), (
-            "Go package-summary durations must normalize to the same signature"
-        )
-        pytest_line = "FAILED tests/test_x.py::test_y"
-        assert _normalize_failure_signature(pytest_line) == pytest_line, (
-            "a line with no embedded duration must be unchanged by normalization"
-        )
-        assert _normalize_failure_signature(
-            "--- FAIL some_test (1.2s) ---"
-        ) == _normalize_failure_signature("--- FAIL some_test (3.4s) ---"), (
-            "run-all.py per-test durations must normalize to the same signature"
-        )
-        assert _normalize_failure_signature(
-            "FAIL -- 3 of 10 in 45.6s: [...]"
-        ) == _normalize_failure_signature("FAIL -- 3 of 10 in 12.0s: [...]"), (
-            "run-all.py summary durations must normalize to the same signature"
-        )
-        print(
-            "PASS: case 71b - _normalize_failure_signature strips volatile"
-            " durations from all four known shapes"
-        )
-    except Exception as exc:
-        print(f"FAIL: case 71b ({exc})", file=sys.stderr)
-        errors += 1
-
-    # Case 72 -- _run_verify_gates batch_verify_baseline subset-diff matrix. (a) replay signatures are an exact/strict subset of a non-empty baseline -> waived (None).
+    # Case 72: strict gate semantics -- a failing batch verify blocks and the module-wide command never runs.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
         try:
-            verify_cmd = "echo '--- FAIL: TestFoo (0.00s)' && exit 1"
-            baseline = ["--- FAIL: TestFoo (9.99s)", "--- FAIL: TestBar (1.11s)"]
+            module_ran_marker = project_root / "module-ran.txt"
             result = _run_verify_gates(
-                project_root, verify_cmd, None, batch_verify_baseline=baseline
+                project_root, "exit 1", "echo ran > module-ran.txt"
             )
-            assert result is None, (
-                f"case 72a: expected waiver (None) for subset match, got {result}"
+            assert result is not None, "case 72a: expected a stuck dict"
+            assert result["stuck_type"] == "verify", (
+                f"case 72a: expected stuck_type=verify, got {result}"
             )
-            print(
-                "PASS: case 72a - replay signatures a subset of baseline -> waived"
+            assert not module_ran_marker.exists(), (
+                "case 72a: module-wide command must not run after a batch failure"
             )
+            print("PASS: case 72a - failing batch verify blocks before the module-wide gate")
         except Exception as exc:
             print(f"FAIL: case 72a ({exc})", file=sys.stderr)
             errors += 1
 
-    # (b) replay signatures contain one entry absent from baseline -> still blocks.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
+        # Batch passes, module-wide fails -> reason carries the module-wide prefix.
         try:
-            verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
-            baseline = ["--- FAIL: TestFoo (9.99s)"]
-            result = _run_verify_gates(
-                project_root, verify_cmd, None, batch_verify_baseline=baseline
+            result = _run_verify_gates(project_root, "exit 0", "exit 1")
+            assert result is not None, "case 72b: expected a stuck dict"
+            assert result["reason"].startswith("[module-wide verify] "), (
+                f"case 72b: expected module-wide prefix, got {result}"
             )
-            assert result is not None, (
-                "case 72b: expected a stuck dict for a non-baseline signature"
-            )
-            assert result["stuck_type"] == "verify", (
-                f"case 72b: expected stuck_type=verify, got {result}"
-            )
-            print(
-                "PASS: case 72b - a replay signature absent from baseline still blocks"
-            )
+            print("PASS: case 72b - failing module-wide verify is prefixed and blocks")
         except Exception as exc:
             print(f"FAIL: case 72b ({exc})", file=sys.stderr)
             errors += 1
 
-    # (c) batch_verify_baseline=None (not yet computed) -> falls back to today's strict behavior: any batch-level verify failure blocks.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
+        # Batch passes and no module-wide command configured -> None.
         try:
-            verify_cmd = "echo '--- FAIL: TestFoo (0.00s)' && exit 1"
-            result = _run_verify_gates(
-                project_root, verify_cmd, None, batch_verify_baseline=None
-            )
-            assert result is not None, (
-                "case 72c: expected strict blocking when baseline is None"
-            )
-            assert result["stuck_type"] == "verify", (
-                f"case 72c: expected stuck_type=verify, got {result}"
-            )
-            print(
-                "PASS: case 72c - batch_verify_baseline=None falls back to strict"
-                " blocking (fail-safe default)"
-            )
+            result = _run_verify_gates(project_root, "exit 0", None)
+            assert result is None, f"case 72c: expected None, got {result}"
+            print("PASS: case 72c - passing batch verify with no module-wide gate -> None")
         except Exception as exc:
             print(f"FAIL: case 72c ({exc})", file=sys.stderr)
             errors += 1
 
-    # (d) replay signatures is an EMPTY list (no recognized FAIL-marker line) while batch_verify_baseline is non-empty -> still blocks (non-vacuous-subset rule).
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
+        # The stuck dict from a failing gate has exactly status, stuck_type, reason.
         try:
-            # This verify command fails but its output has no recognized marker line, so _run_verify_gate's returned "signatures" list is empty.
-            verify_cmd = "echo 'a build error with no recognized marker' && exit 1"
-            baseline = ["--- FAIL: TestFoo (9.99s)"]
-            result = _run_verify_gates(
-                project_root, verify_cmd, None, batch_verify_baseline=baseline
+            result = _run_verify_gate(
+                project_root, "echo '--- FAIL: TestFoo (0.00s)' && exit 1"
             )
-            assert result is not None, (
-                "case 72d: an empty replay signature set must never be waived"
+            assert result is not None, "case 72d: expected a stuck dict"
+            assert set(result) == {"status", "stuck_type", "reason"}, (
+                f"case 72d: unexpected stuck dict keys {sorted(result)}"
             )
-            assert result["stuck_type"] == "verify", (
-                f"case 72d: expected stuck_type=verify, got {result}"
-            )
-            print(
-                "PASS: case 72d - empty replay signature set is never eligible for"
-                " waiver, even against a non-empty baseline"
-            )
+            print("PASS: case 72d - failing verify stuck dict carries no signatures field")
         except Exception as exc:
             print(f"FAIL: case 72d ({exc})", file=sys.stderr)
             errors += 1
 
-    # (e) the stuck dict has NO "signatures" key at all (simulating _run_verify_gate's exception path) while batch_verify_baseline is non-empty -> still blocks.
-    with tempfile.TemporaryDirectory() as tmpdir:
-        project_root = Path(tmpdir)
-        _setup_fixture(project_root)
+        # The removed baseline parameters are rejected outright.
         try:
-            baseline = ["--- FAIL: TestFoo (9.99s)"]
-            exception_stuck_dict = {
-                "status": "stuck",
-                "stuck_type": "verify",
-                "reason": "verify gate raised: [Errno 2] No such file or directory",
-            }
-            with unittest.mock.patch(
-                "_implementer_common._run_verify_gate",
-                return_value=exception_stuck_dict,
+            for removed_kwarg in (
+                {"module_verify_baseline": "clean"},
+                {"batch_verify_baseline": ["x"]},
             ):
-                result = _run_verify_gates(
-                    project_root,
-                    "irrelevant, mocked",
-                    None,
-                    batch_verify_baseline=baseline,
-                )
-            assert result is not None, (
-                "case 72e: a stuck dict with no 'signatures' key must never be waived"
-            )
-            assert result["stuck_type"] == "verify", (
-                f"case 72e: expected stuck_type=verify, got {result}"
-            )
-            print(
-                "PASS: case 72e - a stuck dict with no 'signatures' key (exception"
-                " path) is never eligible for waiver"
-            )
+                try:
+                    _run_verify_gates(project_root, "exit 0", None, **removed_kwarg)
+                except TypeError:
+                    continue
+                raise AssertionError(f"{removed_kwarg} was accepted")
+            print("PASS: case 72e - removed baseline kwargs raise TypeError")
         except Exception as exc:
             print(f"FAIL: case 72e ({exc})", file=sys.stderr)
             errors += 1
@@ -5373,9 +5121,8 @@ def main() -> int:
             print(f"FAIL: case 77 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 78: the corroboration mechanism (#954) is deleted -- a subset-diff mismatch against a
-    # non-empty batch_verify_baseline on the explicit-JSON-success path must now block strictly,
-    # with no checkout of any kind attempted (Decision no-checkout-anywhere / delete-corroboration).
+    # Case 78: a failing verify on the explicit-JSON-success path blocks strictly,
+    # with no checkout of any kind attempted and status.md untouched.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -5439,29 +5186,26 @@ def main() -> int:
                     session_id="case78",
                     task_dir=project_root / "_mill",
                     parent_branch="main",
-                    batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
                     status_path=status_path,
                 )
             )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
-                f"case 78: expected strict blocking with corroboration deleted, got {data}"
+                f"case 78: expected strict blocking, got {data}"
             )
             assert data["stuck_type"] == "verify", (
                 f"case 78: expected stuck_type=verify, got {data}"
             )
             print(
-                "PASS: case 78 - explicit-JSON-success path: a subset-diff mismatch blocks"
-                " strictly now that the corroboration mechanism is deleted"
+                "PASS: case 78 - explicit-JSON-success path: a failing verify blocks strictly"
             )
         except Exception as exc:
             print(f"FAIL: case 78 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 79: same deleted corroboration mechanism, driven through one of the three
-    # no-JSON-inference call sites in _forward_output (no parseable status JSON, snapshot_path
-    # omitted, forcing the inferred-success branch). Must block strictly like case 78, and must
-    # leave status.md untouched since there is no persist-commit mechanism left to write it.
+    # Case 79: a failing verify blocks strictly on one of the three no-JSON-inference call
+    # sites in _forward_output (no parseable status JSON, snapshot_path omitted, forcing the
+    # inferred-success branch), like case 78, and leaves status.md untouched.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -5519,13 +5263,12 @@ def main() -> int:
                     start_sha=batch_start_sha,
                     verify_cmd=verify_cmd,
                     session_id="case79",
-                    batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
                     status_path=status_path,
                 )
             )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
-                f"case 79: expected strict blocking with corroboration deleted, got {data}"
+                f"case 79: expected strict blocking, got {data}"
             )
             assert data["stuck_type"] in ("verify", "incomplete"), (
                 f"case 79: expected stuck_type=verify or incomplete, got {data}"
@@ -5539,16 +5282,15 @@ def main() -> int:
                 f" mechanism left to write it, got {status_diff.stdout!r}"
             )
             print(
-                "PASS: case 79 - a no-JSON-inference call site blocks strictly with the"
-                " corroboration mechanism deleted, leaving status.md untouched"
+                "PASS: case 79 - a no-JSON-inference call site blocks strictly,"
+                " leaving status.md untouched"
             )
         except Exception as exc:
             print(f"FAIL: case 79 ({exc}) captured={captured!r}", file=sys.stderr)
             errors += 1
 
-    # Case 80: with the corroboration mechanism deleted, a subset-diff mismatch blocks strictly
-    # regardless of git identity or batch name -- there is no persist-commit path left to
-    # exercise, so status.md is never written and stays byte-identical to its committed state.
+    # Case 80: a failing verify blocks strictly regardless of git identity or batch name;
+    # status.md is never written and stays byte-identical to its committed state.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
@@ -5601,7 +5343,7 @@ def main() -> int:
         captured = ""
         try:
             # task_dir/parent_branch deliberately omitted here -- this case isolates the
-            # subset-diff-mismatch blocking behavior with no downstream dirty-tree gate involved.
+            # failing-verify blocking behavior with no downstream dirty-tree gate involved.
             rc, captured = _capture_stdout(
                 lambda: _forward_output(
                     agent_output,
@@ -5609,13 +5351,12 @@ def main() -> int:
                     start_sha=batch_start_sha,
                     verify_cmd=verify_cmd,
                     session_id="case80",
-                    batch_verify_baseline=["--- FAIL: TestOld (1.11s)"],
                     status_path=status_path,
                 )
             )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
-                f"case 80: expected strict blocking with corroboration deleted, got {data}"
+                f"case 80: expected strict blocking, got {data}"
             )
             status_diff = _subprocess_util.run(
                 ["git", "status", "--porcelain", "_mill/status.md"],
@@ -5626,8 +5367,7 @@ def main() -> int:
                 f" that could write it, got {status_diff.stdout!r}"
             )
             print(
-                "PASS: case 80 - subset-diff mismatch blocks strictly with no persist"
-                " mechanism to exercise, leaving status.md untouched"
+                "PASS: case 80 - a failing verify blocks strictly, leaving status.md untouched"
             )
         except Exception as exc:
             print(f"FAIL: case 80 ({exc}) captured={captured!r}", file=sys.stderr)

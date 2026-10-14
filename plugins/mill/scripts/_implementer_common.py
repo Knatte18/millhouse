@@ -766,81 +766,26 @@ _FAILURE_MARKER_PREFIXES = (
 )
 
 
-def _extract_failure_signatures(
-    output: str, *, returncode: int | None = None,
-) -> list[str]:
+def _extract_failure_signatures(output: str) -> list[str]:
     """
     Scan every line of a verify command's combined stdout+stderr for known failure-marker prefixes
     and return all matching lines, in order.
 
-    These raw (unnormalized) lines are the failure signature set used both for the human-facing
-    truncation excerpt (capped to the caller's own [:20] slice) and, once passed through
-    _normalize_failure_signature, for baseline/finalize signature-set comparison.
-    This helper itself is deliberately uncapped -- a failure past the 20th matching line must still
-    be detectable as a signature.
-
-    A verify command that chains a non-test tool ahead of tests (e.g. `go vet ./... && go test
-    ./...`) and fails at the non-test stage produces no line matching any known failure-marker
-    prefix, even though its own exit code is non-zero.
-    When returncode is given, is non-zero, and no marker line was found, this synthesizes exactly
-    one signature line -- `"NONZERO_EXIT: exit <returncode>: <first non-empty line of output,
-    stripped, truncated to 200 characters>"` (or "(no output)" when output has no non-empty line) --
-    so an otherwise-empty signature set still has something comparable for the baseline/finalize
-    subset-diff waiver.
-    The "NONZERO_EXIT:" prefix is deliberately outside _FAILURE_MARKER_PREFIXES, so it reads as
-    synthetic (not a real test-runner marker) wherever it is dumped, e.g. in status.md.
-    No synthesis happens when returncode is None or 0, or when a real marker line was already found.
+    The result is uncapped; callers that render it for humans apply their own [:20] slice.
 
     Args:
         output: Combined stdout+stderr of a verify command.
-        returncode: The verify command's own exit code, when known.
-            Used only to decide whether to synthesize a signature for an otherwise-empty result.
 
     Returns:
-        A list of every line in output that starts with one of the fixed failure-marker prefixes, in
-        the order they appear, plus the synthetic NONZERO_EXIT line described above when applicable.
-        Empty when output has no recognized failure lines and no synthesis applies (never raises).
+        Every line in output that starts with one of the fixed failure-marker prefixes, in the order
+        they appear.
+        Empty when output has no recognized failure lines (never raises).
     """
-    matches = [
+    return [
         line for line in output.splitlines()
         if line.startswith(_FAILURE_MARKER_PREFIXES)
     ]
-    if returncode and not matches:
-        first_line = next(
-            (line.strip() for line in output.splitlines() if line.strip()),
-            "(no output)",
-        )
-        matches.append(f"NONZERO_EXIT: exit {returncode}: {first_line[:200]}")
-    return matches
 
-
-def _normalize_failure_signature(line: str) -> str:
-    """
-    Strip volatile per-run duration substrings from a failure-marker line so a genuinely
-    pre-existing failure string-matches across separate verify runs.
-
-    Applies three regex substitutions in sequence, each matching anywhere in
-    the line (not anchored to line-end), covering every duration shape this
-    codebase's verify commands are known to produce: 1. A parenthetical duration
-        `(<digits>[.<digits>]s)` or `(...ms)` -- covers Go's `--- FAIL: TestFoo (0.00s)` and mill's
-        own run-all.py per-test shape `--- FAIL some_test (1.2s) ---` (identical parenthetical
-        shape, position-independent).
-        2. A trailing tab-separated duration field `\\t<digits>[.<digits>]s` -- covers Go's
-            package-summary shape `FAIL\\tgithub.com/pkg\\t0.123s`.
-        3. An ` in <digits>[.<digits>]s` token -- covers mill's own run-all.py summary shape `FAIL
-            -- 3 of 10 in 45.6s: [...]`.
-
-    A line with no embedded duration (e.g.
-    pytest's `FAILED tests/test_x.py::test_y`) passes through unchanged, since none of the three
-    patterns match it.
-
-    Returns:
-        The line with all matching duration substrings removed.
-    """
-    result = re.sub(r"\(\d+(\.\d+)?m?s\)", "", line)
-    result = re.sub(r"\t\d+(\.\d+)?s\b", "", result)
-    result = re.sub(r"\s+in\s+\d+(\.\d+)?s", "", result)
-    return result
 
 
 def _run_verify_gate(
@@ -861,11 +806,6 @@ def _run_verify_gate(
     (byte count of the omitted prefix, plus up to 20 extracted earlier-failure summary lines when
     any are found) followed by the last 2000 characters;
     under 2000 characters, reason is the stripped output unchanged.
-    The non-zero-exit stuck dict also carries a "signatures" field: every raw (unnormalized)
-    failure-marker line extracted from the FULL, untruncated output via _extract_failure_signatures,
-    uncapped -- this is the set _run_verify_gates uses for baseline/finalize subset-diff comparison.
-    The separate exception-path stuck dict below never gains this field, since it has no subprocess
-    output to extract from.
     On success (rc 0) or when verify_cmd is None, returns None.
 
     On Windows (sys.platform == "win32"), applies an additional gate: if the output contains a
@@ -897,10 +837,8 @@ def _run_verify_gate(
                 plain-string verify format.
 
     Returns:
-        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>, "signatures":
-        <raw failure lines>} on non-zero return (unless win32 benign cleanup), or None on success or
-        when verify_cmd is None.
-        The separate exception-path stuck dict (missing binary, etc.) has no "signatures" key.
+        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on non-zero
+        return (unless win32 benign cleanup), or None on success or when verify_cmd is None.
     """
     if verify_cmd is None:
         return None
@@ -944,7 +882,6 @@ def _run_verify_gate(
                 pass
         if result.returncode != 0:
             output = result.stdout + result.stderr
-            effective_returncode = result.returncode
             # On Windows, check if this is a benign cleanup-race with no test failure
             if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                 return None
@@ -970,17 +907,12 @@ def _run_verify_gate(
                 if retry_result.returncode == 0:
                     return None
                 output = retry_result.stdout + retry_result.stderr
-                effective_returncode = retry_result.returncode
                 if sys.platform == "win32" and _is_benign_windows_cleanup(output):
                     return None
                 retry_marker = (
                     "[retried once after dotnet build-server shutdown; "
                     "still failing] "
                 )
-            # Extract every raw failure-marker line from the FULL, untruncated output -- this is the signature set _run_verify_gates uses (after normalization) for baseline/finalize subset-diff comparison, distinct from the capped excerpt used below for the human-facing reason.
-            signatures = _extract_failure_signatures(
-                output, returncode=effective_returncode,
-            )
             # Truncation enriches the reason with an omitted-content marker plus up to 20 extracted earlier-failure summary lines recovered from the omitted portion (#731) -- without this, an earlier failing package/test's identity can be silently dropped when a later, less- informative failure lands in the kept tail.
             output_stripped = output.strip()
             if len(output_stripped) > 2000:
@@ -998,7 +930,6 @@ def _run_verify_gate(
                 "status": "stuck",
                 "stuck_type": "verify",
                 "reason": retry_marker + reason,
-                "signatures": signatures,
             }
     except Exception as e:
         # On any exception (e.g., missing binary), return stuck dict so caller can distinguish this from a genuine pass
@@ -1017,10 +948,8 @@ def _run_verify_gates(
     module_wide_verify_cmd: str | None,
     *,
     git_root: Path | None = None,
-    module_verify_baseline: str | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
-    batch_verify_baseline: list[str] | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -1034,22 +963,10 @@ def _run_verify_gates(
     this helper.
 
     When module_wide_verify_cmd is None, behavior is identical to calling
-    _run_verify_gate(project_root, verify_cmd) alone -- fully backward-compatible.
+    _run_verify_gate(project_root, verify_cmd) alone.
 
     When the module-wide gate fails its stuck dict reason is prefixed with "[module-wide verify]" so
     the operator can distinguish it from a batch-level verify failure in the stuck report.
-
-    module_verify_baseline is a cached, task-scoped read-only signal for whether the parent branch's
-    own module-wide verify command was already failing before this task started
-    ("pre-existing-failures") or was clean ("clean").
-    This function never computes or persists that value -- it only reads whatever the caller hands
-    it and short-circuits the module-wide gate accordingly:
-      - "pre-existing-failures": skip the module-wide gate entirely (do not run
-          module_wide_verify_cmd at all) and treat it as passed, same as when module_wide_verify_cmd
-          is None.
-      - "clean" or None (not yet computed): run the module-wide gate exactly as it always has.
-          None is the fail-safe-toward-strict default -- until a baseline has actually been
-              computed, the gate behaves as if the baseline were "clean".
 
     Args:
         project_root: Path to the worktree root.
@@ -1060,11 +977,6 @@ def _run_verify_gates(
         git_root: Optional git root directory used as cwd for verify subprocesses.
             Threaded to both _run_verify_gate calls.
             When None, falls back to project_root.
-        module_verify_baseline: Cached "clean" | "pre-existing-failures" | None baseline state for
-            the module-wide gate.
-            When "pre-existing-failures", the module-wide gate is skipped entirely regardless of
-                module_wide_verify_cmd.
-            Defaults to None (run strictly, as before).
         cwd_override: Explicit verify cwd for the batch-level gate, resolved by parse_verify_field.
             Takes precedence over git_root/project_root;
             see _run_verify_gate.
@@ -1072,60 +984,17 @@ def _run_verify_gates(
             parse_verify_field.
             Takes precedence over git_root/project_root;
             see _run_verify_gate.
-        batch_verify_baseline: Cached, task-scoped stored signature set (RAW,
-        unnormalized failure-marker lines) for this batch's own verify
-        command, computed once against the parent branch before this task
-        started.
-            When the batch-level gate fails, and both
-        batch_verify_baseline and the failure's own "signatures" field
-        (from _run_verify_gate's non-zero-exit stuck dict) are non-empty
-        lists, both are normalized via _normalize_failure_signature and the
-        batch is waived (treated as passed) only when the normalized replay
-        signature set is a NON-EMPTY subset of the normalized baseline set.
-        In every other case -- batch_verify_baseline absent/None/empty, or
-        the failure's "signatures" absent/None/empty (covers both an
-        unrecognized failure shape and _run_verify_gate's exception path,
-        which never sets "signatures" at all) -- the gate blocks exactly as
-        it always has, unwaived.
-            An empty signature set is never eligible
-        for waiver: it is mathematically a subset of any set, so treating it
-        as waivable would silently mask genuine new regressions and
-        infrastructure failures alike.
-            Defaults to None (run strictly, as before this parameter existed).
 
     Returns:
-        A stuck dict on the first gate that fails,
-        or None when both pass (or are skipped).
+        A stuck dict from the first gate that fails, or None when both pass (or are not configured).
     """
-    # Run the batch-level gate first; propagate any failure immediately.
     batch_result = _run_verify_gate(
         project_root, verify_cmd, git_root=git_root, cwd_override=cwd_override
     )
     if batch_result is not None:
-        # Subset-diff waiver: a batch-level failure is waived only when the replay's own extracted signatures are a non-empty subset of the stored baseline signature set (both normalized to strip volatile per-run durations first).
-        # Any other case -- no baseline yet,
-        # or an empty/absent replay signature set -- blocks exactly as today, since an empty set is vacuously a subset of anything and must never be treated as waivable.
-        replay_signatures = batch_result.get("signatures")
+        return batch_result
 
-        if batch_verify_baseline and replay_signatures:
-            normalized_replay = {
-                _normalize_failure_signature(line) for line in replay_signatures
-            }
-            normalized_baseline = {
-                _normalize_failure_signature(line) for line in batch_verify_baseline
-            }
-            if normalized_replay.issubset(normalized_baseline):
-                # Waived: fall through to the module-wide gate below exactly as the batch_result is None path already does.
-                batch_result = None
-        if batch_result is not None:
-            return batch_result
-
-    # Batch gate passed (or was skipped); run the module-wide gate if configured.
     if module_wide_verify_cmd is None:
-        return None
-
-    # A cached "pre-existing-failures" baseline means the parent branch was already red before this task started -- skip the module-wide gate for the rest of the task rather than blocking on a failure this batch never caused. "clean" and the not-yet-computed None default both fall through to the strict, unchanged behavior below.
-    if module_verify_baseline == "pre-existing-failures":
         return None
 
     module_result = _run_verify_gate(
@@ -1553,7 +1422,6 @@ def finalize_from_output(
     session_id: str | None = None,
     verify_cmd: str | None = None,
     module_wide_verify_cmd: str | None = None,
-    module_verify_baseline: str | None = None,
     card_ids: set[int] | None = None,
     commit_none_card_ids: set[int] | None = None,
     task_dir: Path | None = None,
@@ -1564,7 +1432,6 @@ def finalize_from_output(
     git_root: Path | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
-    batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
     card_commit_messages: dict[int, str] | None = None,
 ) -> int:
@@ -1583,10 +1450,6 @@ def finalize_from_output(
         session_id: Session identifier threaded into the output envelope.
         verify_cmd: Batch-level verify command to run before emitting success.
         module_wide_verify_cmd: Module-wide verify command run after the batch gate passes.
-        module_verify_baseline: Cached "clean" | "pre-existing-failures" | None baseline state for
-            the module-wide gate, forwarded to _run_verify_gates.
-            When "pre-existing-failures", the module-wide gate is skipped entirely.
-            Defaults to None (run the module-wide gate strictly, as before this parameter existed).
         card_ids: The set of Card numbers declared in the batch file;
             enables the completeness gate.
             cards_done and already_complete (read from the parsed success envelope, not accepted as
@@ -1611,13 +1474,6 @@ def finalize_from_output(
         git_root/project_root; forwarded unchanged to _forward_output.
         module_wide_cwd_override: Explicit module-wide verify cwd resolved by parse_verify_field.
             Takes precedence over git_root/project_root; forwarded unchanged to _forward_output.
-        batch_verify_baseline: Cached, task-scoped stored signature set for
-        this batch's own verify command, forwarded unchanged to
-        _forward_output's _run_verify_gates calls.
-            See _run_verify_gates
-        for the subset-diff waiver rule this enables.
-            Defaults to None
-        (run strictly, as before this parameter existed).
         commit_sha_field_name: JSON key the corrective SHA is attached under on the success
             fallback path; defaults to "commit_sha".
         card_commit_messages: Forwarded unchanged to _forward_output.
@@ -1648,7 +1504,6 @@ def finalize_from_output(
         session_id=session_id,
         verify_cmd=verify_cmd,
         module_wide_verify_cmd=module_wide_verify_cmd,
-        module_verify_baseline=module_verify_baseline,
         card_ids=card_ids,
         commit_none_card_ids=commit_none_card_ids,
         task_dir=task_dir,
@@ -1659,7 +1514,6 @@ def finalize_from_output(
         git_root=git_root,
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
-        batch_verify_baseline=batch_verify_baseline,
         commit_sha_field_name=commit_sha_field_name,
         card_commit_messages=card_commit_messages,
     )
@@ -1704,10 +1558,8 @@ def _fixer_logic_ancestor_override(
     module_wide_verify_cmd: str | None,
     *,
     git_root: Path | None = None,
-    module_verify_baseline: str | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
-    batch_verify_baseline: list[str] | None = None,
     session_id: str | None = None,
 ) -> dict | None:
     """
@@ -1736,8 +1588,8 @@ def _fixer_logic_ancestor_override(
         start_sha: Git SHA recorded before the fixer ran.
         verify_cmd: Batch-level verify command, forwarded to `_run_verify_gates`.
         module_wide_verify_cmd: Module-wide verify command, forwarded to `_run_verify_gates`.
-        git_root, module_verify_baseline, cwd_override, module_wide_cwd_override,
-            batch_verify_baseline: forwarded unchanged to `_run_verify_gates`.
+        git_root, cwd_override, module_wide_cwd_override: forwarded unchanged to
+            `_run_verify_gates`.
         session_id: Session identifier for the overridden envelope;
             falls back to the literal "unknown" when not supplied.
 
@@ -1760,10 +1612,8 @@ def _fixer_logic_ancestor_override(
         verify_cmd,
         module_wide_verify_cmd,
         git_root=git_root,
-        module_verify_baseline=module_verify_baseline,
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
-        batch_verify_baseline=batch_verify_baseline,
     )
     if _gate_result is not None:
         return None
@@ -1786,7 +1636,6 @@ def _forward_output(
     session_id: str | None = None,
     verify_cmd: str | None = None,
     module_wide_verify_cmd: str | None = None,
-    module_verify_baseline: str | None = None,
     card_ids: set[int] | None = None,
     commit_none_card_ids: set[int] | None = None,
     task_dir: Path | None = None,
@@ -1797,7 +1646,6 @@ def _forward_output(
     git_root: Path | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
-    batch_verify_baseline: list[str] | None = None,
     commit_sha_field_name: str = "commit_sha",
     card_commit_messages: dict[int, str] | None = None,
 ) -> int:
@@ -1816,11 +1664,6 @@ def _forward_output(
     a module-wide failure also demotes to stuck/verify with a "[module-wide verify]" prefix in the
     reason.
     When module_wide_verify_cmd is None, behavior is unchanged (single gate, backward-compatible).
-    module_verify_baseline is forwarded to _run_verify_gates unchanged: a cached "clean" |
-    "pre-existing-failures" | None baseline for the module-wide gate.
-    When "pre-existing-failures", the module-wide gate is skipped entirely regardless of
-    module_wide_verify_cmd. "clean" and the default None both run the module-wide gate exactly as
-    before this parameter existed.
     When card_ids is provided, the completeness gate checks that the declared card_ids are all
     accounted for -- either by raw content-commit count (when the parsed success envelope's
     cards_done field is absent or malformed) or by comparing card_ids against a self-reported
@@ -1851,10 +1694,6 @@ def _forward_output(
     module-wide, respectively).
     Both default to None, which preserves the git_root/project_root fallback behavior for today's
     plain-string verify format.
-    batch_verify_baseline is forwarded unchanged to every _run_verify_gates call site below: a
-    cached, task-scoped stored signature set for this batch's own verify command, enabling the
-    subset-diff waiver rule documented on _run_verify_gates.
-    Defaults to None (run strictly, as before this parameter existed).
     commit_sha_field_name is the JSON key the corrective SHA is attached under on the success
     fallback block below (the unconditional `git rev-parse HEAD` correction); defaults to
     "commit_sha", which preserves today's behavior for every existing caller. A non-default value
@@ -1889,10 +1728,8 @@ def _forward_output(
                 verify_cmd,
                 module_wide_verify_cmd,
                 git_root=git_root,
-                module_verify_baseline=module_verify_baseline,
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
-                batch_verify_baseline=batch_verify_baseline,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop (stuck_type:transient) or a no-content stop (stuck_type:logic).
@@ -2071,10 +1908,8 @@ def _forward_output(
                 verify_cmd,
                 module_wide_verify_cmd,
                 git_root=git_root,
-                module_verify_baseline=module_verify_baseline,
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
-                batch_verify_baseline=batch_verify_baseline,
                 session_id=session_id or parsed.get("session_id"),
             )
             if _override is not None:
@@ -2172,10 +2007,8 @@ def _forward_output(
                                         verify_cmd,
                                         module_wide_verify_cmd,
                                         git_root=git_root,
-                                        module_verify_baseline=module_verify_baseline,
                                         cwd_override=cwd_override,
                                         module_wide_cwd_override=module_wide_cwd_override,
-                                        batch_verify_baseline=batch_verify_baseline,
                                     )
                                     if gate_result is not None:
                                         # No parsed success JSON on this inference path -- there is nothing to self-report from, so cards_done is always None here (the absent-field fallback always applies).
@@ -2281,10 +2114,8 @@ def _forward_output(
                         verify_cmd,
                         module_wide_verify_cmd,
                         git_root=git_root,
-                        module_verify_baseline=module_verify_baseline,
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
-                        batch_verify_baseline=batch_verify_baseline,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
@@ -2390,10 +2221,8 @@ def _forward_output(
                         verify_cmd,
                         module_wide_verify_cmd,
                         git_root=git_root,
-                        module_verify_baseline=module_verify_baseline,
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
-                        batch_verify_baseline=batch_verify_baseline,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
