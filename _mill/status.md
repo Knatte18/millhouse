@@ -40,7 +40,9 @@ batches:
     start_sha: ed1858475e27fd61104f6f4b4f894fa8f4138743
     commit_sha: 56c1e5cded5214eb19d06d237e37c640a8456511
   - name: cleanliness-status-exclusion
-    state: pending
+    state: running
+    implementer_session: 9390c8d8-462f-4a0f-8d09-3d3138b22a0a
+    start_sha: 167d652cf646b2f5e64cd9ce201172e5c1ea6559
   - name: implementer-gates
     state: pending
   - name: gate-callers
