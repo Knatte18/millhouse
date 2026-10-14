@@ -19,9 +19,6 @@ from _status import (
     append_inferred_success_log,
     append_phase,
     append_recovery_log,
-    clear_module_verify_baseline,
-    get_module_verify_baseline,
-    get_module_verify_baseline_signatures,
     init_batches,
     phase_entry_timestamp,
     read,
@@ -39,8 +36,6 @@ from _status import (
     set_batch_field,
     set_batch_fields,
     set_blocked,
-    set_module_verify_baseline,
-    set_module_verify_baseline_signatures,
     set_parent_branch,
     update_field,
 )
@@ -463,35 +458,54 @@ def main() -> int:
             )
             print("PASS: _serialise_batches leaves int review_round unquoted")
 
-            failures = ["--- FAIL: TestFoo", "FAILED tests/test_x.py::test_y"]
-            set_batch_field(sp, "foundation", "verify_baseline_failures", failures)
-            batches_list = read_batches(sp)
-            entry_list = next(b for b in batches_list if b["name"] == "foundation")
-            assert entry_list["verify_baseline_failures"] == failures, (
-                f"verify_baseline_failures not round-tripped: {entry_list['verify_baseline_failures']!r}"
-            )
-            # Setting a list-valued field must not disturb other fields already set on the same entry earlier in this test.
-            assert entry_list["state"] == "running", (
-                f"unrelated field 'state' corrupted by list-valued write: {entry_list['state']!r}"
-            )
-            assert entry_list["blocked_reason"] == "missing key: foo", (
-                f"unrelated field 'blocked_reason' corrupted by list-valued write: "
-                f"{entry_list['blocked_reason']!r}"
-            )
-            print("PASS: set_batch_field round-trips verify_baseline_failures without corrupting siblings")
+            # The removed baseline key is rejected by both setters.
+            try:
+                set_batch_field(sp, "foundation", "verify_baseline_failures", ["x"])
+            except ValueError as exc:
+                assert "Unknown batch field" in str(exc), f"unexpected message: {exc}"
+                print("PASS: set_batch_field rejects removed verify_baseline_failures key")
+            else:
+                raise AssertionError("set_batch_field accepted verify_baseline_failures")
 
-            set_batch_field(sp, "foundation", "verify_baseline_failures", [])
-            batches_empty = read_batches(sp)
-            entry_empty = next(b for b in batches_empty if b["name"] == "foundation")
-            assert entry_empty["verify_baseline_failures"] == [], (
-                "empty verify_baseline_failures list should round-trip as [] (clean baseline), "
-                f"not be dropped: {entry_empty!r}"
+            try:
+                set_batch_fields(sp, "foundation", {"verify_baseline_failures": []})
+            except ValueError as exc:
+                assert "Unknown batch field" in str(exc), f"unexpected message: {exc}"
+                print("PASS: set_batch_fields rejects removed verify_baseline_failures key")
+            else:
+                raise AssertionError("set_batch_fields accepted verify_baseline_failures")
+
+            # A legacy key already on disk is read back, then dropped by the next batch write.
+            legacy_text = sp.read_text(encoding="utf-8")
+            legacy_anchor = "    state: running\n"
+            assert legacy_anchor in legacy_text, "fixture lacks an unquoted running state row"
+            sp.write_text(
+                legacy_text.replace(
+                    legacy_anchor,
+                    legacy_anchor + '    verify_baseline_failures: ["--- FAIL: TestFoo"]\n',
+                    1,
+                ),
+                encoding="utf-8",
             )
-            assert "verify_baseline_failures" in entry_empty, (
-                "empty verify_baseline_failures must remain present, distinguishing "
-                "'clean baseline' from 'field never computed'"
+            legacy_entry = next(b for b in read_batches(sp) if b["name"] == "foundation")
+            assert legacy_entry["verify_baseline_failures"] == ["--- FAIL: TestFoo"], (
+                f"legacy key not read back: {legacy_entry!r}"
             )
-            print("PASS: set_batch_field round-trips empty verify_baseline_failures list, not dropped")
+            set_batch_field(sp, "foundation", "review_round", 1)
+            rewritten_entry = next(b for b in read_batches(sp) if b["name"] == "foundation")
+            assert "verify_baseline_failures" not in rewritten_entry, (
+                f"legacy key survived a batch write: {rewritten_entry!r}"
+            )
+            assert rewritten_entry["state"] == "running", (
+                f"state corrupted by batch write: {rewritten_entry['state']!r}"
+            )
+            assert rewritten_entry["review_round"] == 1, (
+                f"review_round not written: {rewritten_entry['review_round']!r}"
+            )
+            assert rewritten_entry["blocked_reason"] == "missing key: foo", (
+                f"blocked_reason corrupted by batch write: {rewritten_entry['blocked_reason']!r}"
+            )
+            print("PASS: legacy verify_baseline_failures is read, then dropped on the next batch write")
 
             before_removal = read_batches(sp)
             foundation_entry = next(b for b in before_removal if b["name"] == "foundation")
@@ -990,168 +1004,6 @@ def main() -> int:
             ts_latest_none = phase_entry_timestamp(sp, "nonexistent-phase", latest=True)
             assert ts_latest_none is None, f"expected None for zero matches, got {ts_latest_none!r}"
             print("PASS: phase_entry_timestamp latest=True returns None when no match")
-
-        # --- module_verify_baseline tests ---
-        # Test 1: get_module_verify_baseline returns None on a fresh file.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            value = get_module_verify_baseline(sp)
-            assert value is None, f"expected None on fresh file, got {value!r}"
-            print("PASS: get_module_verify_baseline returns None on a fresh file")
-
-        # Test 2: set_module_verify_baseline("clean") inserts the row;
-        # a subsequent get_module_verify_baseline returns "clean".
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            set_module_verify_baseline(sp, "clean")
-            value = get_module_verify_baseline(sp)
-            assert value == "clean", f"expected 'clean', got {value!r}"
-            print("PASS: set_module_verify_baseline('clean') inserts the row")
-
-            # Test 3: a second set() with a different value rewrites the existing row in place -- exactly one module_verify_baseline: line survives, not a duplicate.
-            set_module_verify_baseline(sp, "pre-existing-failures")
-            value = get_module_verify_baseline(sp)
-            assert value == "pre-existing-failures", f"expected 'pre-existing-failures', got {value!r}"
-            raw = sp.read_text(encoding="utf-8")
-            occurrences = raw.count("module_verify_baseline:")
-            assert occurrences == 1, f"expected exactly one row, found {occurrences}"
-            print("PASS: set_module_verify_baseline rewrites the existing row in place")
-
-        # Test 4: set_module_verify_baseline rejects an unknown value.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            try:
-                set_module_verify_baseline(sp, "bogus")
-                assert False, "expected ValueError"
-            except ValueError:
-                pass
-            print("PASS: set_module_verify_baseline rejects an unknown value")
-
-        # Test 5: clear_module_verify_baseline after a prior set("clean") removes the row;
-        # get_module_verify_baseline then returns None.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            set_module_verify_baseline(sp, "clean")
-            clear_module_verify_baseline(sp)
-            value = get_module_verify_baseline(sp)
-            assert value is None, f"expected None after clear, got {value!r}"
-            print("PASS: clear_module_verify_baseline removes a previously-set row")
-
-        # Test 6: clear_module_verify_baseline is a no-op when the field was never set -- does not raise, file content unchanged.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            before = sp.read_text(encoding="utf-8")
-            clear_module_verify_baseline(sp)
-            after = sp.read_text(encoding="utf-8")
-            assert after == before, "clear_module_verify_baseline should be a no-op when field is absent"
-            print("PASS: clear_module_verify_baseline is a no-op when the field was never set")
-
-        # Test 7: get_module_verify_baseline_signatures returns None on a fresh file.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            value = get_module_verify_baseline_signatures(sp)
-            assert value is None, f"expected None on fresh file, got {value!r}"
-            print("PASS: get_module_verify_baseline_signatures returns None on a fresh file")
-
-        # Test 8: set_module_verify_baseline_signatures inserts the row;
-        # a subsequent get_module_verify_baseline_signatures round-trips the same value.
-        # An empty list survives the round-trip as a present-but-empty field, distinct from absence.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            set_module_verify_baseline_signatures(sp, ["sig-a", "sig-b"])
-            value = get_module_verify_baseline_signatures(sp)
-            assert value == ["sig-a", "sig-b"], f"expected ['sig-a', 'sig-b'], got {value!r}"
-            print("PASS: set_module_verify_baseline_signatures inserts the row")
-
-            set_module_verify_baseline_signatures(sp, [])
-            value = get_module_verify_baseline_signatures(sp)
-            assert value == [], f"expected [] (present, not None), got {value!r}"
-            print("PASS: set_module_verify_baseline_signatures([]) survives round-trip as present-but-empty")
-
-            # Test 9: a second set() with a different value rewrites the existing row in place --
-            # exactly one module_verify_baseline_signatures: line survives, not a duplicate.
-            set_module_verify_baseline_signatures(sp, ["sig-c"])
-            value = get_module_verify_baseline_signatures(sp)
-            assert value == ["sig-c"], f"expected ['sig-c'], got {value!r}"
-            raw = sp.read_text(encoding="utf-8")
-            occurrences = raw.count("module_verify_baseline_signatures:")
-            assert occurrences == 1, f"expected exactly one row, found {occurrences}"
-            print("PASS: set_module_verify_baseline_signatures rewrites the existing row in place")
-
-        # Test 10: a signature list long enough that a naive yaml.safe_dump without a width
-        # override would wrap it across multiple physical lines must instead write as exactly one
-        # physical line -- this is the regression guard for the line-stranding bug this would
-        # otherwise cause on every later _status read.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            long_signatures = [f"sha256:{'a' * 60}-{i}" for i in range(10)]
-            set_module_verify_baseline_signatures(sp, long_signatures)
-            raw = sp.read_text(encoding="utf-8")
-            matching_lines = [
-                line for line in raw.splitlines() if line.startswith("module_verify_baseline_signatures:")
-            ]
-            assert len(matching_lines) == 1, (
-                f"expected the row to stay on exactly one physical line, found {len(matching_lines)}"
-            )
-            value = get_module_verify_baseline_signatures(sp)
-            assert value == long_signatures, f"expected round-trip to preserve the list, got {value!r}"
-            print("PASS: set_module_verify_baseline_signatures writes a long list as one physical line")
-
-            # A subsequent set() then clear_module_verify_baseline() then read() round-trip on that
-            # value leaves status.md fully parseable.
-            clear_module_verify_baseline(sp)
-            parsed = read(sp)
-            assert parsed.get("module_verify_baseline_signatures") is None
-            print("PASS: clear_module_verify_baseline after a long-signature-list set leaves status.md parseable")
-
-        # Test 11: clear_module_verify_baseline now also clears module_verify_baseline_signatures
-        # in the same call -- assert both fields are absent after one call that previously had both set.
-        with tempfile.TemporaryDirectory() as tmp:
-            sp = Path(tmp) / "status.md"
-            initial = render_initial(
-                "Task", "Desc", "2026-05-28T20:00:00Z", "main", slug="t-slug", branch="hanf/t-slug"
-            )
-            sp.write_text(initial, encoding="utf-8")
-            set_module_verify_baseline(sp, "clean")
-            set_module_verify_baseline_signatures(sp, ["sig-a"])
-            clear_module_verify_baseline(sp)
-            assert get_module_verify_baseline(sp) is None, "module_verify_baseline should be cleared"
-            assert get_module_verify_baseline_signatures(sp) is None, (
-                "module_verify_baseline_signatures should be cleared in the same call"
-            )
-            print("PASS: clear_module_verify_baseline clears both fields together")
 
         # --- append_recovery_log tests ---
         ts_rl = "2026-07-29T08:00:00Z"
@@ -1744,36 +1596,6 @@ def main() -> int:
 
             assert read_parent_thread(Path(tmp) / "missing.md") is None
             print("PASS: read_parent_thread returns None for a missing file")
-
-        # --- baseline row anchoring ---
-        anchor_cases = [
-            ("parent_branch: main\nparent_thread: t\n", "parent_thread:"),
-            ("parent_branch: main\n", "parent_branch:"),
-            ("parent: main\n", "parent:"),
-        ]
-        setters = [
-            (set_module_verify_baseline, "clean", "module_verify_baseline:"),
-            (set_module_verify_baseline_signatures, ["sig"], "module_verify_baseline_signatures:"),
-        ]
-        for setter, setter_value, new_key in setters:
-            with tempfile.TemporaryDirectory() as tmp:
-                sp = Path(tmp) / "status.md"
-                for rows, anchor_prefix in anchor_cases:
-                    sp.write_text(_yaml_status(rows), encoding="utf-8")
-                    setter(sp, setter_value)
-                    file_lines = sp.read_text(encoding="utf-8").splitlines()
-                    new_idx = next(i for i, ln in enumerate(file_lines) if ln.startswith(new_key))
-                    assert file_lines[new_idx - 1].startswith(anchor_prefix), (
-                        f"{setter.__name__}: row landed after {file_lines[new_idx - 1]!r}, "
-                        f"expected after {anchor_prefix!r}"
-                    )
-                sp.write_text(_yaml_status(""), encoding="utf-8")
-                try:
-                    setter(sp, setter_value)
-                    assert False, "expected ValueError"
-                except ValueError:
-                    pass
-            print(f"PASS: {setter.__name__} anchors after parent_thread/parent_branch/legacy parent")
 
         print("All _status unit tests passed.")
         return 0
