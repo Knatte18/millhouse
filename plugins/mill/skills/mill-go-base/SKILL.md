@@ -190,16 +190,6 @@ do not branch on which upstream skill "should" logically run next.
   - Read `timeout_minutes = (cfg.get("pipeline") or {}).get("entry_wait_timeout_minutes", 240)` and compute `giveup_s = timeout_minutes * 60`.
   - Build the command: `cmd = _phase_wait.build_wait_command(status_path, "planned", 10, giveup_s)`.
   - State one sentence to the user: waiting for the upstream mill-plan run to reach `phase: planned`.
-  - **Speculative baseline launch.** **Restart/orphan reconciliation:** this makes an earlier speculative launch discoverable across a `/mill-go` restart — the builder lock's documented stale-self-lock reclaim means a restart can re-enter this same wait with no memory of an in-flight detached `millpy-bg` process from the interrupted session, and persisting the log path in a plain local file on the same worktree filesystem, not only in a Builder variable, is what closes that race, with no git write of any kind and therefore no possibility of racing a concurrently active mill-plan session's own commits to the same worktree.
-    - Check whether `<worktree_root>/.millhouse/baseline-preflight-log.txt` exists on disk (a plain `Path.exists()` check — no `_status.py` involvement, no git operation of any kind).
-      - If it exists (a prior session, interrupted and restarted, already launched a job): do NOT launch a second job. Read its contents (the log path) and run the existing `_bg.check_bg_status` liveness check (the same helper "0.5. Baseline pre-flight" already uses) against that log path. Branch on the result: `"running"` — take no further action here (the job is still in flight; "0.5. Baseline pre-flight" will find and poll it when reached). `"exit"` — leave the file as-is (Edit B's "0.5. Baseline pre-flight" step consumes and deletes it). `"dead"` — delete the file (`Path.unlink(missing_ok=True)`), then proceed to the launch step below as if no file had been present (mirrors "0.5. Baseline pre-flight"'s own existing `"dead"` handling: log the reason, don't halt, don't leave a stale pointer).
-      - If it does not exist: check whether `<plan_dir>/00-overview.md` exists on disk with `approved: true` in its frontmatter (the same extraction pattern the rest of this file already uses for that field). If both hold, launch the job:
-        ```bash
-        PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-            --slug baseline-preflight-early -- \
-            "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" --stage baseline
-        ```
-        (fire-and-forget — do not poll it here), then immediately write the returned log path to `<worktree_root>/.millhouse/baseline-preflight-log.txt` (create the `.millhouse/` directory first if absent, mirroring `_builder_lock.acquire`'s `mill_dir.mkdir(parents=True, exist_ok=True)`) — a plain filesystem write, no `git add`, no commit, no push. This file is never `git add`ed or committed by either this step or "0.5. Baseline pre-flight" below — it lives entirely outside git, matching the existing `.millhouse/builder.lock` precedent (see `_builder_lock.py`'s `_lock_path`/`read`/`release` pattern), though this state has no staleness-window or busy/held-by concept — it is a single optional string, not a mutex. If the overview isn't present/approved yet (a genuinely fresh mill-plan run still in progress), do nothing — proceed straight to the `Call the Monitor tool` bullet below unchanged.
   - Record `wait_started_epoch` (the output of `date +%s` in the Bash tool) now, before arming the wait for the first time. Retain it in a local Builder variable for the duration of this wait — it is never reset by the unexpected-expiry re-arm below, only read by it to compute the remaining budget.
   - Call the `Monitor` tool with `command=cmd`, `timeout_ms: 1800000` (the tool's effective cap — no `Monitor` build holds a wait open indefinitely), `description` naming the slug and the target phase (e.g. "waiting for phase: planned (mill-plan handoff) for `<slug>`"), matching the existing "Waiting is never a decision point" convention already documented for Agent-mode dispatch elsewhere in this file: state what is being waited for, then wait, with no `AskUserQuestion` or free-text prompt in between.
   - **Record the `task_id` the `Monitor` tool call returns** in a local Builder variable and retain it for the duration of this wait (mirrors the existing "record the `agentId`" step in "## Agent-mode dispatch" above).
@@ -553,11 +543,10 @@ if not _client.health_check(wiki_path):
 ### 0.55. Done-gate baseline pre-flight (first batch of the task only)
 
 Immediately after "0.
-Wiki health-check" and before "0.5.
-Baseline pre-flight," for the task's **FIRST batch only** (not on every batch — only once per task run, same guard shape as "0.5.
-Baseline pre-flight" below), read `(cfg.get("pipeline") or {}).get("done_gate_baseline_preflight", False)` and `(cfg.get("pipeline") or {}).get("done_gate")`.
-If the preflight flag is falsy OR `done_gate` is `None`/absent, skip this step entirely — log nothing, proceed straight to "0.5.
-Baseline pre-flight."
+Wiki health-check" and before "1.
+Implement," for the task's **FIRST batch only** (not on every batch — only once per task run), read `(cfg.get("pipeline") or {}).get("done_gate_baseline_preflight", False)` and `(cfg.get("pipeline") or {}).get("done_gate")`.
+If the preflight flag is falsy OR `done_gate` is `None`/absent, skip this step entirely — log nothing, proceed straight to "1.
+Implement."
 Otherwise, invoke `_done_gate.run_preflight` from `git_root` (not hub dir — identical cwd to the "0.
 Pre-done gate" block in `plugins/mill/skills/mill-go-base/handoff.md`):
 
@@ -588,39 +577,6 @@ Pre-done gate" gate in `plugins/mill/skills/mill-go-base/handoff.md`, which DOES
 This pre-flight's only job is to get a self-capturing regression/snapshot suite's baseline captured from the right (pre-implementation) commit before any batch touches the tree — it fulfills that job even when `run_preflight` itself reports `blocked` (a captured "blocked" baseline is still a validly-timed baseline for the comparison made at Handoff time).
 The "0.
 Pre-done gate" block in `plugins/mill/skills/mill-go-base/handoff.md` is unchanged and still halts on `blocked` there.
-Skip this step entirely for every batch after the first.
-
-### 0.5. Baseline pre-flight (first batch of the task only)
-
-**First check: a speculative early launch from the entry-gate wait.** Before doing anything else in this section, check whether `<worktree_root>/.millhouse/baseline-preflight-log.txt` exists (the "Entry-gate wait for upstream mill-plan" section's speculative launch, above, writes this file when it fires; this section is what consumes and deletes it).
-
-- If it exists: read the log path from its contents, then check `_bg.check_bg_status` against it. `"exit"` — run `grep '^{' <log-path>` to extract the JSON summary line whose `substage` key reads `"module_wide"` exactly as this section's existing polling logic below already does, treat it as this batch's module-wide result, then delete the file (`Path.unlink(missing_ok=True)`) — this is only the module-wide half of the computation, not the complete baseline computation for this batch: the rest of this section below still invokes `--stage baseline` again afterward, where the module-wide half no-ops as `"cached"` (it already ran, via this speculative launch) and the per-batch half runs for real. `"running"` — poll that same log exactly as this section's existing polling loop below already does (do not launch a fresh job), then once `[mill-bg] EXIT` appears follow the same `"exit"` handling above (extract, delete the file).
-- If it does not exist (no early launch happened — the overview wasn't approved yet at entry-gate-wait time, or this is a run where `pipeline.entry_wait` is `False` and the entry-gate wait's speculative-launch bullet never executed): fall back to launching the job exactly as this section documents below, completely unchanged.
-
-Immediately before "### 1.
-Implement" fires for the task's **FIRST batch only** (not on every batch — only once per task run), invoke the task-scoped module-wide verify baseline computation:
-
-> **Before invoking `millpy-bg`**: verify `pwd` in the Bash terminal matches the task worktree. If `millpy-bg` rejects cwd with the parent-worktree error (`mill-bg: cwd appears to be a non-task worktree`), halt and instruct the operator to switch to the task-worktree terminal.
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-bg.py" \
-    --slug baseline-preflight -- \
-    "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-implement.py" --stage baseline
-```
-
-This returns immediately with `pid=<N> log=<abs-path>`. Poll `cat <log-path>` until the line `[mill-bg] EXIT` appears, but on each iteration also run a liveness check:
-
-```bash
-PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "import _bg, json; from pathlib import Path; print(json.dumps(_bg.check_bg_status(Path('<log-path>'))))"
-```
-
-Parse the JSON result as `(status, pid_or_code)` and branch: `"running"` -> keep polling; `"exit"` -> proceed; `"dead"` -> log the reason (ASCII-only) and continue to batch 1 anyway — do NOT halt here, matching this section's own "never blocks the task" principle stated below (a failed/skipped computation just means the per-batch baseline gate falls back to strict behavior, which is safe). Once `[mill-bg] EXIT` appears, run `grep '^{' <log-path>` to extract the JSON summary line(s) — a single `--stage baseline` invocation may print two JSON lines (one per half), not always exactly one.
-
-(no `batch_name` positional argument — `--stage baseline` is task-scoped, not batch-scoped.) From the extracted line(s), select each by its `substage` key rather than positionally: the module-wide line reads `{"stage": "baseline", "substage": "module_wide", "result": "computed"|"cached"|"error"|"skipped", "value": ...}`. This call is **idempotent and safe to invoke unconditionally even on a resumed/restarted mill-go run**: the `--stage baseline` handler itself checks whether `module_verify_baseline` is already cached in status.md and no-ops (`{"stage": "baseline", "substage": "module_wide", "result": "cached", "value": ...}`) if so. On `{"result": "error", ...}` or `{"result": "skipped", ...}` (no module-wide verify configured for this task), log the reason and continue to batch 1 anyway — this pre-flight step never blocks the task; its only job is to populate the cache before batch 1's implementer can touch dependency manifests. A failed/skipped computation just means the module-wide gate falls back to strict behavior, which is safe.
-
-The same `--stage baseline` invocation also drives the per-batch half, which prints its own line selected by `substage: "per_batch"`: `{"stage": "baseline", "substage": "per_batch", "result": "computed"|"cached"|"deferred"|"skipped"|"error", "value": ...}`. `"computed"` — this run captured at least one batch's `verify_baseline_failures` fresh (`value` is the count captured). `"cached"` — every batch's `verify_baseline_failures` key was already present; nothing to do. `"deferred"` — `## Batches` hasn't been seeded into status.md yet, so there is nothing to enumerate yet. `"skipped"` — the same preflight-precondition guard that can skip the module-wide half skipped this half too. `"error"` — an unexpected failure prevented the capture from completing. None of these outcomes blocks batch 1 from proceeding — log the result and continue.
-
-Why the module-wide half must still run before batch 1 specifically, eagerly and once: this ordering guarantees no implementer session has touched dependency manifests yet, so the eager capture's reused worktree state is still guaranteed to match the parent branch tip at the moment it runs.
 Skip this step entirely for every batch after the first.
 
 ### 1. Implement
