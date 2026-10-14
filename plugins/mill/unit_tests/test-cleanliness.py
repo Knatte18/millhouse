@@ -17,6 +17,7 @@ from _cleanliness import (  # noqa: E402
     compute_new_dirt,
     compute_scope_violations,
     compute_terminal_dirt,
+    is_status_md_path,
     revert_out_of_scope_drift,
     _filter_to_task_scope,
     _parent_diff_names,
@@ -386,11 +387,11 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch(
                 "_cleanliness._pygit2_util.status_porcelain",
-                return_value=[" M _mill/status.md", " M other.txt"]
+                return_value=[" M _mill/discussion.md", " M other.txt"]
             ):
                 with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
                     result = compute_terminal_dirt(Path(tmp), Path("_mill"), "main")
-            assert result == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {result!r}"
+            assert result == [" M _mill/discussion.md"], f"expected [' M _mill/discussion.md'], got {result!r}"
         print("PASS: compute_terminal_dirt: in-scope file under task_dir returned")
     except AssertionError as exc:
         failures.append(f"FAIL: compute_terminal_dirt in-scope under task_dir: {exc}")
@@ -418,11 +419,11 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch(
                 "_cleanliness._pygit2_util.status_porcelain",
-                return_value=[" M _mill/status.md", " M other_task/_mill/status.md"]
+                return_value=[" M _mill/discussion.md", " M other_task/_mill/discussion.md"]
             ):
                 with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
                     result = compute_terminal_dirt(Path(tmp), Path("_mill"), "main")
-            assert result == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {result!r}"
+            assert result == [" M _mill/discussion.md"], f"expected [' M _mill/discussion.md'], got {result!r}"
         print("PASS: compute_terminal_dirt: out-of-scope another task's _mill/ ignored")
     except AssertionError as exc:
         failures.append(f"FAIL: compute_terminal_dirt out-of-scope: {exc}")
@@ -437,12 +438,12 @@ def main() -> int:
             abs_task_dir = worktree / "_mill"
             with unittest.mock.patch(
                 "_cleanliness._pygit2_util.status_porcelain",
-                return_value=[" M _mill/status.md", " M other.txt"]
+                return_value=[" M _mill/discussion.md", " M other.txt"]
             ):
                 with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
                     result = compute_terminal_dirt(worktree, abs_task_dir, "main")
-            assert result == [" M _mill/status.md"], (
-                f"expected [' M _mill/status.md'] with absolute task_dir, got {result!r}"
+            assert result == [" M _mill/discussion.md"], (
+                f"expected [' M _mill/discussion.md'] with absolute task_dir, got {result!r}"
             )
         print("PASS: compute_terminal_dirt: absolute task_dir relativized correctly")
     except AssertionError as exc:
@@ -513,14 +514,14 @@ def main() -> int:
         with tempfile.TemporaryDirectory() as tmp:
             with unittest.mock.patch(
                 "_cleanliness._pygit2_util.status_porcelain",
-                return_value=[" M _mill/status.md", " M out_of_scope.txt"]
+                return_value=[" M _mill/discussion.md", " M out_of_scope.txt"]
             ):
                 with unittest.mock.patch("_cleanliness._parent_diff_names", return_value=[]):
                     with unittest.mock.patch("_cleanliness._subprocess_util.run") as mock_run:
                         mock_run.return_value = unittest.mock.Mock(returncode=0)
                         reverted, remaining = revert_out_of_scope_drift(Path(tmp), Path("_mill"), "main")
             assert reverted == ["out_of_scope.txt"], f"expected ['out_of_scope.txt'], got {reverted!r}"
-            assert remaining == [" M _mill/status.md"], f"expected [' M _mill/status.md'], got {remaining!r}"
+            assert remaining == [" M _mill/discussion.md"], f"expected [' M _mill/discussion.md'], got {remaining!r}"
         print("PASS: revert_out_of_scope_drift: mixed in-scope + out-of-scope -> out-of-scope reverted")
     except AssertionError as exc:
         failures.append(f"FAIL: revert_out_of_scope_drift mixed: {exc}")
@@ -1108,6 +1109,61 @@ def main() -> int:
         failures.append(f"FAIL: CRLF-2 compute_new_dirt CR-only delta: {exc}")
     except Exception as exc:
         failures.append(f"FAIL: CRLF-2 compute_new_dirt CR-only delta ({type(exc).__name__}): {exc}")
+
+    # SMD-1. is_status_md_path matches _mill/status.md at any depth and nothing look-alike.
+    try:
+        for good in ("_mill/status.md", "sub/hub/_mill/status.md"):
+            assert is_status_md_path(good), f"expected True for {good!r}"
+        for bad in ("_mill/status.md.bak", "x_mill/status.md", "_mill/plan/00-overview.md"):
+            assert not is_status_md_path(bad), f"expected False for {bad!r}"
+        print("PASS: SMD-1 - is_status_md_path matches only _mill/status.md")
+    except AssertionError as exc:
+        failures.append(f"FAIL: SMD-1 is_status_md_path: {exc}")
+
+    # SMD-2/3. Dirty status.md alone is ignored by all three dirt helpers;
+    # next to a dirty in-scope source file, only the source file is reported.
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+
+            def git(*args: str) -> None:
+                subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+            git("init")
+            git("config", "user.email", "t@example.com")
+            git("config", "user.name", "t")
+            (repo / "_mill").mkdir()
+            (repo / "_mill" / "status.md").write_text("base\n", encoding="utf-8")
+            (repo / "src.py").write_text("base\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-m", "base")
+            snapshot_path = repo / ".scratch-snapshot.txt"
+            snapshot_path.write_text("", encoding="utf-8")
+
+            (repo / "_mill" / "status.md").write_text("dirty\n", encoding="utf-8")
+            assert compute_new_dirt(repo, snapshot_path) == []
+            assert compute_terminal_dirt(repo, Path("_mill"), "HEAD") == []
+            assert revert_out_of_scope_drift(repo, Path("_mill"), "HEAD") == ([], [])
+            assert (repo / "_mill" / "status.md").read_text(encoding="utf-8") == "dirty\n"
+
+            (repo / "src.py").write_text("dirty\n", encoding="utf-8")
+            assert compute_new_dirt(repo, snapshot_path) == [" M src.py"]
+            # src.py is outside task_dir and not task-owned: drift is reverted, status.md untouched.
+            assert revert_out_of_scope_drift(repo, Path("_mill"), "HEAD") == (["src.py"], [])
+            assert (repo / "_mill" / "status.md").read_text(encoding="utf-8") == "dirty\n"
+
+            # Task-owned src.py (changed by a task commit vs the parent) is reported by terminal dirt.
+            git("branch", "parent")
+            (repo / "src.py").write_text("task\n", encoding="utf-8")
+            git("commit", "-am", "task change")
+            (repo / "src.py").write_text("dirty again\n", encoding="utf-8")
+            assert compute_terminal_dirt(repo, Path("_mill"), "parent") == [" M src.py"]
+            assert revert_out_of_scope_drift(repo, Path("_mill"), "parent") == ([], [" M src.py"])
+        print("PASS: SMD-2/3 - status.md dirt excluded from all three helpers")
+    except AssertionError as exc:
+        failures.append(f"FAIL: SMD-2/3 status.md exclusion: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL: SMD-2/3 status.md exclusion ({type(exc).__name__}): {exc}")
 
     if failures:
         for msg in failures:
