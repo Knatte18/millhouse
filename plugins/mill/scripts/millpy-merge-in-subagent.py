@@ -43,7 +43,8 @@ import _paths
 import _render
 import _review_common
 import _reviewers
-from _implementer_common import _extract_status_json, _forward_output, _posix_shell_run_args, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
+from _implementer_common import _extract_status_json, _forward_output, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
+from _verify_run import _posix_shell_run_args
 
 
 # DU-conflict resolution needs branch intent; the resolver had no signal before #314.

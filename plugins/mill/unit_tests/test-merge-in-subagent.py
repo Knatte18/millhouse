@@ -527,47 +527,6 @@ def main() -> int:
             print(f"FAIL: Case E setup error ({exc})", file=sys.stderr)
             errors += 1
 
-    # Test _posix_shell_run_args: Windows with bash available
-    try:
-        with unittest.mock.patch("_implementer_common.os") as mock_os:
-            with unittest.mock.patch("_implementer_common.shutil") as mock_shutil:
-                mock_os.name = "nt"
-                mock_shutil.which.return_value = "/usr/bin/bash"
-                run_args, run_kwargs = _implementer_common._posix_shell_run_args("PYTHONPATH= uv run foo")
-                assert run_args == ["/usr/bin/bash", "-c", "PYTHONPATH= uv run foo"], \
-                    f"expected bash args, got {run_args}"
-                assert run_kwargs == {}, f"expected empty kwargs, got {run_kwargs}"
-                print("PASS: posix-shell-args-windows-with-bash")
-    except Exception as exc:
-        print(f"FAIL: posix-shell-args-windows-with-bash ({exc})", file=sys.stderr)
-        errors += 1
-
-    # Test _posix_shell_run_args: Windows without bash
-    try:
-        with unittest.mock.patch("_implementer_common.os") as mock_os:
-            with unittest.mock.patch("_implementer_common.shutil") as mock_shutil:
-                mock_os.name = "nt"
-                mock_shutil.which.return_value = None
-                run_args, run_kwargs = _implementer_common._posix_shell_run_args("PYTHONPATH= uv run foo")
-                assert run_args == "PYTHONPATH= uv run foo", f"expected cmd string, got {run_args}"
-                assert run_kwargs == {"shell": True}, f"expected shell=True kwargs, got {run_kwargs}"
-                print("PASS: posix-shell-args-windows-no-bash")
-    except Exception as exc:
-        print(f"FAIL: posix-shell-args-windows-no-bash ({exc})", file=sys.stderr)
-        errors += 1
-
-    # Test _posix_shell_run_args: POSIX (not Windows)
-    try:
-        with unittest.mock.patch("_implementer_common.os") as mock_os:
-            mock_os.name = "posix"
-            run_args, run_kwargs = _implementer_common._posix_shell_run_args("PYTHONPATH= uv run foo")
-            assert run_args == "PYTHONPATH= uv run foo", f"expected cmd string, got {run_args}"
-            assert run_kwargs == {"shell": True}, f"expected shell=True kwargs, got {run_kwargs}"
-            print("PASS: posix-shell-args-posix")
-    except Exception as exc:
-        print(f"FAIL: posix-shell-args-posix ({exc})", file=sys.stderr)
-        errors += 1
-
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

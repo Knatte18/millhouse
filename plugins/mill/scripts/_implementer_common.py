@@ -13,6 +13,7 @@ import _pygit2_util
 import _status
 import _subprocess_util
 import _timestamp
+from _verify_run import _posix_shell_run_args
 from pathlib import Path
 
 
@@ -623,32 +624,6 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     )
 
     return has_cleanup_signature and not has_failure_marker
-
-
-def _posix_shell_run_args(cmd: str) -> tuple:
-    """
-    Build subprocess.run args to route POSIX shell commands through bash on Windows.
-
-    On Windows (os.name == "nt"), when bash is available, returns args to invoke bash -c explicitly.
-    On other platforms or when bash is unavailable, returns the command string with shell=True so
-    the native shell processes it.
-
-    POSIX verify commands often start with "PYTHONPATH= " (env-prefix syntax) that cmd.exe cannot
-    parse.
-    Running through bash honours this syntax cross-platform.
-
-    Args:
-        cmd: The command string (e.g., "PYTHONPATH= pytest tests/ -q").
-
-    Returns:
-        A tuple (run_args, run_kwargs) where run_args is either a list ([bash, "-c", cmd]) or a
-        string (cmd), and run_kwargs is either {} or {"shell": True} to be unpacked into
-        subprocess.run.
-    """
-    bash = shutil.which("bash") if os.name == "nt" else None
-    if bash:
-        return [bash, "-c", cmd], {}
-    return cmd, {"shell": True}
 
 
 def _is_formatter_drift_only(project_root: Path) -> bool:
