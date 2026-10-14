@@ -11,6 +11,17 @@ import _subprocess_util
 _JUNCTION_SKIP_SET = frozenset({".active", ".portals", ".wiki", ".others"})
 
 
+def is_status_md_path(path: str) -> bool:
+    """
+    Return True when a repo-root- or hub-relative path is `_mill/status.md` at any depth.
+
+    status.md is orchestrator-owned;
+    verify runs append `## Verify log` rows to it between orchestrator status commits,
+    so its dirt is never implementer work.
+    """
+    return ("/" + path).endswith("/_mill/status.md")
+
+
 def capture_snapshot(worktree: Path, snapshot_path: Path) -> None:
     """Capture a pre-batch git status snapshot to disk.
 
@@ -34,6 +45,7 @@ def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
     Line-set diff (post − pre) so a status-code change like ' M' → 'MM' is flagged as new dirt,
     but pre-existing dirt is not.
     Returns sorted(post_set - pre_set).
+    Lines for _mill/status.md are dropped from both sides before the diff.
     """
     if snapshot_path.exists():
         pre_text = snapshot_path.read_text(encoding="utf-8")
@@ -51,6 +63,8 @@ def compute_new_dirt(worktree: Path, snapshot_path: Path) -> list[str]:
     # Strip trailing \r from each line so that a CRLF snapshot (possible on Windows even with newline="" when the file is read back via text mode) and an LF live-status output compare equal and produce no false-positive dirt.
     pre_set = {line.rstrip("\r") for line in pre_text.splitlines() if line.strip("\r")}
     post_set = {line.rstrip("\r") for line in post_text.splitlines() if line.strip("\r")}
+    pre_set = {line for line in pre_set if not is_status_md_path(line[3:])}
+    post_set = {line for line in post_set if not is_status_md_path(line[3:])}
     return sorted(post_set - pre_set)
 
 
@@ -166,6 +180,7 @@ def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) ->
     branch.
     Runs git status --porcelain --untracked-files=no and filters the result to only include files
     within the task's owned scope.
+    Lines for _mill/status.md are excluded.
 
     Args:
         worktree: Path to the task worktree.
@@ -176,8 +191,12 @@ def compute_terminal_dirt(worktree: Path, task_dir: Path, parent_branch: str) ->
         Sorted list of dirty files within the task scope, in porcelain format, or None when the
         parent diff itself is unresolvable -- distinct from a genuinely empty result.
     """
-    # Get current dirt
-    lines = _pygit2_util.status_porcelain(worktree, include_untracked=False)
+    # Get current dirt, minus the orchestrator-owned status.md
+    lines = [
+        line
+        for line in _pygit2_util.status_porcelain(worktree, include_untracked=False)
+        if not is_status_md_path(line[3:])
+    ]
 
     # Get paths changed by the task
     parent_diff_names = _parent_diff_names(worktree, parent_branch)
@@ -344,6 +363,7 @@ def revert_out_of_scope_drift(
     task_dir AND NOT in the task's parent-diff owned set.
     Such drift is reverted via `git checkout HEAD -- <path>`.
     Untracked files (`??`) and added files (`A `) are NOT reverted.
+    Lines for _mill/status.md are skipped entirely: never reverted and never reported as remaining.
 
     In a nested-hub layout (worktree is a subdirectory of git_root), both the porcelain status lines
     and the parent-diff owned paths are git-root-relative, while task_dir is hub-relative -- see
@@ -422,6 +442,9 @@ def revert_out_of_scope_drift(
         # Extract status code and path from porcelain format "XY path"
         status_code = line[:2]
         raw_path = line[3:]
+
+        if is_status_md_path(raw_path):
+            continue
 
         # Rebase the git-root-relative path onto the hub root;
         # drop lines that belong to a different subtree of the git root, not this hub.

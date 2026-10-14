@@ -19,7 +19,9 @@ from _status import (
     append_inferred_success_log,
     append_phase,
     append_recovery_log,
+    append_verify_log,
     init_batches,
+    normalize_log_field,
     phase_entry_timestamp,
     read,
     read_batches,
@@ -30,8 +32,10 @@ from _status import (
     read_parent_thread,
     read_slug,
     read_status,
+    read_verify_log_rows,
     remove_batch,
     render_initial,
+    restore_verify_log_rows,
     resume_batch,
     set_batch_field,
     set_batch_fields,
@@ -1112,6 +1116,116 @@ def main() -> int:
             except ValueError:
                 pass
         print("PASS: append_recovery_log raises ValueError when the fenced block is unterminated")
+
+        # --- verify-log tests ---
+        ts_vl = "2026-10-14T10:00:00Z"
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_vl, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            assert "## Verify log" not in initial
+            append_recovery_log(sp, ts_vl, ["_mill/status.md"])
+            before_full = read_full(sp)
+            recovery_before = sp.read_text(encoding="utf-8")
+
+            assert read_verify_log_rows(sp) == []
+            print("PASS: read_verify_log_rows returns [] without the section")
+
+            append_verify_log(
+                sp, timestamp=ts_vl, label="batch-1", exit=0, wall_s=1.25,
+                first_run=True, cmd="pytest -q",
+            )
+            row1 = (
+                f"{quote_scalar(ts_vl)}  batch-1  exit=0  wall=1.2s  first_run=true  cmd=pytest -q"
+            )
+            assert read_verify_log_rows(sp) == [row1], read_verify_log_rows(sp)
+            contents = sp.read_text(encoding="utf-8")
+            vl_lines = contents.splitlines()
+            heading_idx = vl_lines.index("## Verify log")
+            assert vl_lines[heading_idx + 1] == ""
+            assert vl_lines[heading_idx + 2] == "```text"
+            assert vl_lines[-1] == "```"
+            print("PASS: append_verify_log creates the section lazily at the end of the file")
+
+            append_verify_log(
+                sp, timestamp=ts_vl, label="batch-2", exit="timeout", wall_s=3.0,
+                first_run=False, cmd="make test",
+            )
+            row2 = (
+                f"{quote_scalar(ts_vl)}  batch-2  exit=timeout  wall=3.0s  first_run=false  "
+                "cmd=make test"
+            )
+            assert read_verify_log_rows(sp) == [row1, row2]
+            print("PASS: append_verify_log appends rows in order")
+
+            after_full = read_full(sp)
+            assert after_full["yaml"] == before_full["yaml"]
+            assert after_full["timeline"] == before_full["timeline"]
+            assert "## Tracked-file recovery log" in sp.read_text(encoding="utf-8")
+            assert recovery_before.rstrip("\n") in sp.read_text(encoding="utf-8")
+            print("PASS: append_verify_log leaves Timeline and the recovery log untouched")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("Task", "Desc", ts_vl, "main", slug="t-slug", branch="hanf/t-slug"),
+                encoding="utf-8",
+            )
+            messy_cmd = "echo ```\n  café   done"
+            append_verify_log(
+                sp, timestamp=ts_vl, label="la`bel\né", exit=1, wall_s=0.5,
+                first_run=False, cmd=messy_cmd,
+            )
+            rows = read_verify_log_rows(sp)
+            assert len(rows) == 1, rows
+            assert "`" not in rows[0] and rows[0].isascii() and "\n" not in rows[0], rows[0]
+            assert rows[0].endswith("cmd=echo ''' caf? done"), rows[0]
+            assert "la'bel ?" in rows[0], rows[0]
+            append_verify_log(
+                sp, timestamp=ts_vl, label="again", exit=0, wall_s=0.1,
+                first_run=False, cmd="x",
+            )
+            assert len(read_verify_log_rows(sp)) == 2
+            print("PASS: append_verify_log normalizes a multi-line cmd and keeps the block parseable")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            sp.write_text(
+                render_initial("Task", "Desc", ts_vl, "main", slug="t-slug", branch="hanf/t-slug"),
+                encoding="utf-8",
+            )
+            append_verify_log(
+                sp, timestamp=ts_vl, label="long", exit=0, wall_s=0.1,
+                first_run=False, cmd="a" * 400,
+            )
+            assert read_verify_log_rows(sp)[0].endswith("cmd=" + "a" * 300 + "..."), (
+                read_verify_log_rows(sp)[0]
+            )
+            print("PASS: append_verify_log cuts a 400-character cmd to 300 plus ...")
+
+        assert normalize_log_field("  a \t\n b  ") == "a b"
+        assert normalize_log_field("abcdef", 3) == "abc..."
+        assert normalize_log_field("abc", 3) == "abc"
+        print("PASS: normalize_log_field collapses whitespace and honours max_len")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            sp = Path(tmp) / "status.md"
+            initial = render_initial(
+                "Task", "Desc", ts_vl, "main", slug="t-slug", branch="hanf/t-slug"
+            )
+            sp.write_text(initial, encoding="utf-8")
+            assert restore_verify_log_rows(sp, []) == 0
+            assert sp.read_text(encoding="utf-8") == initial
+            assert restore_verify_log_rows(sp, ["row-a", "row-b"]) == 2
+            assert read_verify_log_rows(sp) == ["row-a", "row-b"]
+            mtime_text = sp.read_text(encoding="utf-8")
+            assert restore_verify_log_rows(sp, ["row-a", "row-b"]) == 0
+            assert sp.read_text(encoding="utf-8") == mtime_text
+            assert restore_verify_log_rows(sp, ["row-a", "row-c", "row-c"]) == 1
+            assert read_verify_log_rows(sp) == ["row-a", "row-b", "row-c"]
+            print("PASS: restore_verify_log_rows creates the section, skips present rows, counts appended")
 
         # --- append_inferred_success_log tests ---
         ts_is = "2026-08-09T09:00:00Z"

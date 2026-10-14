@@ -103,13 +103,14 @@ Whatever model the operator started this session with is the model that does the
    hub_root = _paths.resolve_hub_path()
    cfg = _config.load_config(hub_root, git_root)
    gate_cmd = (cfg.get('pipeline') or {}).get('done_gate')
-   result = _done_gate.run_preflight(gate_cmd, git_root)
+   result = _done_gate.run_preflight(gate_cmd, git_root, hub_root=hub_root)
    print(json.dumps(result))
    "
    ```
 
    `gate_cmd` is re-derived inside the subprocess rather than passed from Entry's in-session value across a fresh `Bash` subprocess boundary — this is safe because Entry step 2 already proved it is non-null and it cannot have changed mid-flow.
-   Give this Bash-tool call an extended 600000ms (10-minute) timeout, same justification as `mill-go`'s "0.55" step: `gate_cmd` is an arbitrary, potentially slow project command with no bound on runtime.
+   Run this Bash call with `run_in_background: true` and no `timeout`. `pipeline.verify_timeout_minutes` bounds each verify command it runs, so the Bash tool's 10-minute cap must not cut it off first. Wait for the call's completion notification, then read its output; the JSON result is the last stdout line starting with `{`.
+   The run appends a `## Verify log` row to `status.md`, which the success-path `done` commit and the failure-path `blocked` commit both stage.
 
 2. **Parse the JSON result** and branch on `result["result"]`:
    - `"ok"` → success path (below).

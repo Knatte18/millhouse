@@ -280,7 +280,6 @@ There is no "or invoke the standalone CLI" fallback for this self-run — call `
 Give every Bash-tool call that runs the validator self-run in this SKILL (this one and the full-validate gates in Phase: Plan Review steps 4b, 4c and 4d) an explicit Bash-tool `timeout` of 600000ms (10 minutes).
 The validator walks the whole source tree, spawns git subprocesses per declared path, and prints no progress output;
 on a large repo a single run has exceeded the default 2-minute Bash timeout.
-This mirrors the finalize-stage timeout note in mill-go-base/SKILL.md.
 
 ```python
 from _review_common import _load_root_from_overview

@@ -30,6 +30,7 @@ if "--_worker" in sys.argv:
     import os
     import subprocess
     import threading
+    import time
     from datetime import datetime, timezone
 
     # How often the worker appends a "[mill-bg] HEARTBEAT" line to the log while
@@ -37,6 +38,9 @@ if "--_worker" in sys.argv:
     # process is hard-killed (SIGKILL/TerminateProcess) before its own
     # except/finally handlers can run -- see module docstring.
     _HEARTBEAT_INTERVAL_S = 30
+
+    # Longest inner-command text a heartbeat line carries before it is cut with "...".
+    _HEARTBEAT_CMD_MAX = 200
 
     def _worker_main(args: list[str]) -> int:
         try:
@@ -69,12 +73,18 @@ if "--_worker" in sys.argv:
                 )
                 _heartbeat_stop = threading.Event()
 
+                cmd_text = " ".join(cmd)
+                if len(cmd_text) > _HEARTBEAT_CMD_MAX:
+                    cmd_text = cmd_text[:_HEARTBEAT_CMD_MAX] + "..."
+                started = time.monotonic()
+
                 def _heartbeat() -> None:
                     while not _heartbeat_stop.wait(_HEARTBEAT_INTERVAL_S):
                         try:
                             log_f.write(
                                 f"[mill-bg] HEARTBEAT "
-                                f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}\n"
+                                f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                                f"elapsed={int(time.monotonic() - started)}s cmd={cmd_text}\n"
                             )
                         except Exception:
                             return
