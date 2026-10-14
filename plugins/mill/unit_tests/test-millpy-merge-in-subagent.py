@@ -21,6 +21,7 @@ sys.path.insert(0, str(HUB / "plugins" / "mill" / "scripts"))
 
 import _implementer_common  # noqa: E402
 import _safe_rmtree  # noqa: E402
+import _verify_run  # noqa: E402
 
 _SCRIPT_PATH = HUB / "plugins" / "mill" / "scripts" / "millpy-merge-in-subagent.py"
 
@@ -44,6 +45,29 @@ def _clean_gate_side_effect(argv, **kwargs):
             args=argv, returncode=0, stdout="a" * 40 + "\n", stderr=""
         )
     return subprocess.CompletedProcess(args=argv, returncode=0, stdout="", stderr="")
+
+
+def _verify_record(exit_code, output="", *, timed_out=False, label="merge-in:verify-fix"):
+    """Build the canned ``VerifyRun`` a patched ``run_verify`` returns."""
+    return _verify_run.VerifyRun(
+        label=label,
+        cmd="pytest tests/",
+        cwd=Path("."),
+        exit_code=exit_code,
+        wall_s=1.0,
+        first_run=False,
+        timed_out=timed_out,
+        output=output,
+        output_path=Path("verify-output.out"),
+        timeout_s=60.0,
+    )
+
+
+def _patch_run_verify(*records):
+    """Patch ``run_verify`` to return ``records`` in call order."""
+    return unittest.mock.patch.object(
+        millpy_merge_in_subagent._verify_run, "run_verify", side_effect=list(records)
+    )
 
 
 class TestMillpyMergeInSubagent(unittest.TestCase):
@@ -261,10 +285,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             "merge": {"model": "haiku", "conflicts_model": "sonnet", "verify_fix_rounds": 3},
             "llm": {"implementer_timeout": 1800},
         }
-        with unittest.mock.patch.object(
-            millpy_merge_in_subagent.subprocess, "run",
-            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
-        ), \
+        with _patch_run_verify(_verify_record(0)), \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
             return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr=""),
@@ -284,10 +305,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_5_verify_fix_success_no_subagent(self):
         """verify-fix mode: verify passes on first run -> exit 0, success JSON, sub-agent not called."""
-        with unittest.mock.patch.object(
-            millpy_merge_in_subagent.subprocess, "run",
-            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
-        ), \
+        with _patch_run_verify(_verify_record(0)), \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
             return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc1234\n", stderr=""),
@@ -308,22 +326,15 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_6_verify_fix_failure_subagent_success(self):
         """verify-fix mode: verify fails -> sub-agent dispatched, returns success."""
-        # call 1 (initial verify, shell=True): subprocess.run call 2 (post-verify, shell=True): subprocess.run call 3 (git diff): _subprocess_util.run;
-        # call 4 (git rev-parse for post-verify success): _subprocess_util.run
+        # run_verify: initial verify, then post-verify.
+        # _subprocess_util.run: call 1 (git diff), call 2 (git rev-parse for post-verify success).
         with unittest.mock.patch.object(
             millpy_merge_in_subagent._render, "render",
             return_value="rendered",
         ) as mock_render, \
-        unittest.mock.patch.object(
-            millpy_merge_in_subagent.subprocess, "run",
-            side_effect=[
-                subprocess.CompletedProcess(
-                    args=[], returncode=1, stdout="FAILED test_foo", stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="", stderr=""
-                ),
-            ],
+        _patch_run_verify(
+            _verify_record(1, "FAILED test_foo"),
+            _verify_record(0, label="merge-in:verify-fix:post-fix"),
         ), \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
@@ -359,18 +370,11 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_7_verify_fix_subagent_stuck(self):
         """verify-fix mode: verify fails, sub-agent returns stuck -> exit 0, stuck JSON."""
-        # call 1 (initial verify, shell=True): subprocess.run call 2 (post-verify, shell=True): subprocess.run call 3 (git diff): _subprocess_util.run;
-        # call 4 (git rev-parse for _forward_output): _subprocess_util.run
-        with unittest.mock.patch.object(
-            millpy_merge_in_subagent.subprocess, "run",
-            side_effect=[
-                subprocess.CompletedProcess(
-                    args=[], returncode=1, stdout="FAILED test_foo", stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=1, stdout="FAILED test_foo", stderr=""
-                ),
-            ],
+        # run_verify: initial verify, then post-verify.
+        # _subprocess_util.run: call 1 (git diff), call 2 (git rev-parse for _forward_output).
+        with _patch_run_verify(
+            _verify_record(1, "FAILED test_foo"),
+            _verify_record(1, "FAILED test_foo", label="merge-in:verify-fix:post-fix"),
         ), \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
@@ -409,16 +413,9 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_11_verify_fix_failure_subagent_no_json_post_verify_success(self):
         """verify-fix mode: verify fails, sub-agent emits no JSON, post-verify passes -> success."""
-        with unittest.mock.patch.object(
-            millpy_merge_in_subagent.subprocess, "run",
-            side_effect=[
-                subprocess.CompletedProcess(
-                    args=[], returncode=1, stdout="FAILED test_foo", stderr=""
-                ),
-                subprocess.CompletedProcess(
-                    args=[], returncode=0, stdout="", stderr=""
-                ),
-            ],
+        with _patch_run_verify(
+            _verify_record(1, "FAILED test_foo"),
+            _verify_record(0, label="merge-in:verify-fix:post-fix"),
         ), \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
@@ -525,11 +522,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
     def test_13_stage_prepare_verify_fix_passes(self):
         """--stage prepare verify-fix mode: verify passes -> dispatch_needed:false with embedded envelope."""
         verify_cmd = "exit 0"
-        with unittest.mock.patch("subprocess.run") as mock_subprocess:
-            # Verify passes (returncode=0)
-            mock_subprocess.return_value = unittest.mock.MagicMock(
-                returncode=0, stdout="", stderr=""
-            )
+        with _patch_run_verify(_verify_record(0)):
             with unittest.mock.patch.object(
                 millpy_merge_in_subagent._subprocess_util, "run",
                 return_value=unittest.mock.MagicMock(returncode=0, stdout="abc123\n"),
@@ -553,15 +546,12 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["dispatch_needed"], False)
         self.assertIn("envelope", data)
         self.assertEqual(data["envelope"]["status"], "success")
+        self.assertEqual(data["verify_runs"], [_verify_record(0).summary()])
 
     def test_14_stage_prepare_verify_fix_fails(self):
         """--stage prepare verify-fix mode: verify fails -> normal prepare with dispatch_needed:true."""
         verify_cmd = "exit 1"
-        with unittest.mock.patch("subprocess.run") as mock_subprocess:
-            # Verify fails (returncode=1)
-            mock_subprocess.return_value = unittest.mock.MagicMock(
-                returncode=1, stdout="error", stderr=""
-            )
+        with _patch_run_verify(_verify_record(1, "error")):
             with unittest.mock.patch.object(
                 millpy_merge_in_subagent._subprocess_util, "run",
                 return_value=unittest.mock.MagicMock(returncode=0, stdout="abc123\n"),
@@ -586,6 +576,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(data["role"], "merge")
         self.assertEqual(data["scope"], "verify-fix")
         self.assertEqual(data["effort"], "high")
+        self.assertEqual(data["verify_runs"], [_verify_record(1, "error").summary()])
 
     def test_15_stage_finalize_conflicts(self):
         """--stage finalize conflicts mode: reads agent output, calls finalize_from_output."""
@@ -749,11 +740,8 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         agent_output_path.write_text("agent output", encoding="utf-8")
         verify_cmd = "exit 0"
 
-        with unittest.mock.patch("subprocess.run") as mock_subprocess:
-            # Verify passes on re-run (returncode=0)
-            mock_subprocess.return_value = unittest.mock.MagicMock(
-                returncode=0, stdout="", stderr=""
-            )
+        # Verify passes on re-run (exit code 0)
+        with _patch_run_verify(_verify_record(0, label="merge-in:verify-fix:post-fix")):
             with unittest.mock.patch.object(
                 millpy_merge_in_subagent._subprocess_util, "run",
                 return_value=unittest.mock.MagicMock(returncode=0, stdout="abc123\n"),
@@ -1051,18 +1039,15 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
 
     def test_2x_verify_fix_full_mode_subprocess_calls_pass_generous_env(self):
         """verify-fix full mode: both the initial verify and the post-sub-agent re-verify
-        subprocess.run calls pass env=_generous_terminal_env() (#1068)."""
+        run_verify calls pass env=_generous_terminal_env() (#1068)."""
         sentinel_env = {"COLUMNS": "220", "LINES": "50", "SENTINEL": "1"}
         with unittest.mock.patch.object(
             millpy_merge_in_subagent, "_generous_terminal_env",
             return_value=sentinel_env,
         ), \
-        unittest.mock.patch.object(
-            millpy_merge_in_subagent.subprocess, "run",
-            side_effect=[
-                subprocess.CompletedProcess(args=[], returncode=1, stdout="FAILED test_foo", stderr=""),
-                subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
-            ],
+        _patch_run_verify(
+            _verify_record(1, "FAILED test_foo"),
+            _verify_record(0, label="merge-in:verify-fix:post-fix"),
         ) as mock_subprocess_run, \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
@@ -1101,10 +1086,7 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
             millpy_merge_in_subagent, "_generous_terminal_env",
             return_value=sentinel_env,
         ), \
-        unittest.mock.patch.object(
-            millpy_merge_in_subagent.subprocess, "run",
-            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
-        ) as mock_subprocess_run, \
+        _patch_run_verify(_verify_record(0)) as mock_subprocess_run, \
         unittest.mock.patch.object(
             millpy_merge_in_subagent._subprocess_util, "run",
             return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc123\n", stderr=""),
@@ -1120,6 +1102,201 @@ class TestMillpyMergeInSubagent(unittest.TestCase):
         self.assertEqual(rc, 0)
         mock_subprocess_run.assert_called_once()
         self.assertEqual(mock_subprocess_run.call_args.kwargs.get("env"), sentinel_env)
+
+    # ---- verify runner integration ----
+
+    def test_2x_prepare_timeout_prints_stuck_without_emit_prepare(self):
+        """--stage prepare: a timed-out initial verify prints a stuck envelope and never prepares a
+        fixer dispatch."""
+        timed_out = _verify_record(None, "partial output", timed_out=True)
+        with _patch_run_verify(timed_out), \
+        unittest.mock.patch.object(millpy_merge_in_subagent, "emit_prepare") as mock_emit_prepare:
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "abc123",
+                "--stage", "prepare",
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_emit_prepare.assert_not_called()
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertEqual(data["stuck_type"], "verify")
+        self.assertIs(data["timed_out"], True)
+        self.assertTrue(
+            data["reason"].startswith("[verify timed out after 60s: merge-in:verify-fix] ")
+        )
+        self.assertEqual(data["verify_runs"], [timed_out.summary()])
+
+    def test_2x_full_stage_timeout_never_dispatches_fixer(self):
+        """--stage full: a timed-out initial verify prints the stuck envelope without calling the
+        sub-agent."""
+        with _patch_run_verify(_verify_record(None, "", timed_out=True)), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run"
+        ) as mock_subagent:
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "abc123",
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_subagent.assert_not_called()
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertIs(data["timed_out"], True)
+
+    def test_2x_launch_failure_prints_gate_raised_without_fixer(self):
+        """A verify command that cannot launch is stuck with ``verify gate raised`` and no fixer."""
+        with _patch_run_verify(_verify_record(None, "No such file")), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run"
+        ) as mock_subagent:
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "abc123",
+            ])
+
+        self.assertEqual(rc, 0)
+        mock_subagent.assert_not_called()
+        data = json.loads(out.strip())
+        self.assertEqual(data["stuck_type"], "verify")
+        self.assertEqual(data["reason"], "verify gate raised: No such file")
+        self.assertNotIn("timed_out", data)
+
+    def test_2x_finalize_post_fix_timeout_prints_stuck(self):
+        """--stage finalize: a post-fix verify timeout prints the stuck envelope."""
+        agent_output_path = self.tmp_path / "agent-output.txt"
+        agent_output_path.write_text("agent output", encoding="utf-8")
+        timed_out = _verify_record(
+            None, "slow", timed_out=True, label="merge-in:verify-fix:post-fix"
+        )
+        with _patch_run_verify(timed_out):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--stage", "finalize",
+                "--agent-output", str(agent_output_path),
+            ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertIs(data["timed_out"], True)
+        self.assertEqual(data["verify_runs"], [timed_out.summary()])
+
+    def test_2x_full_stage_post_fix_timeout_prints_stuck(self):
+        """--stage full: a post-fix verify timeout after the fixer ran prints the stuck envelope
+        carrying both runs."""
+        initial = _verify_record(1, "FAILED test_foo")
+        post_fix = _verify_record(
+            None, "slow", timed_out=True, label="merge-in:verify-fix:post-fix"
+        )
+        with _patch_run_verify(initial, post_fix), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="diff", stderr=""),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=("", "fake"),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render", return_value="rendered",
+        ):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "abc123",
+            ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        self.assertEqual(data["status"], "stuck")
+        self.assertIs(data["timed_out"], True)
+        self.assertEqual(data["verify_runs"], [initial.summary(), post_fix.summary()])
+
+    def test_2x_post_fix_failure_reason_is_truncated_with_output_suffix(self):
+        """A post-fix failure reason is the truncated output plus the saved-output pointer."""
+        long_output = "x" * 3000
+        with _patch_run_verify(
+            _verify_record(1, "FAILED"),
+            _verify_record(1, long_output, label="merge-in:verify-fix:post-fix"),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="diff", stderr=""),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=("", "fake"),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render", return_value="rendered",
+        ):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "abc123",
+            ])
+
+        self.assertEqual(rc, 0)
+        data = json.loads(out.strip())
+        expected_reason = (
+            _implementer_common._truncate_verify_output(long_output)
+            + "\n[verify output: verify-output.out]"
+        )
+        self.assertEqual(data["reason"], expected_reason)
+        self.assertNotIn("timed_out", data)
+
+    def test_2x_label_flag_reaches_run_verify_and_post_fix_suffix(self):
+        """--label names the initial run; the post-fix run uses ``<label>:post-fix``."""
+        with _patch_run_verify(
+            _verify_record(1, "FAILED"), _verify_record(0)
+        ) as mock_run_verify, \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._subprocess_util, "run",
+            return_value=subprocess.CompletedProcess(args=[], returncode=0, stdout="abc\n", stderr=""),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._implementer_claude, "run",
+            return_value=("", "fake"),
+        ), \
+        unittest.mock.patch.object(
+            millpy_merge_in_subagent._render, "render", return_value="rendered",
+        ):
+            rc, _ = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "abc123",
+                "--label", "merge-in:batch-7",
+            ])
+
+        self.assertEqual(rc, 0)
+        labels = [call.kwargs["label"] for call in mock_run_verify.call_args_list]
+        self.assertEqual(labels, ["merge-in:batch-7", "merge-in:batch-7:post-fix"])
+
+    def test_2x_invalid_verify_timeout_config_returns_1(self):
+        """pipeline.verify_timeout_minutes of 0 makes main print the config error and return 1."""
+        self.mock_load_config.return_value = {
+            "merge": {"verify_fix_rounds": 3},
+            "llm": {"implementer_timeout": 1800},
+            "pipeline": {"verify_timeout_minutes": 0},
+        }
+        stderr_buf = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr_buf):
+            rc, out = self._run_main([
+                "--mode", "verify-fix",
+                "--cmd", "pytest tests/",
+                "--checkpoint", "abc123",
+            ])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(out.strip(), "")
+        self.assertIn("pipeline.verify_timeout_minutes", stderr_buf.getvalue())
 
 
 def _git(args, cwd, check=True):

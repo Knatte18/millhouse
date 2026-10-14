@@ -21,6 +21,24 @@ import _paths  # noqa: E402
 import _review_common  # noqa: E402
 import _reviewers  # noqa: E402
 import _subprocess_util  # noqa: E402
+import _verify_run  # noqa: E402
+
+
+def _verify_record(exit_code: int, output: str = "") -> _verify_run.VerifyRun:
+    """Build the canned ``VerifyRun`` a patched ``run_verify`` returns."""
+    return _verify_run.VerifyRun(
+        label="merge-in:verify-fix",
+        cmd="verify",
+        cwd=Path("."),
+        exit_code=exit_code,
+        wall_s=1.0,
+        first_run=False,
+        timed_out=False,
+        output=output,
+        output_path=None,
+        timeout_s=60.0,
+    )
+
 
 # Load the subagent module (name contains hyphen)
 _subagent_path = Path(__file__).resolve().parent.parent / "scripts" / "millpy-merge-in-subagent.py"
@@ -98,20 +116,10 @@ def main() -> int:
             ):
                 with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
                         unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=project_root):
-                    # Mock subprocess.run to return success for verify command
-                    original_run = subprocess.run
-
-                    def mock_subprocess_run(cmd, *args, **kwargs):
-                        if isinstance(cmd, str) or (isinstance(cmd, list) and "verify" in str(cmd)):
-                            return subprocess.CompletedProcess(
-                                args=cmd,
-                                returncode=0,
-                                stdout="Verify passed",
-                                stderr="",
-                            )
-                        return original_run(cmd, *args, **kwargs)
-
-                    with unittest.mock.patch("subprocess.run", side_effect=mock_subprocess_run):
+                    # Mock run_verify to return success for the verify command
+                    with unittest.mock.patch.object(
+                        _verify_run, "run_verify", return_value=_verify_record(0, "Verify passed")
+                    ):
                         rc, captured = _capture_stdout(
                             lambda: millpy_merge_in_subagent.main([
                                 "--mode", "verify-fix",
@@ -158,30 +166,15 @@ def main() -> int:
             ):
                 with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
                         unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=project_root):
-                    # Mock subprocess.run: first verify fails, then finalize verify passes
-                    call_count = [0]
-                    original_run = subprocess.run
-
-                    def mock_subprocess_run(cmd, *args, **kwargs):
-                        if isinstance(cmd, str) or (isinstance(cmd, list) and "verify" in str(cmd)):
-                            call_count[0] += 1
-                            if call_count[0] == 1:
-                                # Initial verify fails
-                                return subprocess.CompletedProcess(
-                                    args=cmd,
-                                    returncode=1,
-                                    stdout="Verify failed initially",
-                                    stderr="Error: test",
-                                )
-                            else:
-                                # Post-fix verify passes
-                                return subprocess.CompletedProcess(
-                                    args=cmd,
-                                    returncode=0,
-                                    stdout="Verify passed after fix",
-                                    stderr="",
-                                )
-                        return original_run(cmd, *args, **kwargs)
+                    # Mock run_verify: first verify fails, then the post-fix verify passes
+                    mock_run_verify = unittest.mock.patch.object(
+                        _verify_run,
+                        "run_verify",
+                        side_effect=[
+                            _verify_record(1, "Verify failed initially\nError: test"),
+                            _verify_record(0, "Verify passed after fix"),
+                        ],
+                    )
 
                     def mock_implementer_run(*args, **kwargs):
                         # Simulate implementer fixing the issue (making a commit)
@@ -191,7 +184,7 @@ def main() -> int:
                         )
                         return "Agent output", None
 
-                    with unittest.mock.patch("subprocess.run", side_effect=mock_subprocess_run):
+                    with mock_run_verify:
                         with unittest.mock.patch.object(_implementer_claude, "run", side_effect=mock_implementer_run):
                             rc, captured = _capture_stdout(
                                 lambda: millpy_merge_in_subagent.main([
@@ -239,18 +232,12 @@ def main() -> int:
             ):
                 with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
                         unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=project_root):
-                    # Mock subprocess.run: verify always fails
-                    original_run = subprocess.run
-
-                    def mock_subprocess_run(cmd, *args, **kwargs):
-                        if isinstance(cmd, str) or (isinstance(cmd, list) and "verify" in str(cmd)):
-                            return subprocess.CompletedProcess(
-                                args=cmd,
-                                returncode=1,
-                                stdout="Verify failed",
-                                stderr="Error details",
-                            )
-                        return original_run(cmd, *args, **kwargs)
+                    # Mock run_verify: verify always fails
+                    mock_run_verify = unittest.mock.patch.object(
+                        _verify_run,
+                        "run_verify",
+                        return_value=_verify_record(1, "Verify failed\nError details"),
+                    )
 
                     def mock_implementer_run(*args, **kwargs):
                         # Simulate implementer attempting fix (making a commit)
@@ -260,7 +247,7 @@ def main() -> int:
                         )
                         return "Agent output claiming success", None
 
-                    with unittest.mock.patch("subprocess.run", side_effect=mock_subprocess_run):
+                    with mock_run_verify:
                         with unittest.mock.patch.object(_implementer_claude, "run", side_effect=mock_implementer_run):
                             rc, captured = _capture_stdout(
                                 lambda: millpy_merge_in_subagent.main([
@@ -315,19 +302,11 @@ def main() -> int:
             ):
                 with unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config), \
                         unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=project_root):
-                    original_run = subprocess.run
-
-                    def mock_subprocess_run(cmd, *args, **kwargs):
-                        if isinstance(cmd, str) or (isinstance(cmd, list) and "verify" in str(cmd)):
-                            return subprocess.CompletedProcess(
-                                args=cmd,
-                                returncode=1,
-                                stdout="Verify still fails",
-                                stderr="Error in finalize",
-                            )
-                        return original_run(cmd, *args, **kwargs)
-
-                    with unittest.mock.patch("subprocess.run", side_effect=mock_subprocess_run):
+                    with unittest.mock.patch.object(
+                        _verify_run,
+                        "run_verify",
+                        return_value=_verify_record(1, "Verify still fails\nError in finalize"),
+                    ):
                         rc, captured = _capture_stdout(
                             lambda: millpy_merge_in_subagent.main([
                                 "--mode", "verify-fix",
@@ -393,16 +372,9 @@ def main() -> int:
                 unittest.mock.patch.object(_paths, "resolve_active_hub", return_value=hub_dir),
                 unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config),
             ):
-                original_run = subprocess.run
-
-                def mock_subprocess_run(cmd, *args, **kwargs):
-                    if isinstance(cmd, str) or (isinstance(cmd, list) and "verify" in str(cmd)):
-                        return subprocess.CompletedProcess(
-                            args=cmd, returncode=0, stdout="Verify passed", stderr="",
-                        )
-                    return original_run(cmd, *args, **kwargs)
-
-                with unittest.mock.patch("subprocess.run", side_effect=mock_subprocess_run):
+                with unittest.mock.patch.object(
+                    _verify_run, "run_verify", return_value=_verify_record(0, "Verify passed")
+                ):
                     rc, captured = _capture_stdout(
                         lambda: millpy_merge_in_subagent.main([
                             "--mode", "verify-fix",
@@ -484,22 +456,16 @@ def main() -> int:
                 unittest.mock.patch.object(_review_common, "load_config", side_effect=mock_load_config),
                 unittest.mock.patch.object(_reviewers, "resolve", side_effect=mock_reviewers_resolve),
             ):
-                original_run = subprocess.run
-                call_count = [0]
+                mock_run_verify = unittest.mock.patch.object(
+                    _verify_run,
+                    "run_verify",
+                    side_effect=[
+                        _verify_record(1, "Verify failed initially"),
+                        _verify_record(0, "Verify passed after fix"),
+                    ],
+                )
 
-                def mock_subprocess_run(cmd, *args, **kwargs):
-                    if isinstance(cmd, str) or (isinstance(cmd, list) and "verify" in str(cmd)):
-                        call_count[0] += 1
-                        if call_count[0] == 1:
-                            return subprocess.CompletedProcess(
-                                args=cmd, returncode=1, stdout="Verify failed initially", stderr="",
-                            )
-                        return subprocess.CompletedProcess(
-                            args=cmd, returncode=0, stdout="Verify passed after fix", stderr="",
-                        )
-                    return original_run(cmd, *args, **kwargs)
-
-                with unittest.mock.patch("subprocess.run", side_effect=mock_subprocess_run):
+                with mock_run_verify:
                     with unittest.mock.patch.object(_implementer_claude, "run", side_effect=mock_implementer_run):
                         rc, captured = _capture_stdout(
                             lambda: millpy_merge_in_subagent.main([

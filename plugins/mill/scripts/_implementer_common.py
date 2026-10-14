@@ -1386,6 +1386,8 @@ def emit_prepare(
     start_sha: str | None = None,
     nits_only: bool = False,
     effort: str | None = None,
+    *,
+    verify_runs: list[dict] | None = None,
 ) -> int:
     """Write brief and emit prepare JSON envelope.
 
@@ -1401,6 +1403,8 @@ def emit_prepare(
             Omitted from the envelope (not emitted as `false`) when this stays at its default.
         effort: Effort tier resolved from the reviewer/implementer registry spec (e.g. "high");
             included in the envelope as "effort" when not None, omitted otherwise.
+        verify_runs: Summaries of the verify runs made while preparing; included in the envelope
+            as "verify_runs" when not None, omitted otherwise.
     """
     brief_path = _agent_dispatch.write_brief(
         briefs_dir, role, scope, round_n, prompt_text
@@ -1423,6 +1427,8 @@ def emit_prepare(
         envelope["nits_only"] = True
     if effort is not None:
         envelope["effort"] = effort
+    if verify_runs is not None:
+        envelope["verify_runs"] = verify_runs
     print(json.dumps(envelope))
     return 0
 
@@ -1434,12 +1440,15 @@ def emit_prepare_no_dispatch(
     scope: str,
     round_n: int,
     project_root: Path,
+    *,
+    verify_runs: list[dict] | None = None,
 ) -> int:
     """Emit prepare JSON with dispatch_needed:false for verify-fix pass case.
 
     When verify passes in prepare, there is nothing to dispatch.
     This emits a special prepare envelope with dispatch_needed:false and an embedded success
     envelope.
+    When ``verify_runs`` is not None it is included in the envelope as "verify_runs".
     Returns 0.
     """
     result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
@@ -1462,6 +1471,8 @@ def emit_prepare_no_dispatch(
         "round": round_n,
         "envelope": embedded_envelope,
     }
+    if verify_runs is not None:
+        envelope["verify_runs"] = verify_runs
     print(json.dumps(envelope))
     return 0
 
