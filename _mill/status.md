@@ -38,7 +38,9 @@ batches:
     commit_sha: b5b28b3c3cd96bb1b078dc507830957a1016c6a3
     verify_baseline_failures: []
   - name: fix-finalize-strict
-    state: pending
+    state: running
+    implementer_session: 53cfa230-5a91-4cb6-ae06-48b66f2711bc
+    start_sha: 06d49a587f8c8bad09a8dc3e75c45a0e5353833f
     verify_baseline_failures: []
   - name: merge-in-recompute-removal
     state: pending
