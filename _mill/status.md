@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: holistic-approved
+phase: done
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
 plan: _mill/plan
@@ -32,6 +32,7 @@ approved-strict-verify-gates  '2026-10-14T09:45:11Z'
 approved-docs-and-comments  '2026-10-14T09:47:26Z'
 holistic-reviewing  '2026-10-14T09:47:37Z'
 holistic-approved  '2026-10-14T09:49:42Z'
+done  '2026-10-14T09:49:55Z'
 ```
 
 ## Batches
