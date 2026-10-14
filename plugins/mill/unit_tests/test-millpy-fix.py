@@ -969,6 +969,8 @@ class TestMillpyFix(unittest.TestCase):
         # Only batch2's ("approved") command survives -- batch1 ("pending") is filtered.
         # A single contributing batch is still wrapped in its own subshell.
         self.assertEqual(captured_kwargs.get("verify_cmd"), "(exit 0)")
+        self.assertEqual(captured_kwargs.get("verify_timeout_s"), 1200.0)
+        self.assertEqual(captured_kwargs.get("verify_label"), "fix:holistic")
         self.assertIn(
             "[millpy-fix] skipped batch1: batch not approved",
             stderr_buf.getvalue(),
@@ -1049,6 +1051,8 @@ class TestMillpyFix(unittest.TestCase):
         self.assertNotIn("batch_verify_baseline", forwarded_kwargs)
         self.assertIsNotNone(forwarded_kwargs.get("verify_cmd"))
         self.assertIn("module_wide_verify_cmd", forwarded_kwargs)
+        self.assertEqual(forwarded_kwargs.get("verify_timeout_s"), 2400.0)
+        self.assertEqual(forwarded_kwargs.get("verify_label"), "fix:holistic")
 
     def test_holistic_finalize_status_path_logs_target_removed_skip(self):
         """Card 5: an approved batch whose verify command references a path a later approved batch's
@@ -1935,6 +1939,26 @@ class TestMillpyFixBriefSizeGuard(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(captured_kwargs.get("verify_cmd"), "(exit 0) && (exit 0)")
         self.assertEqual(captured_kwargs.get("cwd_override"), nested_hub)
+        # Two contributing batches scale the default 1200s per-command budget.
+        self.assertEqual(captured_kwargs.get("verify_timeout_s"), 2400.0)
+        self.assertEqual(captured_kwargs.get("verify_label"), "fix:holistic")
+
+    def test_invalid_verify_timeout_returns_1_naming_the_key(self):
+        """A non-positive pipeline.verify_timeout_minutes fails the invocation before any stage work."""
+        self.mock_load_config.return_value = {
+            **self.mock_load_config.return_value,
+            "pipeline": {"verify_timeout_minutes": 0},
+        }
+        stderr = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr):
+            rc, out = self._run_main([
+                "--scope", "holistic",
+                "--review-file", str(self.review_file),
+            ])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(out, "")
+        self.assertIn("pipeline.verify_timeout_minutes", stderr.getvalue())
 
     def test_holistic_scope_mixed_cwd_raises_value_error_naming_batches(self):
         """Holistic scope: batches resolving to mixed cwd values raise ValueError naming the conflict (Card 20)."""

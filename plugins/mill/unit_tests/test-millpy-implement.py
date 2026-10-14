@@ -930,6 +930,37 @@ class TestMillpyImplement(unittest.TestCase):
         mock_finalize.assert_called_once()
         call_kwargs = mock_finalize.call_args.kwargs
         self.assertEqual(call_kwargs.get("verify_cmd"), "exit 0")
+        self.assertEqual(call_kwargs.get("verify_timeout_s"), 1200.0)
+        self.assertEqual(call_kwargs.get("verify_label"), "test-batch")
+
+    def test_full_stage_passes_verify_timeout_and_label_to_forward_output(self):
+        """Full stage threads the default verify timeout and the batch name into _forward_output."""
+        with unittest.mock.patch.object(
+            millpy_implement._implementer_claude, "run",
+            return_value=('{"status":"success"}\n', "fake-session"),
+        ), unittest.mock.patch.object(
+            millpy_implement, "_forward_output", return_value=0,
+        ) as mock_forward:
+            rc, _ = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 0)
+        call_kwargs = mock_forward.call_args.kwargs
+        self.assertEqual(call_kwargs.get("verify_timeout_s"), 1200.0)
+        self.assertEqual(call_kwargs.get("verify_label"), "test-batch")
+
+    def test_invalid_verify_timeout_returns_1_naming_the_key(self):
+        """A non-positive pipeline.verify_timeout_minutes fails the invocation before any stage work."""
+        self.mock_load_config.return_value = {
+            **self.mock_load_config.return_value,
+            "pipeline": {"verify_timeout_minutes": 0},
+        }
+        stderr = io.StringIO()
+        with unittest.mock.patch("sys.stderr", stderr):
+            rc, out = self._run_main(["test-batch"])
+
+        self.assertEqual(rc, 1)
+        self.assertEqual(out, "")
+        self.assertIn("pipeline.verify_timeout_minutes", stderr.getvalue())
 
     def test_parent_branch_token_in_render_map(self):
         """PARENT_BRANCH token is present in the render map with the resolved parent value."""
