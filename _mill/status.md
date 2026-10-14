@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-skill-docs
+phase: holistic-reviewing
 slug: verify-runner-instrumentation
 branch: hanf/verify-runner-instrumentation
 plan: _mill/plan
@@ -33,6 +33,7 @@ approved-implementer-gates  '2026-10-14T12:24:46Z'
 approved-gate-callers  '2026-10-14T12:28:15Z'
 approved-merge-in  '2026-10-14T12:42:15Z'
 approved-skill-docs  '2026-10-14T12:44:43Z'
+holistic-reviewing  '2026-10-14T12:44:57Z'
 ```
 
 ## Batches
