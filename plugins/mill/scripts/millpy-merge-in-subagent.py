@@ -6,12 +6,7 @@ The Builder reads only the JSON verdict on stdout;
 all context-heavy work happens inside the sub-agent session.
 
 Flags:
-    --mode conflicts|verify-fix which delegation mode to run; required unless --recompute-baseline
-        is set
-    --recompute-baseline reset and eagerly recompute the cached module_verify_baseline after a
-        successful parent-branch sync.
-        Independent of --mode;
-        a synchronous computation with no LLM session involved.
+    --mode conflicts|verify-fix which delegation mode to run; required
 
   conflicts mode:
     --files FILE [FILE ...]
@@ -45,12 +40,9 @@ import _implementer_claude
 import _llm_claude
 import _marker
 import _paths
-import _plan_dag
 import _render
 import _review_common
 import _reviewers
-import _status
-import _verify_baseline
 from _implementer_common import _extract_status_json, _forward_output, _posix_shell_run_args, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
 
 
@@ -196,102 +188,6 @@ def _verify_conflict_markers(files: list[str], project_root: Path) -> dict | Non
     return None
 
 
-def _run_recompute_baseline(project_root: Path, git_root: Path, cfg: dict) -> int:
-    """
-    Reset and eagerly recompute the cached ``module_verify_baseline`` after a successful
-    parent-branch sync in ``mill-merge-in``.
-
-    Mirrors ``millpy-implement.py``'s ``_run_baseline_stage`` in structure and error-handling shape
-    -- the two functions compute the same thing from two different entry points (task-start
-    pre-flight vs. post-merge-in recompute) -- but always clears the cached value first (via
-    ``_status.clear_module_verify_baseline``) so a stale, already-cached baseline from before the
-    merge is never reused: ``--stage baseline``'s own idempotent no-op-if-cached behavior is exactly
-    why a bare call to it would not recompute after a merge-in without this explicit reset.
-
-    Every batch's ``verify_baseline_failures`` field is cleared unconditionally, on every code path
-    through this function -- including the no-module-wide-verify-configured skip and the malformed
-    ``verify:`` error case -- per Decision ``merge-in-batch-baseline-staleness``: a merge-in changes
-    the tree these per-batch baselines were captured against, so they are stale the instant the merge
-    lands, independent of whether an overview-level module-wide ``verify:`` even exists.
-    Previously ``_corroborate_batch_failure`` masked this staleness by re-checking a batch's own
-    failure against the current tree at gate time;
-    that function is gone, so this unconditional clear is now what keeps a stale per-batch baseline
-    from silently surviving a merge.
-
-    Never raises -- every failure path (status.md absent, malformed ``verify:`` field, or the
-    computation itself raising) prints a JSON line describing the outcome and returns 0 without
-    blocking the merge-in;
-    a baseline-recompute failure must never fail an otherwise successful merge.
-
-    Args:
-        project_root: Absolute path to the task worktree root.
-        git_root: Absolute path to the repo root ``git`` commands run against.
-        cfg: Already-loaded mill config dict (avoids a redundant reload).
-
-    Returns:
-        Always 0 -- outcomes are communicated through the printed JSON line.
-    """
-    try:
-        status_path = _paths.require_status_path(project_root, cfg)
-    except Exception as e:
-        print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
-        return 0
-
-    # Clear every batch's per-batch baseline FIRST, before any other code path in this function --
-    # per Decision merge-in-batch-baseline-staleness, staleness applies regardless of whether the
-    # module-wide half below even runs.
-    for batch in _status.read_batches(status_path):
-        _status.set_batch_field(status_path, batch["name"], "verify_baseline_failures", None)
-
-    plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
-    plan_base = _paths.resolve_task_path(project_root, plan_dir)
-    overview_path = plan_base / "00-overview.md"
-    overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
-    try:
-        module_wide_verify_cmd, cwd_override = _plan_dag.parse_verify_field(
-            overview_frontmatter, project_root, git_root
-        )
-    except Exception as e:
-        print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
-        return 0
-
-    if module_wide_verify_cmd is None:
-        print(
-            json.dumps(
-                {
-                    "status": "success",
-                    "baseline": "skipped",
-                    "reason": "no module-wide verify configured",
-                }
-            )
-        )
-        return 0
-
-    # Reset: force recomputation regardless of any currently-cached value.
-    _status.clear_module_verify_baseline(status_path)
-
-    # Resolve the effective verify cwd the same way _run_verify_gate resolves its own: an explicit
-    # override if present, else git_root.
-    effective_cwd = cwd_override if cwd_override is not None else git_root
-
-    try:
-        result, _signatures = _verify_baseline.compute_baseline(
-            effective_cwd, module_wide_verify_cmd,
-        )
-    except Exception as e:
-        print(f"[millpy-merge-in-subagent] baseline recompute failed: {e}", file=sys.stderr)
-        print(json.dumps({"status": "success", "baseline": "error", "reason": str(e)}))
-        return 0
-
-    # Asymmetric mapping per Decision merge-in-recompute: only "clean" is cached; a
-    # "pre-existing-failures" result is left unset (clear_module_verify_baseline above already did
-    # that) so the module-wide gate stays strict rather than caching a permissive result.
-    if result == "clean":
-        _status.set_module_verify_baseline(status_path, "clean")
-    print(json.dumps({"status": "success", "baseline": "computed", "value": result}))
-    return 0
-
-
 def _generous_terminal_env() -> dict:
     """
     Build a subprocess environment with a generous floor on ``COLUMNS``/``LINES``.
@@ -328,11 +224,6 @@ def main(argv=None) -> int:
         required=False,
         choices=["conflicts", "verify-fix"],
         help="Delegation mode: 'conflicts' or 'verify-fix'.",
-    )
-    parser.add_argument(
-        "--recompute-baseline",
-        action="store_true",
-        help="Reset and eagerly recompute the cached module_verify_baseline after a successful parent-branch sync. Independent of --mode; when set, --mode is not required and no other mode-specific flag is consulted.",
     )
     parser.add_argument(
         "--files",
@@ -376,8 +267,8 @@ def main(argv=None) -> int:
         help="Accepted for CLI-shape parity with millpy-fix.py / millpy-implement.py; ignored in all stages.",
     )
     args = parser.parse_args(argv)
-    if not args.recompute_baseline and not args.mode:
-        print("--mode is required unless --recompute-baseline is set", file=sys.stderr)
+    if not args.mode:
+        print("--mode is required", file=sys.stderr)
         return 1
 
     # Common setup
@@ -409,9 +300,6 @@ def main(argv=None) -> int:
     # primary-clone template) config than the task hub's own mill-config.yaml.
     # Downstream consumers (verify-cwd resolution, conflict handling, finalize dispatch) must observe this corrected value, per cfg-reload-after-active-hub.
     cfg = _review_common.load_config(project_root, mill_dir)
-
-    if args.recompute_baseline:
-        return _run_recompute_baseline(project_root, git_root, cfg)
 
     # Stage: finalize (early exit before mode-specific logic)
     if args.stage == "finalize":
