@@ -64,7 +64,9 @@ batches:
     start_sha: b253b57b86e8783a2e847eeaf11a7652b0ce13e3
     commit_sha: 09d0754601d2e49ea60ff7727720e51c5dafec83
   - name: skill-docs
-    state: pending
+    state: running
+    implementer_session: 31554e1e-e24c-4b21-bb98-cf97706e4b47
+    start_sha: a6f6ba49954ce9f64903b8cb50edfaf5ee7d1f75
 ```
 ## Inferred-success log
 
