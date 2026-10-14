@@ -413,23 +413,17 @@ def main(argv=None) -> int:
             print("--agent-output is required when --stage finalize", file=sys.stderr)
             return 1
         fixer_snapshot_path = project_root / "_mill" / ".cleanliness-snapshot-fixer.txt"
-        # Module-wide verify derivation, mirroring millpy-implement.py's main(): read the
-        # overview's own verify field and the already-cached module-scoped baseline so the
-        # fixer's live verify replay can apply the same subset-diff waiver the implementer
-        # dispatch already gets. Without this, forwarding module_verify_baseline alone would
-        # be inert -- _run_verify_gates short-circuits the module-wide gate whenever
-        # module_wide_verify_cmd is None.
+        # Module-wide verify derivation, mirroring millpy-implement.py's main():
+        # the fixer's verify replay runs the overview's module-wide verify after the joined batch verify, exactly as the implementer dispatch does.
         overview_frontmatter = _plan_dag._read_batch_frontmatter(overview_path)
         module_wide_verify_cmd, module_wide_cwd_override = _plan_dag.parse_verify_field(
             overview_frontmatter, project_root, git_root
         )
-        module_verify_baseline = _status.get_module_verify_baseline(status_path)
 
         # Resolve the joined verify command across all batches.
         # verify_cmd / cwd_override stay None when no batch declares a runnable verify command.
         verify_cmd = None
         cwd_override = None
-        batch_verify_baseline = None
         # Derive concatenated verify_cmd from all batch verify commands in DAG order
         batch_verifies = _plan_dag.iter_batch_verifies(
             plan_base, project_root, git_root, status_path=status_path
@@ -439,16 +433,6 @@ def main(argv=None) -> int:
         )
         if batch_verifies:
             verify_cmd, cwd_override = _resolve_holistic_verify(batch_verifies)
-        # Union every contributing batch's cached verify-baseline failure set, so the
-        # holistic waiver covers pre-existing/unrelated failures from any batch this
-        # fix round spans -- not just one arbitrarily-chosen batch's baseline.
-        _all_batches_status = _status.read_batches(status_path)
-        _union_baseline: set[str] = set()
-        for _bv_name, _bv_cmd, _bv_cwd in batch_verifies:
-            _bv_status = next((b for b in _all_batches_status if b.get("name") == _bv_name), None)
-            if _bv_status is not None and _bv_status.get("verify_baseline_failures"):
-                _union_baseline.update(_bv_status["verify_baseline_failures"])
-        batch_verify_baseline = sorted(_union_baseline) if _union_baseline else None
         nits_scope = "holistic"
         return finalize_from_output(
             Path(args.agent_output),
@@ -464,8 +448,6 @@ def main(argv=None) -> int:
             cwd_override=cwd_override,
             module_wide_verify_cmd=module_wide_verify_cmd,
             module_wide_cwd_override=module_wide_cwd_override,
-            module_verify_baseline=module_verify_baseline,
-            batch_verify_baseline=batch_verify_baseline,
         )
 
     # Compute the fixer-brief carve-out clause once, from the already-parsed --nits-only flag.
