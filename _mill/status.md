@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: implementing
+phase: approved-verify-run-core
 slug: verify-runner-instrumentation
 branch: hanf/verify-runner-instrumentation
 plan: _mill/plan
@@ -27,6 +27,7 @@ plan-review-r2  '2026-10-14T11:45:15Z'
 plan-fix-r2  '2026-10-14T11:46:00Z'
 planned  '2026-10-14T11:46:04Z'
 implementing  '2026-10-14T11:46:22Z'
+approved-verify-run-core  '2026-10-14T11:57:36Z'
 ```
 
 ## Batches
@@ -34,9 +35,10 @@ implementing  '2026-10-14T11:46:22Z'
 ```yaml
 batches:
   - name: verify-run-core
-    state: running
+    state: approved
     implementer_session: 980f6c84-186d-4626-89bb-1b805ffca1ae
     start_sha: ed1858475e27fd61104f6f4b4f894fa8f4138743
+    commit_sha: 56c1e5cded5214eb19d06d237e37c640a8456511
   - name: cleanliness-status-exclusion
     state: pending
   - name: implementer-gates
@@ -48,7 +50,6 @@ batches:
   - name: skill-docs
     state: pending
 ```
-
 ## Inferred-success log
 
 ```text
