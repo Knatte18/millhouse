@@ -71,4 +71,5 @@ batches:
 '2026-10-14T11:59:24Z'  cleanliness-status-exclusion  round 1
 '2026-10-14T12:24:44Z'  implementer-gates  round 1
 '2026-10-14T12:28:14Z'  gate-callers  round 1
+'2026-10-14T12:42:12Z'  merge-in  round 1
 ```
