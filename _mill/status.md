@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-implement-stage-removal
+phase: approved-fix-finalize-strict
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
 plan: _mill/plan
@@ -25,6 +25,7 @@ plan-fix-r1  '2026-10-14T09:26:07Z'
 planned  '2026-10-14T09:26:17Z'
 implementing  '2026-10-14T09:26:29Z'
 approved-implement-stage-removal  '2026-10-14T09:31:44Z'
+approved-fix-finalize-strict  '2026-10-14T09:33:44Z'
 ```
 
 ## Batches
@@ -38,9 +39,10 @@ batches:
     commit_sha: b5b28b3c3cd96bb1b078dc507830957a1016c6a3
     verify_baseline_failures: []
   - name: fix-finalize-strict
-    state: running
+    state: approved
     implementer_session: 53cfa230-5a91-4cb6-ae06-48b66f2711bc
     start_sha: 06d49a587f8c8bad09a8dc3e75c45a0e5353833f
+    commit_sha: 35db621e9db8c2ad4cb46855dc1abc5f8cf3ebb2
     verify_baseline_failures: []
   - name: merge-in-recompute-removal
     state: pending
