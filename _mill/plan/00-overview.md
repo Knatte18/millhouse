@@ -3,7 +3,7 @@
 ```yaml
 task: "Drop the eager verify-baseline pre-flight"
 slug: "drop-verify-baseline-preflight"
-approved: false
+approved: true
 started: "20261014-090105"
 parent_branch: "main"
 root: ""
@@ -48,7 +48,7 @@ batches:
     name: docs-and-comments
     file: 06-docs-and-comments.md
     depends-on: [1, 2, 3, 4, 5]
-    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-worktree.py test-plan-dag.py test-guards.py
+    verify: PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/run-all.py --only test-worktree.py test-plan-dag.py test-guards.py test-done-gate.py
 ```
 
 ## Shared Decisions
@@ -113,6 +113,7 @@ batches:
 - `plugins/mill/skills/mill-go-base/SKILL.md`
 - `plugins/mill/skills/mill-merge-in/SKILL.md`
 - `plugins/mill/templates/mill-config.yaml`
+- `plugins/mill/unit_tests/test-done-gate.py`
 - `plugins/mill/unit_tests/test-fix-finalize.py`
 - `plugins/mill/unit_tests/test-implementer-common.py`
 - `plugins/mill/unit_tests/test-millpy-fix.py`
