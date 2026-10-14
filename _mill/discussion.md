@@ -40,13 +40,12 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 - A durable per-run summary row in `status.md` that survives worktree teardown via the pushed task branch and the `archive/<slug>` tag.
 - Wall time, exit code, first-run and timed-out fields in the JSON results the orchestrator reads.
 - `millpy-bg.py`'s heartbeat naming its inner command and elapsed time.
+- Orchestrator Bash calls that run verify commands move from a foreground 600000 ms Bash timeout to `run_in_background: true`, so the runner's timeout is the only bound (see Decisions, "Bash-tool cap").
 - Verify sites: `_implementer_common._run_verify_gate` / `_run_verify_gates` (all callers, including the finalize replays and the inferred-success check), `_done_gate.run_gate` and `_done_gate.run_preflight`, `millpy-merge-in-subagent.py`'s verify-fix runs, and the `mill-merge-in` SKILL's step-4 verify replay.
 
 **Out:**
 
 - The NORCE fixture bootstrap bug itself — fixed in that repo.
-- The Bash-tool 10-minute cap on agent-mode `--stage finalize` calls (`mill-go-base/SKILL.md`, "Give any `--stage finalize` call an extended Bash-tool timeout").
-  It stays an outer bound on the whole finalize call; this task does not restructure how finalize is invoked.
 - Review CLIs, LLM-provider timeouts (`bulk_timeout`, `holistic_timeout`, ...) and `implementer_timeout` — they run LLMs, not verify commands.
 - The `dotnet build-server shutdown` post-steps (`_implementer_common._run_verify_gate` and `_done_gate.run_gate`, both `subprocess.run(["dotnet", "build-server", "shutdown"], capture_output=True, timeout=30)`) — left exactly as they are.
   They are cleanup, not verify commands, so they get no label, no verify timeout, no first-run marker and no `## Verify log` row.
@@ -69,11 +68,13 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 
 ### Shell mode preserves each site's current semantics
 
-- Decision: `shell_mode` is `"posix"` or `"native"`.
-  `"posix"` reproduces `_implementer_common._posix_shell_run_args`: `[bash, "-c", cmd]` when `bash` is on PATH on Windows, otherwise `[os.environ.get("SHELL") or "/bin/sh", "-c", cmd]` on POSIX and `["cmd", "/c", cmd]` on Windows without bash.
-  `"native"` reproduces today's `shell=True` (`cmd /c` on Windows, `/bin/sh -c` on POSIX).
-  Batch/module-wide gates and the merge-in paths use `"posix"`; `_done_gate` keeps `"native"`.
-  `_posix_shell_run_args` stays the single source of the bash lookup; the runner calls it or shares its helper.
+- Decision: `shell_mode` is `"posix"` or `"native"`, and the runner hands the result straight to `subprocess.Popen` (it does not go through `_subprocess_util.run`, which accepts only an argv list — see "Timeout").
+  - `"posix"`: call `_implementer_common._posix_shell_run_args(cmd)` unchanged and pass its `(run_args, run_kwargs)` to `Popen` as-is.
+    That yields `Popen([bash, "-c", cmd])` on Windows when `bash` is on PATH, and `Popen(cmd, shell=True)` everywhere else (`/bin/sh -c` on POSIX, `cmd.exe /c` on Windows without bash).
+    `$SHELL` is not consulted, matching today's behaviour.
+    To avoid a `_verify_run` -> `_implementer_common` import cycle (`_implementer_common` will import `_verify_run`), move `_posix_shell_run_args` into `_verify_run.py` and keep a re-export (or update the callers) in `_implementer_common`; there is one definition.
+  - `"native"`: `Popen(cmd, shell=True)` on every platform — exactly today's `_done_gate` behaviour.
+  Batch/module-wide gates, the lock-race retry, the merge-in paths and `millpy-verify-run.py` use `"posix"`; `_done_gate` keeps `"native"`.
 - Rationale: `done_gate` commands are written today against `shell=True`; switching them to bash routing silently changes their meaning on Windows.
 - Rejected: one shell mode for all sites.
 
@@ -96,7 +97,12 @@ The same runner still executes the batch gates, the finalize replays, the merge-
   It bounds each single command invocation — the batch gate, the module-wide gate, the dotnet lock-race retry and each merge-in replay each get their own full budget.
   The value must be a positive number; a missing key uses the default, and a non-positive or non-numeric value raises a clear `ValueError` naming the key when the runner's caller resolves it (no silent fallback).
   A shared helper (e.g. `_verify_run.timeout_seconds(cfg) -> float`) resolves it so the sites don't each parse it.
-- On timeout the runner kills the whole process tree — `taskkill /T /F /PID` on Windows, `os.killpg` on POSIX after starting the child with `start_new_session=True` — exactly the mechanics `_subprocess_util.run` and `_subprocess_util._run_windows_watchdog` already implement; reuse them rather than reimplement (`_subprocess_util.run` with `stdout=<file>`, `stderr=subprocess.STDOUT`, `timeout=`).
+- The runner owns its own `Popen` (stdout to the output file, `stderr=subprocess.STDOUT`, `stdin=subprocess.DEVNULL`), started in its own process group: `start_new_session=True` on POSIX, `CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW` on Windows.
+  It waits with `proc.wait(timeout=...)` in a loop.
+  On timeout it kills the tree directly, with no terminate-then-grace step: `os.killpg(proc.pid, signal.SIGKILL)` on POSIX, `taskkill /T /F /PID <pid>` on Windows, then `proc.wait()` with a short bound.
+  This kills grandchildren that stay in the child's process group/tree; a grandchild that deliberately detaches (new session, or an orphaned MSBuild node on Windows whose parent already exited) is out of reach, which is acceptable because the output file — not a pipe — means it can no longer block mill.
+  `_subprocess_util.run` is not reused: it takes only an argv list (the `"native"` mode needs `shell=True`), and on POSIX it sends `terminate()` first and reaches `killpg` only after a grace period, so a `bash -c` parent dying on SIGTERM would leave its grandchildren running.
+  The runner mirrors only its `PYTHONIOENCODING=utf-8` env injection.
 - A timed-out run is a failed gate.
   `_run_verify_gate` returns `{"status": "stuck", "stuck_type": "verify", "reason": "[verify timed out after <N>s: <label>] <truncated output>", "timed_out": true}`.
   `_done_gate` returns `{"result": "blocked", "reason": "[verify timed out after <N>s] ..."}`.
@@ -106,6 +112,24 @@ The same runner still executes the batch gates, the finalize replays, the merge-
   Per command rather than per gate keeps the bound independent of how many commands a gate chains.
   Reusing `stuck_type: verify` keeps mill-go's existing self-resolve-then-escalate routing; the reason prefix and `timed_out` field tell the self-resolver it is not a test failure.
 - Rejected: a 30-minute floor (sized against the bug, not the suites); a new `stuck_type: verify_timeout` (touches orchestrator routing in mill-go-base for no behavioural gain); `null` to disable (a disabled bound is the silent degradation the brief rules out — a repo with a slow suite raises the number instead).
+
+### Bash-tool cap: verify-running orchestrator calls run in the background
+
+- Problem: the orchestrator runs several verify-executing scripts as foreground Bash calls with a 600000 ms (10-minute) timeout, the Bash tool's maximum.
+  A hung verify is cut off there, before a 20-minute runner timeout fires: the caller gets a tool timeout with no verdict, no `timed_out` envelope and no `## Verify log` row.
+  `--stage finalize` replays every batch's `verify:` sequentially, so even healthy slow suites can hit the cap.
+- Decision: every orchestrator Bash call that runs a verify command uses `run_in_background: true` and no `timeout`, then waits for the Bash completion notification and reads the call's output (the JSON envelope is its last `{`-prefixed stdout line) instead of a foreground return.
+  The calls, and the SKILL text that changes for each:
+  - `millpy-implement.py --stage finalize` and `millpy-fix.py --stage finalize` — `mill-go-base/SKILL.md` "## Agent-mode dispatch" step 5's "Give any `--stage finalize` call an extended Bash-tool timeout — recommend 600000ms" paragraph;
+  - the Prepare-phase `_done_gate.run_preflight` snippet — `mill-go-base/SKILL.md` (~line 571);
+  - the Handoff `_done_gate.run_gate` snippet — `mill-go-base/handoff.md` (~line 143);
+  - the mill-quick `run_preflight` snippet — `mill-quick/SKILL.md` (~line 112);
+  - `millpy-verify-run.py` and `millpy-merge-in-subagent.py --stage finalize` (verify-fix mode) — `mill-merge-in/SKILL.md` step 4.
+  Each paragraph's rationale is rewritten to say the runner's `pipeline.verify_timeout_minutes` bounds each command, so no Bash timeout is set.
+  The existing "Do **not** use `run_in_background: true`" rule for `millpy-bg` launches is unrelated (a `millpy-bg` launch returns immediately) and stays.
+- Resulting bound: total wall time of one call is at most (number of verify commands it runs) x `verify_timeout_minutes`, plus the lock-race retry's own budget; every command that times out produces a `timed_out` result, a `## Verify log` row and a loud failure verdict.
+- Rationale: it is the only option under which the runner's timeout is the failure that fires, so "fail loudly" holds on every path.
+- Rejected: lowering the default below 10 minutes (still loses to the cap whenever a call runs more than one command, and squeezes headroom on real suites); keeping the foreground cap as a documented outer bound (keeps the verdict-less failure shape the brief rules out).
 
 ### Observability lines: START / HEARTBEAT / END
 
@@ -140,6 +164,8 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 
 - Decision: add `_status.append_verify_log(status_path, *, timestamp, label, exit, wall_s, first_run, cmd)` following the existing `append_recovery_log` / `append_inferred_success_log` pattern (a `## Verify log` heading with a fenced `text` block, created on first append).
   One row per command: `<ts>  <label>  exit=<rc|timeout|launch-error>  wall=<N.N>s  first_run=<bool>  cmd=<cmd>`.
+  Before writing, `label` and `cmd` are made single-line and fence-safe: every whitespace run (including newlines) collapses to one space, every backtick becomes `'`, non-ASCII characters become `?`, and `cmd` is cut to 300 characters with a trailing `...`.
+  The same normalisation applies to the `cmd=` field of the START/HEARTBEAT lines.
   `run_verify` appends the row itself when `status_path` is given; callers resolve `status_path` the way they already do (`_paths.status_path` / `require_status_path`) and pass `None` only where no status file exists, in which case the row is skipped with a one-line stderr note.
   A failure to write the row is caught and reported on stderr; it never changes the verify verdict.
 - Commit coverage: the row is only durable once committed.
@@ -170,7 +196,7 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 
 - Decision: add `plugins/mill/scripts/millpy-verify-run.py --label <label> --cmd <cmd> --cwd <path>` that resolves `git_root`, config, timeout and `status_path`, calls `run_verify` with `shell_mode="posix"`, prints one JSON line (`label`, `cmd`, `exit_code`, `wall_s`, `first_run`, `timed_out`, `output_path`, `verify_runs`, and a `reason` using the same truncation as `_run_verify_gate` on failure), and exits 0 on pass, 1 on fail or timeout.
   `mill-merge-in/SKILL.md` step 4's "Run the command from that resolved cwd" invokes this CLI (cache-form `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-verify-run.py" ...`) instead of running the command bare.
-  The SKILL tells the orchestrator to give that Bash call a 600000 ms timeout, matching the existing finalize guidance.
+  The SKILL runs that Bash call with `run_in_background: true` per "Bash-tool cap" above.
 - Rationale: that replay is executed by the orchestrator's own Bash tool today, so it gets none of the instrumentation unless it goes through a script.
 - Rejected: leaving the SKILL replay bare (one verify site would stay blind).
 
@@ -192,8 +218,8 @@ The same runner still executes the batch gates, the finalize replays, the merge-
   - `plugins/mill/scripts/_done_gate.py` — `run_preflight` and `run_gate`, `shell=True`, never-raise contract; callers in `skills/mill-go-base/SKILL.md` (Prepare pre-flight, ~line 550), `skills/mill-go-base/handoff.md` (~line 130), `skills/mill-quick/SKILL.md` (~line 101).
   - `plugins/mill/scripts/millpy-merge-in-subagent.py` — three verify `subprocess.run` calls (~lines 315, 456, 525), each with `env=_generous_terminal_env()`; pass that env as the runner's `env` base so the `COLUMNS`/`LINES` floor survives.
   - `plugins/mill/skills/mill-merge-in/SKILL.md` step 4 — orchestrator runs each batch `verify:` command bare via Bash, dispatching the verify-fix subagent on failure.
-- `plugins/mill/scripts/_subprocess_util.py` — `run(argv, *, cwd, timeout, env, stdout, stderr, ...)` already kills the full process tree on timeout (`_run_windows_watchdog` with `taskkill /T /F`; POSIX `start_new_session` + `killpg`) and returns as soon as the child exits when stdout is not a pipe.
-  It injects `PYTHONIOENCODING=utf-8` and prints spawn/exit breadcrumbs to stderr on non-zero exit; both are acceptable for verify.
+- `plugins/mill/scripts/_subprocess_util.py` — reference only, not reused (see Decisions, "Timeout").
+  `_run_windows_watchdog`'s `taskkill /T /F /PID` call is the Windows tree-kill to copy; its `PYTHONIOENCODING=utf-8` injection is mirrored.
 - `plugins/mill/scripts/millpy-bg.py` — worker fast path, stdlib-only, `_HEARTBEAT_INTERVAL_S = 30`, heartbeat thread writes to the log file handle.
 - `plugins/mill/scripts/_status.py` — log-section helpers to copy: `append_recovery_log`, `append_inferred_success_log`, `append_fork_fallback_log` and their `_find_*_block` helpers.
 - `plugins/mill/scripts/_paths.py` — `status_path`, `require_status_path`, `sanitize_filename_component`.
@@ -222,7 +248,8 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 
 - `_verify_run.py` — TDD, new `unit_tests/test-verify-run.py`:
   - **Pipe-trap regression (TDD first):** a command whose child spawns a grandchild that inherits stdout and sleeps well past the parent's exit; `run_verify` returns within a small bound after the parent exits, with the parent's exit code.
-  - Timeout: a command that sleeps past a tiny `timeout_s` returns `timed_out=True`, `exit_code=None`, and its process tree (including a grandchild) is gone.
+  - Timeout: a command that sleeps past a tiny `timeout_s` returns `timed_out=True`, `exit_code=None`, and a non-detaching grandchild it started (same process group) is gone afterwards, on both POSIX and Windows.
+  - Row/line normalisation: a multi-line `cmd` containing a triple backtick and a non-ASCII character produces a single-line, backtick-free, ASCII row, and the `## Verify log` block still parses with the existing `_find_*_block` pattern after it.
   - First-run marker: first call `first_run=True`, second call in the same `git_root` `False`; marker written after a failing run and after a timeout too.
   - START / HEARTBEAT / END lines appear on stderr and in `.scratch/verify/verify.log`, with a heartbeat interval patched down to a fraction of a second; lines are ASCII.
   - Env: the child sees `MSBUILDDISABLENODEREUSE=1` and `DOTNET_CLI_USE_MSBUILD_SERVER=0` and still sees a caller-supplied env key.
@@ -231,8 +258,12 @@ The same runner still executes the batch gates, the finalize replays, the merge-
   - `shell_mode` routing: `"posix"` vs `"native"` argv construction (unit-level, monkeypatched `shutil.which` / `os.name` as the existing `_posix_shell_run_args` tests do).
   - Timeout config resolution: default when absent, positive value honoured, zero/negative/non-numeric raises.
 - `_status.append_verify_log` — `test-status.py`: section created on first append, rows appended in order, existing sections untouched.
-- `_implementer_common` — `test-implementer-common.py`: existing verify-gate tests keep passing through the runner; timed-out gate returns the stuck dict with the reason prefix and `timed_out`; lock-race retry not attempted on timeout; `verify_runs` present on emitted envelopes for pass and fail.
-- `_done_gate` — `test-done-gate.py`: timeout yields `blocked` with the prefix; `verify_runs` present on `ok` and `blocked`; `skipped` unchanged.
+- Mocking seam: tests of the gate sites patch `_verify_run.run_verify` (returning canned `VerifyRun` records) instead of `subprocess.run`.
+  The existing tests in `test-implementer-common.py` and `test-done-gate.py` that patch `_implementer_common.subprocess.run` / `_done_gate.subprocess.run` and count calls are rewritten, not preserved: verify calls are asserted through the `run_verify` patch, while the `dotnet build-server shutdown` call is still asserted through the module's `subprocess.run` patch, since it stays a plain `subprocess.run`.
+  Any `_posix_shell_run_args` tests that monkeypatch `_implementer_common.shutil.which` move with the function to `test-verify-run.py` and patch `_verify_run`'s `shutil.which`.
+  `test-millpy-merge-in-subagent.py` is updated the same way for its verify calls.
+- `_implementer_common` — `test-implementer-common.py`: verify-gate behaviour (pass, fail, benign Windows cleanup, lock-race retry, truncation) re-asserted through the seam; timed-out gate returns the stuck dict with the reason prefix and `timed_out`; lock-race retry not attempted on timeout; `verify_runs` present on emitted envelopes for pass and fail.
+- `_done_gate` — `test-done-gate.py`: same seam; timeout yields `blocked` with the prefix; `verify_runs` present on `ok` and `blocked`; `skipped` unchanged; `run_gate`'s Windows shutdown still called on success.
 - `millpy-merge-in-subagent.py` — `test-millpy-merge-in-subagent.py`: runner is used with the generous-terminal env; timeout reported as a failed verify.
 - `millpy-verify-run.py` — new CLI test: JSON shape, exit 0 on pass, 1 on fail and on timeout.
 - `millpy-bg.py` — `test-millpy-bg.py` only (passes on `main`): heartbeat line format includes `elapsed=` and `cmd=`, keeps the `[mill-bg] HEARTBEAT ` prefix, long commands truncated with `...`.
@@ -248,4 +279,5 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 - **Q:** Where does the durable timing record live? **A:** [auto-pick] A `## Verify log` section in `status.md`, committed by existing status commits plus `mill-merge-in` step 5. **Why:** follows the `_mill/`-on-branch convention and the existing status log sections; survives teardown via the branch and `archive/<slug>`.
 - **Q:** What does "first run" key on? **A:** [auto-pick] Per worktree, via a marker in `<git_root>/.scratch/verify/`. **Why:** `.scratch/` shares the worktree's lifetime, so a resumed worktree on another machine is correctly cold.
 - **Q:** Should `_done_gate` switch to bash routing? **A:** [auto-pick] No — the runner takes a `shell_mode`; `_done_gate` keeps `native` (`shell=True` semantics). **Why:** done-gate commands are written against today's shell; switching changes their meaning on Windows.
+- **Q:** How is the 20-minute runner timeout reconciled with the 10-minute Bash-tool cap on foreground orchestrator calls? **A:** [auto-pick] Verify-running orchestrator Bash calls switch to `run_in_background: true` with no Bash timeout. **Why:** the only option under which the runner's own timeout, with its loud verdict and log row, is what fires (round-2 review BLOCKING finding).
 - **Q:** How is the `mill-merge-in` SKILL's bare verify replay instrumented? **A:** [auto-pick] A new `millpy-verify-run.py` CLI the SKILL calls instead of running the command bare. **Why:** otherwise that site stays blind.
