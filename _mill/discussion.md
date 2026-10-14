@@ -56,8 +56,11 @@ Why now: #1102 argued for removal and was closed as consolidated into a wiki tas
 - `mill-config.yaml` (hub) and `plugins/mill/templates/mill-config.yaml`: remove the `baseline_verify_timeout_minutes` line from both, in sync.
 - Tests: delete `plugins/mill/integration_tests/test-baseline-waiver.py`, `plugins/mill/integration_tests/test-verify-baseline.py`, `plugins/mill/unit_tests/test-verify-baseline.py`;
   remove baseline cases from `test-millpy-implement.py`, `test-implementer-common.py`, `test-status.py`, `test-millpy-fix.py`, `test-fix-finalize.py`, `test-millpy-merge-in-subagent.py` (see Testing).
-- Present-tense comments that cite removed code: `plugins/mill/scripts/_long_path.py:7`, `plugins/mill/scripts/_worktree.py:272`, `plugins/mill/unit_tests/test-worktree.py:547` and `:597`.
-  Rephrase to describe the still-real failure mode (a lingering dotnet testhost/MSBuild handle after a verify run) without naming `_verify_baseline.py` or `--stage baseline`.
+- Present-tense comments that cite removed code — each keeps its own subject, only the attribution to removed code changes:
+  - `plugins/mill/scripts/_long_path.py:7` (module docstring): WinError 145 from `os.scandir`/`shutil` recursive-delete and junction-removal on deep paths. Replace "during verify-baseline teardown" with "during worktree teardown"; the rest stays.
+  - `plugins/mill/scripts/_worktree.py:272` (`_is_retryable_lock_error` docstring): WinError 32 from a lingering dotnet testhost/MSBuild handle. Replace "left over from a ``--stage baseline`` verify run" with "left over from a verify run"; keep the GitHub #1032 reference.
+  - `plugins/mill/unit_tests/test-worktree.py:547`: the test exercises `remove_safe` pruning a stale nested-worktree registration after force-removing the enclosing worktree. Drop the "`_verify_baseline.py`'s transient nested worktree" attribution (already stale — #1130/#1181 removed that nested worktree); describe the scenario as a nested worktree whose enclosing task worktree was force-removed.
+  - `plugins/mill/unit_tests/test-worktree.py:597`: the test asserts `-c core.longpaths=true` in both the worktree-remove and worktree-prune argv. Drop the trailing "mirroring _verify_baseline.py's creation-side placement" clause; nothing replaces it.
 
 **Out:**
 
@@ -131,17 +134,19 @@ Why now: #1102 argued for removal and was closed as consolidated into a wiki tas
 
 - **Verify commands must avoid `main`'s nine known-red tests.** With strict gates (this task's own outcome) and `main` red, a batch verify that runs `run-all.py` or any of the nine files listed under Scope/Out will fail. Batch `verify:` commands target the specific test files each batch touches, via the `PYTHONPATH=` prefix (Python project), e.g. `PYTHONPATH= uv run --project plugins/mill python plugins/mill/unit_tests/test-status.py`. Plan must check the exact single-file invocation form `run-all.py` and existing plans use.
 - `test-long-path.py` is one of the nine red tests; this task does not edit it (see historical-docs-untouched), so no batch verify should include it.
+  The `_long_path.py` docstring edit is comment-only; put it in the same batch as the `_worktree.py` and `test-worktree.py` comment edits, whose `verify:` runs `test-worktree.py` (green on `main`, not among the nine).
+  Never give that batch `test-long-path.py` as its verify, and never leave it without a `verify:`.
 - Never use `sed` in any generated brief or script (CLAUDE.md).
 - `print()` output ASCII-only.
 
 ## Testing
 
 - **Deletions:** `unit_tests/test-verify-baseline.py`, `integration_tests/test-verify-baseline.py`, `integration_tests/test-baseline-waiver.py` go whole.
-- **`test-implementer-common.py`:** remove waiver/pre-existing-failures cases; keep or add cases asserting strict semantics — batch failure returns the stuck dict; batch pass + module-wide failure returns the prefixed stuck dict; batch pass + no module-wide returns None; stuck dict carries no `"signatures"` key. TDD candidate: write the strict-semantics assertions first, watch the waiver-era code fail the no-`signatures` one, then strip.
+- **`test-implementer-common.py`:** remove `_normalize_failure_signature` from the import block (line 35 — otherwise the file fails at import) and delete case 71b (~line 4918), which exercises it directly; remove waiver/pre-existing-failures cases; keep or add cases asserting strict semantics — batch failure returns the stuck dict; batch pass + module-wide failure returns the prefixed stuck dict; batch pass + no module-wide returns None; stuck dict carries no `"signatures"` key. TDD candidate: write the strict-semantics assertions first, watch the waiver-era code fail the no-`signatures` one, then strip.
 - **`test-millpy-implement.py`:** remove `--stage baseline` and preflight-guard tests; add one asserting argparse rejects `--stage baseline` and that a missing `batch_name` errors for every remaining stage.
 - **`test-status.py`:** remove module-baseline getter/setter/clear and signatures tests; add one asserting `set_batch_field(..., "verify_baseline_failures", ...)` raises `ValueError`, and one asserting a status.md whose `## Batches` entry carries a legacy `verify_baseline_failures` key reads fine and loses the key after an unrelated `set_batch_field` write.
 - **`test-millpy-fix.py` / `test-fix-finalize.py`:** remove the union-forwarding cases (`test-fix-finalize.py` Test 7 around line 520; `test-millpy-fix.py` around 979–1045); assert `finalize_from_output` is called without `module_verify_baseline` / `batch_verify_baseline` kwargs.
-- **`test-millpy-merge-in-subagent.py`:** remove the `--recompute-baseline` cases (around lines 1130–1290); add one asserting `--mode` is required and `--recompute-baseline` is rejected by argparse.
+- **`test-millpy-merge-in-subagent.py`:** remove the `--recompute-baseline` cases (around lines 1130–1290); update `test_9_missing_mode` (~lines 451–461), which asserts the literal `--mode is required unless --recompute-baseline is set` and whose docstring names `--recompute-baseline` as an alternative — `main()` keeps its manual print + `return 1` check, with the message shortened to `--mode is required`; add one asserting `--recompute-baseline` is rejected by argparse.
 - **Final grep check** (plan's last batch or a holistic step): no remaining hit for `_verify_baseline`, `verify_baseline_failures`, `module_verify_baseline`, `baseline_verify_timeout_minutes`, `--stage baseline`, `recompute-baseline`, `baseline-preflight-log` under `plugins/` and `mill-config.yaml`, except the out-of-scope historical files listed under Scope/Out.
 
 ## Q&A log
