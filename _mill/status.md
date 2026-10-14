@@ -1,10 +1,10 @@
 # Status
 
 ```yaml
-phase: discussed
+phase: planning
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
-plan: null
+plan: _mill/plan
 parent_branch: main
 parent_thread: MH-orch
 task: Drop the eager verify-baseline pre-flight
@@ -19,4 +19,5 @@ discussing  '2026-10-14T08:29:24Z'
 discussion-fix-r1  '2026-10-14T08:39:15Z'
 discussion-fix-r2  '2026-10-14T08:41:31Z'
 discussed  '2026-10-14T08:41:31Z'
+planning  '2026-10-14T09:21:02Z'
 ```
