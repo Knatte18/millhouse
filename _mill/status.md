@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-gap-fix-r2
+phase: discussed
 slug: verify-runner-instrumentation
 branch: hanf/verify-runner-instrumentation
 plan: null
@@ -18,4 +18,6 @@ task_description: |
 discussing  '2026-10-14T10:12:23Z'
 discussion-fix-r1  '2026-10-14T11:11:16Z'
 discussion-gap-fix-r2  '2026-10-14T11:14:30Z'
+discussion-fix-r3  '2026-10-14T11:17:39Z'
+discussed  '2026-10-14T11:17:39Z'
 ```

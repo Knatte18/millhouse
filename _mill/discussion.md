@@ -61,6 +61,9 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 
 - Decision: add `plugins/mill/scripts/_verify_run.py` exposing one entry point, `run_verify(cmd, *, cwd, label, git_root, timeout_s, shell_mode, env=None, status_path=None) -> VerifyRun`.
   `VerifyRun` is a small dataclass: `label`, `cmd`, `cwd`, `exit_code` (int, or `None` on timeout), `wall_s` (float), `first_run` (bool), `timed_out` (bool), `output` (str, combined stdout+stderr read from the output file), `output_path` (Path).
+  The output file is opened in binary mode for the child and read back after exit with `encoding="utf-8", errors="replace"`, so undecodable bytes never raise; the child env already carries `PYTHONIOENCODING=utf-8`.
+  This replaces today's `text=True` locale decoding (cp1252 on Windows), which is a deliberate, safer change.
+  `run_verify` takes `timeout_s` and `status_path` as already-resolved values; it never reads config itself.
   It never raises for command failure or timeout; it raises only for programmer errors (e.g. missing `cwd`).
   A launch failure (missing binary, bad cwd) is returned as a `VerifyRun` with `exit_code=None`, `timed_out=False` and the exception text as `output`, so every caller keeps its existing never-raise contract.
 - Rationale: there are five call sites with five hand-rolled `subprocess.run` blocks; instrumentation and the pipe fix belong in one place or they drift.
@@ -97,6 +100,14 @@ The same runner still executes the batch gates, the finalize replays, the merge-
   It bounds each single command invocation — the batch gate, the module-wide gate, the dotnet lock-race retry and each merge-in replay each get their own full budget.
   The value must be a positive number; a missing key uses the default, and a non-positive or non-numeric value raises a clear `ValueError` naming the key when the runner's caller resolves it (no silent fallback).
   A shared helper (e.g. `_verify_run.timeout_seconds(cfg) -> float`) resolves it so the sites don't each parse it.
+- Where each site resolves `timeout_s` and `status_path`:
+  - `_implementer_common._run_verify_gate` / `_run_verify_gates` gain keyword parameters `timeout_s`, `status_path` and `label`, threaded from `millpy-implement.py` / `millpy-fix.py`, which already load `cfg`.
+    Those CLIs resolve the timeout before any verify runs, so an invalid value fails the CLI invocation loudly (non-zero exit with the `ValueError` text) instead of reaching the never-raise gate.
+  - `_done_gate.run_gate` / `run_preflight` keep their `(gate_cmd, git_root)` signatures, so the SKILL snippets do not change shape.
+    Inside their existing `try`, they resolve `hub = _paths.resolve_hub_path(git_root)` (explicit path, never cwd), `cfg = _config.load_config(hub, git_root)`, `timeout_s = _verify_run.timeout_seconds(cfg)` and `status_path = _paths.status_path(hub, cfg)` (`None` when the file does not exist).
+    Any exception there, including the invalid-timeout `ValueError`, returns `{"result": "blocked", "reason": <message>}`, preserving the never-raise contract.
+  - `millpy-merge-in-subagent.py` already loads `cfg`; it resolves both once at startup.
+  - `millpy-verify-run.py` resolves both from `git_root` the same way as `_done_gate`, exiting 1 with a JSON `reason` on an invalid value.
 - The runner owns its own `Popen` (stdout to the output file, `stderr=subprocess.STDOUT`, `stdin=subprocess.DEVNULL`), started in its own process group: `start_new_session=True` on POSIX, `CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW` on Windows.
   It waits with `proc.wait(timeout=...)` in a loop.
   On timeout it kills the tree directly, with no terminate-then-grace step: `os.killpg(proc.pid, signal.SIGKILL)` on POSIX, `taskkill /T /F /PID <pid>` on Windows, then `proc.wait()` with a short bound.
@@ -106,7 +117,7 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 - A timed-out run is a failed gate.
   `_run_verify_gate` returns `{"status": "stuck", "stuck_type": "verify", "reason": "[verify timed out after <N>s: <label>] <truncated output>", "timed_out": true}`.
   `_done_gate` returns `{"result": "blocked", "reason": "[verify timed out after <N>s] ..."}`.
-  The merge-in paths report it as a failed verify through their existing stuck shape with the same reason prefix.
+  The merge-in paths report it as a failed verify through their existing stuck shape with the same reason prefix (see "Timed-out merge-in verify skips the fixer").
   A timed-out run never triggers the dotnet lock-race retry and is never classified benign by `_is_benign_windows_cleanup`.
 - Rationale: real suites in every repo in play run 2–4 minutes and the reporting repo's worst cold run is now 163 seconds; 20 minutes leaves 5x headroom for a legitimately slow suite while bounding a hang.
   Per command rather than per gate keeps the bound independent of how many commands a gate chains.
@@ -173,7 +184,8 @@ The same runner still executes the batch gates, the finalize replays, the merge-
   - batch gates / finalize replays — mill-go's existing per-batch status commits;
   - done gate — Handoff's existing `done` phase commit;
   - `run_preflight` (mill-go Prepare and mill-quick) — the next existing status commit;
-  - merge-in replays and `millpy-merge-in-subagent.py` — `mill-merge-in` step 5 currently stages only `_mill/briefs/`; extend it to also stage `status_path`, so rows written during merge-in are committed before `mill-merge`'s cleanup commit removes `_mill/`.
+  - merge-in replays and `millpy-merge-in-subagent.py`, success path — `mill-merge-in` step 5 currently stages only `_mill/briefs/`; extend it to also stage `status_path`, so rows written during merge-in are committed before `mill-merge`'s cleanup commit removes `_mill/`.
+  - merge-in replays, failure path — see "Verify log survives merge-in rollback" below.
   After that commit, the rows survive teardown through the pushed task branch and the `archive/<slug>` tag that `mill-merge` creates.
 - Dirty-tree hazard: writing `status.md` mid-finalize must not trip any dirty-tree check.
   `_in_scope_dirty_stuck` already excludes the task dir.
@@ -199,6 +211,34 @@ The same runner still executes the batch gates, the finalize replays, the merge-
   The SKILL runs that Bash call with `run_in_background: true` per "Bash-tool cap" above.
 - Rationale: that replay is executed by the orchestrator's own Bash tool today, so it gets none of the instrumentation unless it goes through a script.
 - Rejected: leaving the SKILL replay bare (one verify site would stay blind).
+
+### Timed-out merge-in verify skips the fixer
+
+- Decision: a `timed_out` verify result in the merge-in flow never dispatches the verify-fix LLM.
+  It goes straight to the existing stuck path (rollback to `$CHK`, preserve the checkpoint, escalate to the caller).
+  - `millpy-merge-in-subagent.py` `_run_verify_fix`, initial verify, `prepare` stage: on `timed_out`, emit `{"status": "stuck", "stuck_type": "verify", "timed_out": true, "reason": "[verify timed out after <N>s: merge-in:<label>] <truncated output>", "verify_runs": [...]}` instead of a dispatch envelope.
+    `mill-merge-in` step 4 treats a `status: stuck` line from the prepare stage exactly like a stuck finalize result: Rollback, then escalate.
+  - Same function, `full` stage (subprocess/psmux dispatch): on `timed_out`, return that stuck envelope without starting the sub-agent session.
+  - Post-fix re-verify in `finalize` / `full`: already reports stuck on failure; a timeout uses the same envelope shape.
+  - `millpy-verify-run.py` replay in `mill-merge-in` step 4: when its JSON has `timed_out: true`, the SKILL skips the verify-fix dispatch and goes straight to Rollback and escalation with the CLI's `reason`.
+- Rationale: the fixer would re-run the same hung command, spending another full timeout budget per attempt, and would read a hang as a test failure to fix.
+  A timeout is evidence about the environment or a bootstrap, not the merged code, so it belongs with the operator.
+- mill-go's batch gates keep their existing `stuck_type: verify` routing (self-resolve once, then escalate); the `[verify timed out` reason prefix tells the self-resolver what happened, and the extra cost is bounded at one more budget.
+- Rejected: letting the fixer try once (one or more extra 20-minute budgets spent on a non-code problem).
+
+### Verify log survives merge-in rollback
+
+- Problem: `mill-merge-in`'s Rollback (`git reset --hard "$CHK"`, the shared block near the end of the SKILL, also referenced from steps 3 and 4) reverts `status.md` to the checkpoint, discarding the uncommitted `## Verify log` rows of exactly the failed or timed-out runs that most need recording.
+- Decision: add `_status.read_verify_log_rows(status_path) -> list[str]` and `_status.restore_verify_log_rows(status_path, rows) -> int` (appends each row not already present in the section, by exact text, preserving order; returns the number appended).
+  The Rollback block becomes:
+  1. capture rows: a cache-form `python -c` snippet writes `read_verify_log_rows(status_path)` as JSON to `<git_root>/.scratch/verify/rollback-rows.json` (gitignored, so the reset leaves it alone);
+  2. `git reset --hard "$CHK"` (unchanged);
+  3. restore: a snippet reads that JSON, calls `restore_verify_log_rows`, and deletes the JSON file;
+  4. when it appended any rows, commit `status_path` alone with `mill-merge-in: keep verify log across rollback` and push.
+  The checkpoint branch is still preserved and the escalation to the caller is unchanged; the commit lands on top of `$CHK`, so the rolled-back state is otherwise identical.
+- Rationale: the rollback's job is to undo the merge, not the record of what the verify did; with this, "every command that times out produces a durable `## Verify log` row" holds on the merge-in failure path too.
+- Other hard resets checked: `mill-autofix`'s `git reset --hard HEAD` runs after mill-go's Handoff commit, which already includes the rows; `_merge.py`'s resets operate on the parent worktree or after the cleanup commit, with no verify-log rows pending.
+- Rejected: accepting that failed merge-in rows are not durable (loses exactly the diagnostic the task exists for); committing `status_path` before the reset (the reset to `$CHK` discards that commit too).
 
 ### millpy-bg heartbeat names its command
 
@@ -258,6 +298,10 @@ The same runner still executes the batch gates, the finalize replays, the merge-
   - `shell_mode` routing: `"posix"` vs `"native"` argv construction (unit-level, monkeypatched `shutil.which` / `os.name` as the existing `_posix_shell_run_args` tests do).
   - Timeout config resolution: default when absent, positive value honoured, zero/negative/non-numeric raises.
 - `_status.append_verify_log` — `test-status.py`: section created on first append, rows appended in order, existing sections untouched.
+  `read_verify_log_rows` / `restore_verify_log_rows`: rows read back verbatim; restore into a file without the section creates it; restore skips rows already present and returns the count appended.
+- `millpy-merge-in-subagent.py` timeout routing: a `timed_out` initial verify in the `prepare` stage emits the stuck envelope with `timed_out: true` and no dispatch envelope; in the `full` stage no sub-agent session is started.
+- `_done_gate` config resolution: an invalid `pipeline.verify_timeout_minutes` in the fixture config yields `blocked` with the error text, never an exception.
+- `_verify_run` output decoding: a child writing invalid UTF-8 bytes yields a `VerifyRun` with replacement characters, not an exception.
 - Mocking seam: tests of the gate sites patch `_verify_run.run_verify` (returning canned `VerifyRun` records) instead of `subprocess.run`.
   The existing tests in `test-implementer-common.py` and `test-done-gate.py` that patch `_implementer_common.subprocess.run` / `_done_gate.subprocess.run` and count calls are rewritten, not preserved: verify calls are asserted through the `run_verify` patch, while the `dotnet build-server shutdown` call is still asserted through the module's `subprocess.run` patch, since it stays a plain `subprocess.run`.
   Any `_posix_shell_run_args` tests that monkeypatch `_implementer_common.shutil.which` move with the function to `test-verify-run.py` and patch `_verify_run`'s `shutil.which`.
