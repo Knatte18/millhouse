@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: discussion-fix-r1
+phase: discussed
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
 plan: null
@@ -17,4 +17,6 @@ task_description: |
 ```text
 discussing  '2026-10-14T08:29:24Z'
 discussion-fix-r1  '2026-10-14T08:39:15Z'
+discussion-fix-r2  '2026-10-14T08:41:31Z'
+discussed  '2026-10-14T08:41:31Z'
 ```

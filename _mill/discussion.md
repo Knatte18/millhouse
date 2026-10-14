@@ -60,6 +60,7 @@ Why now: #1102 argued for removal and was closed as consolidated into a wiki tas
   - `plugins/mill/scripts/_long_path.py:7` (module docstring): WinError 145 from `os.scandir`/`shutil` recursive-delete and junction-removal on deep paths. Replace "during verify-baseline teardown" with "during worktree teardown"; the rest stays.
   - `plugins/mill/scripts/_worktree.py:272` (`_is_retryable_lock_error` docstring): WinError 32 from a lingering dotnet testhost/MSBuild handle. Replace "left over from a ``--stage baseline`` verify run" with "left over from a verify run"; keep the GitHub #1032 reference.
   - `plugins/mill/unit_tests/test-worktree.py:547`: the test exercises `remove_safe` pruning a stale nested-worktree registration after force-removing the enclosing worktree. Drop the "`_verify_baseline.py`'s transient nested worktree" attribution (already stale — #1130/#1181 removed that nested worktree); describe the scenario as a nested worktree whose enclosing task worktree was force-removed.
+  - `plugins/mill/scripts/_plan_dag.py:507` (`parse_verify_field` docstring): drop "baseline" from the list of `verify:` read sites ("implementer, fixer, baseline, merge-in, plan-validate"). The final grep keys on identifiers and will not catch this one.
   - `plugins/mill/unit_tests/test-worktree.py:597`: the test asserts `-c core.longpaths=true` in both the worktree-remove and worktree-prune argv. Drop the trailing "mirroring _verify_baseline.py's creation-side placement" clause; nothing replaces it.
 
 **Out:**
@@ -105,6 +106,10 @@ Why now: #1102 argued for removal and was closed as consolidated into a wiki tas
 - Rationale: the waiver was the sole consumer of both (verified by grep across `plugins/mill/scripts` and `plugins/mill/skills`). YAGNI.
 - Rejected: keeping the field "for diagnostics" — nothing reads it.
 - Plan must re-grep for `"signatures"` / `.get("signatures")` and `_normalize_failure_signature` before deleting, and adjust `_extract_failure_signatures`' docstring which currently describes its output as feeding baseline/finalize comparison.
+- Also remove `_extract_failure_signatures`' `returncode` keyword parameter and its synthetic `NONZERO_EXIT:` branch, and the docstring paragraphs explaining them.
+  Their only production callers are `_run_verify_gate`'s `signatures = _extract_failure_signatures(..., returncode=...)` line (deleted with the `"signatures"` field) and `_verify_baseline.py` (deleted); `_done_gate.py:70` and `_run_verify_gate`'s tail-truncation recovery call it without `returncode`.
+  The synthesis existed only so the subset-diff waiver had a comparable signature for non-test failures. Same YAGNI reasoning as the field.
+  The function becomes "return every line starting with a known failure-marker prefix, in order".
 
 ### no-status-migration
 
@@ -142,7 +147,7 @@ Why now: #1102 argued for removal and was closed as consolidated into a wiki tas
 ## Testing
 
 - **Deletions:** `unit_tests/test-verify-baseline.py`, `integration_tests/test-verify-baseline.py`, `integration_tests/test-baseline-waiver.py` go whole.
-- **`test-implementer-common.py`:** remove `_normalize_failure_signature` from the import block (line 35 — otherwise the file fails at import) and delete case 71b (~line 4918), which exercises it directly; remove waiver/pre-existing-failures cases; keep or add cases asserting strict semantics — batch failure returns the stuck dict; batch pass + module-wide failure returns the prefixed stuck dict; batch pass + no module-wide returns None; stuck dict carries no `"signatures"` key. TDD candidate: write the strict-semantics assertions first, watch the waiver-era code fail the no-`signatures` one, then strip.
+- **`test-implementer-common.py`:** remove `_normalize_failure_signature` from the import block (line 35 — otherwise the file fails at import) and delete case 71b (~line 4918), which exercises it directly; delete the `_extract_failure_signatures(..., returncode=...)` / `NONZERO_EXIT` assertions (~lines 4875–4910) and keep the marker-matching assertions above them (~4852–4871); remove waiver/pre-existing-failures cases; keep or add cases asserting strict semantics — batch failure returns the stuck dict; batch pass + module-wide failure returns the prefixed stuck dict; batch pass + no module-wide returns None; stuck dict carries no `"signatures"` key. TDD candidate: write the strict-semantics assertions first, watch the waiver-era code fail the no-`signatures` one, then strip.
 - **`test-millpy-implement.py`:** remove `--stage baseline` and preflight-guard tests; add one asserting argparse rejects `--stage baseline` and that a missing `batch_name` errors for every remaining stage.
 - **`test-status.py`:** remove module-baseline getter/setter/clear and signatures tests; add one asserting `set_batch_field(..., "verify_baseline_failures", ...)` raises `ValueError`, and one asserting a status.md whose `## Batches` entry carries a legacy `verify_baseline_failures` key reads fine and loses the key after an unrelated `set_batch_field` write.
 - **`test-millpy-fix.py` / `test-fix-finalize.py`:** remove the union-forwarding cases (`test-fix-finalize.py` Test 7 around line 520; `test-millpy-fix.py` around 979–1045); assert `finalize_from_output` is called without `module_verify_baseline` / `batch_verify_baseline` kwargs.
