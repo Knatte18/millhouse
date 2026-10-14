@@ -35,6 +35,8 @@ from _implementer_common import (  # noqa: E402
     _extract_failure_signatures,
     _fixer_logic_ancestor_override,
     _truncate_verify_output,
+    _attach_verify_runs,
+    _porcelain_dirt,
 )
 import _cleanliness  # noqa: E402
 import _status  # noqa: E402
@@ -5971,6 +5973,183 @@ def _run_cases() -> int:
             except Exception as exc:
                 print(f"FAIL: case 87 {label} ({exc})", file=sys.stderr)
                 errors += 1
+
+    # Case 88: _forward_output attaches a "verify_runs" summary list to the envelope whenever a verify ran.
+    summary_keys = {"label", "cmd", "exit_code", "wall_s", "first_run", "timed_out"}
+    for label_88, batch_cmd, module_cmd, expected_status, expected_labels in (
+        ("a", "exit 0", None, "success", ["verify"]),
+        ("b", "exit 1", None, "stuck", ["verify"]),
+        ("c", "exit 0", "exit 0", "success", ["verify", "verify:module-wide"]),
+        ("d", None, None, "success", None),
+    ):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir)
+            base_sha = _setup_fixture(project_root)
+            try:
+                _commit_file(project_root, "src.txt", "x", "card-1")
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        '{"status":"success","commit_sha":"abc","session_id":"s88"}\n',
+                        project_root,
+                        start_sha=base_sha,
+                        verify_cmd=batch_cmd,
+                        module_wide_verify_cmd=module_cmd,
+                        card_ids={1},
+                        session_id="s88",
+                    )
+                )
+                data = json.loads(captured.strip())
+                assert data["status"] == expected_status, data
+                if expected_labels is None:
+                    assert "verify_runs" not in data, data
+                else:
+                    assert [r["label"] for r in data["verify_runs"]] == expected_labels, data
+                    assert all(set(r) == summary_keys for r in data["verify_runs"]), data
+                print(f"PASS: case 88{label_88} - verify_runs on the envelope: {expected_labels}")
+            except Exception as exc:
+                print(f"FAIL: case 88{label_88} ({exc})", file=sys.stderr)
+                errors += 1
+
+    # Case 88e: _attach_verify_runs leaves non-envelope lines and trailing newlines alone.
+    try:
+        fake_run = _verify_run.VerifyRun(
+            label="verify", cmd="exit 0", cwd=Path("."), exit_code=0, wall_s=0.04,
+            first_run=False, timed_out=False, output="", output_path=None, timeout_s=1.0,
+        )
+        text = 'log noise\n{"status": "success"}\n{"other": 1}\n'
+        attached = _attach_verify_runs(text, [fake_run])
+        lines = attached.split("\n")
+        assert lines[0] == "log noise" and lines[2] == '{"other": 1}' and lines[3] == "", attached
+        assert json.loads(lines[1])["verify_runs"] == [fake_run.summary()], attached
+        assert _attach_verify_runs(text, []) == text
+        print("PASS: case 88e - _attach_verify_runs rewrites only status envelopes")
+    except Exception as exc:
+        print(f"FAIL: case 88e ({exc})", file=sys.stderr)
+        errors += 1
+
+    # Case 89: finalize_from_output forwards verify_timeout_s and verify_label to the verify runner.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        try:
+            _commit_file(project_root, "src.txt", "x", "card-1")
+            agent_output_path = project_root / "agent-output.txt"
+            agent_output_path.write_text(
+                '{"status":"success","commit_sha":"abc","session_id":"s89"}\n', encoding="utf-8"
+            )
+            side_effect, calls = _canned_run_verify({"exit_code": 0})
+            with _patch_run_verify(side_effect):
+                _capture_stdout(
+                    lambda: finalize_from_output(
+                        agent_output_path,
+                        project_root,
+                        start_sha=base_sha,
+                        verify_cmd="exit 0",
+                        card_ids={1},
+                        session_id="s89",
+                        status_path=project_root / "_mill" / "status.md",
+                        verify_timeout_s=42,
+                        verify_label="batch-gate",
+                    )
+                )
+            kwargs = calls[0][1]
+            assert kwargs["timeout_s"] == 42, kwargs
+            assert kwargs["label"] == "batch-gate", kwargs
+            assert kwargs["status_path"] == project_root / "_mill" / "status.md", kwargs
+            print("PASS: case 89 - finalize_from_output forwards verify timeout and label")
+        except Exception as exc:
+            print(f"FAIL: case 89 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 90: a timed-out gate stays stuck/verify even where a failing gate would be reclassified as a partial-batch stop.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        base_sha = _setup_fixture(project_root)
+        try:
+            _commit_file(project_root, "src.txt", "x", "card-1")
+            plain_failure = {"status": "stuck", "stuck_type": "verify", "reason": "boom"}
+            reclassified = _reclassify_verify_failure(
+                dict(plain_failure), project_root, base_sha, {1, 2, 3}, "s90", cards_done=None
+            )
+            assert reclassified["stuck_type"] != "verify", (
+                f"fixture must be a reclassifiable partial batch, got {reclassified}"
+            )
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": None, "timed_out": True, "output": "hung"}
+            )
+            with _patch_run_verify(side_effect):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        '{"status":"success","commit_sha":"abc","session_id":"s90"}\n',
+                        project_root,
+                        start_sha=base_sha,
+                        verify_cmd="sleep 999",
+                        card_ids={1, 2, 3},
+                        session_id="s90",
+                        verify_timeout_s=5,
+                    )
+                )
+            data = json.loads(captured.strip())
+            assert data["stuck_type"] == "verify" and data["timed_out"] is True, data
+            assert data["reason"].startswith("[verify timed out after 5s: verify] "), data
+            assert data["verify_runs"][0]["timed_out"] is True, data
+            print("PASS: case 90 - timed-out gate is never reclassified away from stuck/verify")
+        except Exception as exc:
+            print(f"FAIL: case 90 ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 91: a dirty _mill/status.md alone is ignored by every dirty-tree check in this module.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        _setup_fixture(project_root)
+        try:
+            _commit_file(project_root, "_mill/status.md", "# Status\n", "add status")
+            base_sha = subprocess.run(
+                ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True,
+            ).stdout.strip()
+            _commit_file(project_root, "src.txt", "x", "card-1")
+            status_file = project_root / "_mill" / "status.md"
+            status_file.write_text("# Status\n\n## Verify log\n| row |\n", encoding="utf-8")
+
+            assert _porcelain_dirt(" M _mill/status.md\n M hub/_mill/status.md\n") == []
+            assert _porcelain_dirt(" M _mill/status.md\n M src.txt\n") == [" M src.txt"]
+
+            gate = _in_scope_dirty_stuck(
+                project_root=project_root,
+                task_dir=project_root / "_mill",
+                parent_branch="main",
+                session_id="s91",
+                start_sha=base_sha,
+            )
+            assert gate is None, f"case 91: status.md dirt tripped the dirty gate: {gate}"
+
+            rc, captured = _capture_stdout(
+                lambda: _forward_output(
+                    "no structured status here",
+                    project_root,
+                    start_sha=base_sha,
+                    session_id="s91",
+                )
+            )
+            data = json.loads(captured.strip())
+            assert data["status"] == "success" and data["inferred"] is True, data
+
+            override = _fixer_logic_ancestor_override(project_root, base_sha, "exit 0", None)
+            assert override is not None and override["status"] == "success", override
+
+            # Whitespace-only drift next to the dirty status.md still reads as formatter drift.
+            (project_root / "README.md").write_text("seed ", encoding="utf-8")
+            assert _is_formatter_drift_only(project_root) is True, (
+                "case 91: whitespace drift beside a dirty status.md must be formatter drift"
+            )
+            # A real content change in a non-status file is still not drift.
+            (project_root / "README.md").write_text("changed", encoding="utf-8")
+            assert _is_formatter_drift_only(project_root) is False
+            print("PASS: case 91 - dirty status.md is ignored by the dirty-tree checks")
+        except Exception as exc:
+            print(f"FAIL: case 91 ({exc})", file=sys.stderr)
+            errors += 1
 
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)

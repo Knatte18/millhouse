@@ -1,6 +1,8 @@
 """Shared helpers for millpy-implement.py and millpy-fix.py."""
 
+import contextlib
 import html
+import io
 import json
 import os
 import re
@@ -434,6 +436,19 @@ def _is_brief_path(path: str) -> bool:
     return "/_mill/briefs/" in "/" + path
 
 
+def _porcelain_dirt(stdout: str) -> list[str]:
+    """
+    Return the non-empty `git status --porcelain` lines whose path is not a status.md.
+
+    status.md is orchestrator-owned; its dirt is never implementer work.
+    """
+    return [
+        line
+        for line in stdout.splitlines()
+        if line.strip() and not _cleanliness.is_status_md_path(line[3:])
+    ]
+
+
 def _in_scope_dirty_stuck(
     project_root: Path,
     task_dir: Path | None,
@@ -453,6 +468,7 @@ def _in_scope_dirty_stuck(
     gate, so it cannot false-block finalize if it becomes dirty again for reasons unrelated to the
     current batch. Do not "fix" this function to match compute_terminal_dirt's broader scope --
     that would reintroduce the false-block this function exists to avoid.
+    `_mill/status.md` is excluded the same way: the Verify log makes it dirty between orchestrator commits.
     `_mill/briefs/` paths, at any depth (flat or under a hub subdirectory), are excluded from `owned_paths` entirely -- they are Builder-owned
     orchestration bookkeeping (rendered prompt / captured transcript), never implementer content
     this gate exists to police, and the Builder already stages and commits them itself at
@@ -489,7 +505,7 @@ def _in_scope_dirty_stuck(
             return None
         owned_paths = {
             line for line in diff_result.stdout.splitlines()
-            if line and not _is_brief_path(line)
+            if line and not _is_brief_path(line) and not _cleanliness.is_status_md_path(line)
         }
         porcelain_lines = _pygit2_util.status_porcelain(project_root, include_untracked=False)
         dirt = [line for line in porcelain_lines if line[3:] in owned_paths]
@@ -626,6 +642,10 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     return has_cleanup_signature and not has_failure_marker
 
 
+# Pathspec that drops status.md (at any depth) from a whole-tree `git diff`.
+_STATUS_MD_EXCLUDE_PATHSPEC = ["--", ":/", ":(top,exclude,glob)**/_mill/status.md"]
+
+
 def _is_formatter_drift_only(project_root: Path) -> bool:
     """Check if the only remaining dirt is whitespace-only formatter drift.
 
@@ -667,7 +687,7 @@ def _is_formatter_drift_only(project_root: Path) -> bool:
         # Check if tracked files have changes. --ignore-cr-at-eol ensures that a pure CRLF-vs-LF delta (e.g.
         # from text-mode CRLF translation on Windows) is treated the same as whitespace and does not prevent drift detection.
         result_diff = _subprocess_util.run(
-            ["git", "-C", str(project_root), "diff", "--ignore-cr-at-eol"],
+            ["git", "-C", str(project_root), "diff", "--ignore-cr-at-eol", *_STATUS_MD_EXCLUDE_PATHSPEC],
             check=False,
         )
         if result_diff.returncode != 0:
@@ -679,7 +699,7 @@ def _is_formatter_drift_only(project_root: Path) -> bool:
         # Check if those changes are purely whitespace. --ignore-cr-at-eol is added here too because git diff -w does not suppress CR-at-EOL diffs on its own;
         # a CRLF-only delta would still appear as content under -w without this flag, causing a false "not formatter drift" result.
         result_diff_w = _subprocess_util.run(
-            ["git", "-C", str(project_root), "diff", "-w", "--ignore-cr-at-eol"],
+            ["git", "-C", str(project_root), "diff", "-w", "--ignore-cr-at-eol", *_STATUS_MD_EXCLUDE_PATHSPEC],
             check=False,
         )
         if result_diff_w.returncode != 0:
@@ -1467,6 +1487,8 @@ def finalize_from_output(
     module_wide_cwd_override: Path | None = None,
     commit_sha_field_name: str = "commit_sha",
     card_commit_messages: dict[int, str] | None = None,
+    verify_timeout_s: float | None = None,
+    verify_label: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -1512,6 +1534,10 @@ def finalize_from_output(
         card_commit_messages: Forwarded unchanged to _forward_output.
             See _forward_output for the full-batch-history fallback this enables.
             Defaults to None (fallback disabled, as before this parameter existed).
+        verify_timeout_s: Per-command verify timeout in seconds, forwarded to _forward_output;
+            None means the runner's default.
+        verify_label: Verify-site label for the runner's markers and Verify log rows, forwarded to
+            _forward_output; None means "verify".
     """
     # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
     # but the parameter is documented (not enforced) as Path.
@@ -1549,6 +1575,8 @@ def finalize_from_output(
         module_wide_cwd_override=module_wide_cwd_override,
         commit_sha_field_name=commit_sha_field_name,
         card_commit_messages=card_commit_messages,
+        verify_timeout_s=verify_timeout_s,
+        verify_label=verify_label,
     )
 
 
@@ -1594,6 +1622,10 @@ def _fixer_logic_ancestor_override(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     session_id: str | None = None,
+    timeout_s: float | None = None,
+    status_path: Path | None = None,
+    label: str = "verify",
+    runs: list | None = None,
 ) -> dict | None:
     """
     Override a fixer's self-reported ``stuck_type: logic`` when the ancestry and working tree show
@@ -1609,7 +1641,8 @@ def _fixer_logic_ancestor_override(
     Checks, in order:
       1. A real content commit exists since start_sha (`_content_commit_count`).
           None or 0 means the self-report stands -- return None.
-      2. The working tree is clean (`git status --porcelain --untracked-files=no` has no output).
+      2. The working tree is clean (`git status --porcelain --untracked-files=no` has no output
+          beyond a dirty status.md).
           A dirty tree means a genuine unresolved problem -- return None.
       3. `_run_verify_gates` passes (returns None) for the already-committed state.
           A non-None result means verify still fails -- the self-reported logic stuck is not
@@ -1625,6 +1658,7 @@ def _fixer_logic_ancestor_override(
             `_run_verify_gates`.
         session_id: Session identifier for the overridden envelope;
             falls back to the literal "unknown" when not supplied.
+        timeout_s, status_path, label, runs: forwarded unchanged to `_run_verify_gates`.
 
     Returns:
         `{"status": "success", "commit_sha": <HEAD>, "session_id": ..., "inferred": True}` when all
@@ -1637,7 +1671,7 @@ def _fixer_logic_ancestor_override(
         ["git", "status", "--porcelain", "--untracked-files=no"],
         cwd=project_root,
     )
-    if _status_result.stdout.strip():
+    if _porcelain_dirt(_status_result.stdout):
         return None
 
     _gate_result = _run_verify_gates(
@@ -1647,6 +1681,10 @@ def _fixer_logic_ancestor_override(
         git_root=git_root,
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
+        timeout_s=timeout_s,
+        status_path=status_path,
+        label=label,
+        runs=runs,
     )
     if _gate_result is not None:
         return None
@@ -1658,6 +1696,32 @@ def _fixer_logic_ancestor_override(
         "session_id": session_id or "unknown",
         "inferred": True,
     }
+
+
+def _attach_verify_runs(text: str, runs: list) -> str:
+    """
+    Add a "verify_runs" summary list to every JSON status envelope line in text.
+
+    Lines that are not a JSON object with a "status" key pass through unchanged, and text is
+    returned unchanged when runs is empty.
+    """
+    if not runs:
+        return text
+    summaries = [run.summary() for run in runs]
+    rewritten = []
+    for line in text.splitlines(keepends=True):
+        stripped = line.rstrip("\r\n")
+        try:
+            envelope = json.loads(stripped)
+        except json.JSONDecodeError:
+            rewritten.append(line)
+            continue
+        if isinstance(envelope, dict) and "status" in envelope:
+            envelope["verify_runs"] = summaries
+            rewritten.append(json.dumps(envelope) + line[len(stripped):])
+        else:
+            rewritten.append(line)
+    return "".join(rewritten)
 
 
 def _forward_output(
@@ -1681,6 +1745,77 @@ def _forward_output(
     module_wide_cwd_override: Path | None = None,
     commit_sha_field_name: str = "commit_sha",
     card_commit_messages: dict[int, str] | None = None,
+    verify_timeout_s: float | None = None,
+    verify_label: str | None = None,
+) -> int:
+    """
+    Finalize a sub-agent's output: print exactly one JSON status envelope on stdout and return 0.
+
+    Every verify run made while finalizing is summarised under a "verify_runs" key on each
+    envelope; no key is added when no verify ran.
+    All other parameters, and the gates they drive, are documented on `_forward_output_body`.
+
+    Args:
+        verify_timeout_s: Per-command verify timeout in seconds; None means the runner's default.
+        verify_label: Verify-site label for the runner's markers and Verify log rows; None means
+            "verify".
+    """
+    verify_runs: list = []
+    captured = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(captured):
+            return _forward_output_body(
+                output,
+                project_root,
+                start_sha=start_sha,
+                snapshot_path=snapshot_path,
+                session_id=session_id,
+                verify_cmd=verify_cmd,
+                module_wide_verify_cmd=module_wide_verify_cmd,
+                card_ids=card_ids,
+                commit_none_card_ids=commit_none_card_ids,
+                task_dir=task_dir,
+                parent_branch=parent_branch,
+                nits_only=nits_only,
+                status_path=status_path,
+                nits_scope=nits_scope,
+                git_root=git_root,
+                cwd_override=cwd_override,
+                module_wide_cwd_override=module_wide_cwd_override,
+                commit_sha_field_name=commit_sha_field_name,
+                card_commit_messages=card_commit_messages,
+                verify_timeout_s=verify_timeout_s,
+                verify_label=verify_label,
+                verify_runs=verify_runs,
+            )
+    finally:
+        sys.stdout.write(_attach_verify_runs(captured.getvalue(), verify_runs))
+
+
+def _forward_output_body(
+    output: str,
+    project_root: Path,
+    *,
+    start_sha: str | None = None,
+    snapshot_path: Path | None = None,
+    session_id: str | None = None,
+    verify_cmd: str | None = None,
+    module_wide_verify_cmd: str | None = None,
+    card_ids: set[int] | None = None,
+    commit_none_card_ids: set[int] | None = None,
+    task_dir: Path | None = None,
+    parent_branch: str | None = None,
+    nits_only: bool = False,
+    status_path: Path | None = None,
+    nits_scope: str | None = None,
+    git_root: Path | None = None,
+    cwd_override: Path | None = None,
+    module_wide_cwd_override: Path | None = None,
+    commit_sha_field_name: str = "commit_sha",
+    card_commit_messages: dict[int, str] | None = None,
+    verify_timeout_s: float | None = None,
+    verify_label: str | None = None,
+    verify_runs: list,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -1763,18 +1898,24 @@ def _forward_output(
                 git_root=git_root,
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
+                timeout_s=verify_timeout_s,
+                status_path=status_path,
+                label=verify_label or "verify",
+                runs=verify_runs,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop (stuck_type:transient) or a no-content stop (stuck_type:logic).
-                gate_result = _reclassify_verify_failure(
-                    gate_result,
-                    project_root,
-                    start_sha,
-                    card_ids,
-                    _gate_session_id,
-                    cards_done=_cards_done,
-                    commit_none_card_ids=commit_none_card_ids,
-                )
+                # A timed-out gate stays stuck/verify so the verify self-resolve route sees it.
+                if not gate_result.get("timed_out"):
+                    gate_result = _reclassify_verify_failure(
+                        gate_result,
+                        project_root,
+                        start_sha,
+                        card_ids,
+                        _gate_session_id,
+                        cards_done=_cards_done,
+                        commit_none_card_ids=commit_none_card_ids,
+                    )
                 # Add commit_sha only for verify/transient/incomplete results;
                 # logic (no-content) results match the sibling no-content gates that omit commit_sha.
                 if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
@@ -1944,6 +2085,10 @@ def _forward_output(
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
                 session_id=session_id or parsed.get("session_id"),
+                timeout_s=verify_timeout_s,
+                status_path=status_path,
+                label=verify_label or "verify",
+                runs=verify_runs,
             )
             if _override is not None:
                 print(json.dumps(_override))
@@ -2004,7 +2149,7 @@ def _forward_output(
                         ],
                         check=True,
                     )
-                    if result_full.stdout.strip():
+                    if _porcelain_dirt(result_full.stdout):
                         # Check if the remaining dirt is only formatter drift
                         if _is_formatter_drift_only(project_root):
                             # Auto-commit formatter drift
@@ -2023,7 +2168,7 @@ def _forward_output(
                                 )
                                 if (
                                     result_check.returncode == 0
-                                    and not result_check.stdout.strip()
+                                    and not _porcelain_dirt(result_check.stdout)
                                 ):
                                     # Tree is now clean; get the new HEAD after drift commit
                                     result_head = _subprocess_util.run(
@@ -2042,18 +2187,24 @@ def _forward_output(
                                         git_root=git_root,
                                         cwd_override=cwd_override,
                                         module_wide_cwd_override=module_wide_cwd_override,
+                                        timeout_s=verify_timeout_s,
+                                        status_path=status_path,
+                                        label=verify_label or "verify",
+                                        runs=verify_runs,
                                     )
                                     if gate_result is not None:
                                         # No parsed success JSON on this inference path -- there is nothing to self-report from, so cards_done is always None here (the absent-field fallback always applies).
-                                        gate_result = _reclassify_verify_failure(
-                                            gate_result,
-                                            project_root,
-                                            start_sha,
-                                            card_ids,
-                                            session_id,
-                                            cards_done=None,
-                                            commit_none_card_ids=commit_none_card_ids,
-                                        )
+                                        # A timed-out gate stays stuck/verify so the verify self-resolve route sees it.
+                                        if not gate_result.get("timed_out"):
+                                            gate_result = _reclassify_verify_failure(
+                                                gate_result,
+                                                project_root,
+                                                start_sha,
+                                                card_ids,
+                                                session_id,
+                                                cards_done=None,
+                                                commit_none_card_ids=commit_none_card_ids,
+                                            )
                                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                                             gate_result["commit_sha"] = new_head
                                         print(json.dumps(gate_result))
@@ -2149,18 +2300,24 @@ def _forward_output(
                         git_root=git_root,
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
+                        timeout_s=verify_timeout_s,
+                        status_path=status_path,
+                        label=verify_label or "verify",
+                        runs=verify_runs,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
-                        gate_result = _reclassify_verify_failure(
-                            gate_result,
-                            project_root,
-                            start_sha,
-                            card_ids,
-                            session_id,
-                            cards_done=None,
-                            commit_none_card_ids=commit_none_card_ids,
-                        )
+                        # A timed-out gate stays stuck/verify so the verify self-resolve route sees it.
+                        if not gate_result.get("timed_out"):
+                            gate_result = _reclassify_verify_failure(
+                                gate_result,
+                                project_root,
+                                start_sha,
+                                card_ids,
+                                session_id,
+                                cards_done=None,
+                                commit_none_card_ids=commit_none_card_ids,
+                            )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
@@ -2247,7 +2404,7 @@ def _forward_output(
                     ],
                     check=True,
                 )
-                if not result_full.stdout.strip():
+                if not _porcelain_dirt(result_full.stdout):
                     # Apply verify gates before emitting success
                     gate_result = _run_verify_gates(
                         project_root,
@@ -2256,18 +2413,24 @@ def _forward_output(
                         git_root=git_root,
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
+                        timeout_s=verify_timeout_s,
+                        status_path=status_path,
+                        label=verify_label or "verify",
+                        runs=verify_runs,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
-                        gate_result = _reclassify_verify_failure(
-                            gate_result,
-                            project_root,
-                            start_sha,
-                            card_ids,
-                            session_id,
-                            cards_done=None,
-                            commit_none_card_ids=commit_none_card_ids,
-                        )
+                        # A timed-out gate stays stuck/verify so the verify self-resolve route sees it.
+                        if not gate_result.get("timed_out"):
+                            gate_result = _reclassify_verify_failure(
+                                gate_result,
+                                project_root,
+                                start_sha,
+                                card_ids,
+                                session_id,
+                                cards_done=None,
+                                commit_none_card_ids=commit_none_card_ids,
+                            )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
