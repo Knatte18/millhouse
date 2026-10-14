@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-merge-in-recompute-removal
+phase: approved-status-and-module-removal
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
 plan: _mill/plan
@@ -27,6 +27,7 @@ implementing  '2026-10-14T09:26:29Z'
 approved-implement-stage-removal  '2026-10-14T09:31:44Z'
 approved-fix-finalize-strict  '2026-10-14T09:33:44Z'
 approved-merge-in-recompute-removal  '2026-10-14T09:36:06Z'
+approved-status-and-module-removal  '2026-10-14T09:38:41Z'
 ```
 
 ## Batches
@@ -52,9 +53,10 @@ batches:
     commit_sha: dd56e3a62ed68f2a8039c6ac192c1d82cbe84df9
     verify_baseline_failures: []
   - name: status-and-module-removal
-    state: running
+    state: approved
     implementer_session: e4577e31-3687-4140-8727-17131b6baf45
     start_sha: 21747e3eb159e0af1e8110bd8ef2f465469a9498
+    commit_sha: 089a654f57dc0a3792caddff90569f7685372ef4
     verify_baseline_failures: []
   - name: strict-verify-gates
     state: pending
