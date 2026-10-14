@@ -45,7 +45,9 @@ batches:
     commit_sha: 35db621e9db8c2ad4cb46855dc1abc5f8cf3ebb2
     verify_baseline_failures: []
   - name: merge-in-recompute-removal
-    state: pending
+    state: running
+    implementer_session: f2ec1e2f-2869-48c9-bf4c-cf6b71d4959c
+    start_sha: e032e65a9c78a2f083a9a9b0c2a5d5e0d9d801cd
     verify_baseline_failures: []
   - name: status-and-module-removal
     state: pending
