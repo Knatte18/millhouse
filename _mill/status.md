@@ -48,3 +48,9 @@ batches:
   - name: skill-docs
     state: pending
 ```
+
+## Inferred-success log
+
+```text
+'2026-10-14T11:57:29Z'  verify-run-core  round 1
+```
