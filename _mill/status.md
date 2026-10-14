@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: planned
+phase: implementing
 slug: verify-runner-instrumentation
 branch: hanf/verify-runner-instrumentation
 plan: _mill/plan
@@ -26,4 +26,23 @@ plan-fix-r1  '2026-10-14T11:38:58Z'
 plan-review-r2  '2026-10-14T11:45:15Z'
 plan-fix-r2  '2026-10-14T11:46:00Z'
 planned  '2026-10-14T11:46:04Z'
+implementing  '2026-10-14T11:46:22Z'
+```
+
+## Batches
+
+```yaml
+batches:
+  - name: verify-run-core
+    state: pending
+  - name: cleanliness-status-exclusion
+    state: pending
+  - name: implementer-gates
+    state: pending
+  - name: gate-callers
+    state: pending
+  - name: merge-in
+    state: pending
+  - name: skill-docs
+    state: pending
 ```
