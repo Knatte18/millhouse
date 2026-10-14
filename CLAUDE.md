@@ -55,7 +55,7 @@ _mill/   ← status.md, discussion.md, plan/, reviews/
   reading stale cache content during plan-writing has previously produced an incorrect conclusion requiring mid-plan rework. `${CLAUDE_PLUGIN_ROOT}` remains correct for script invocation — this bullet narrows only the source-code-verification case, it does not revise the bullet above it.
 - **A `main`-merged plugin fix isn't live for dispatched invocations until the cache refreshes.**
   A fix merged to `main` under `plugins/mill/**` during the current session does not take effect in
-  any *dispatched* mill-go/mill-merge/mill-plan invocation until the plugin cache is refreshed —
+  any *dispatched* mill-go/mill-merge/mill-plan invocation until the deploy directory is refreshed —
   those dispatches read `${CLAUDE_PLUGIN_ROOT}`, a frozen copy, not the dev tree.
   `./update-plugins.sh`, run from the hub root, is the existing mechanism to force that refresh.
   It also refreshes `scribe@scribe`, mill's declared dependency, before syncing,
@@ -94,8 +94,10 @@ mill-plan auto-prepends the prefix on validator failure for Python projects.
 - `print()` / `_log()` output: ASCII only (`—` -> ` -- `, `->` -> ` -> `).
   Windows cp1252 crashes on non-ASCII stdout.
 - `mill-config.yaml` hub file and plugin template must stay in sync — template seeds new hubs.
-- `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache entry, never the dev tree.
+- `CLAUDE_PLUGIN_ROOT` always resolves to the deployed copy under `<container>/deploy/plugins/<name>`, never the dev tree.
   Use it for all intra-plugin paths.
+  The `millhouse` marketplace is a directory source registered against `<container>/deploy`, and Claude Code reads a directory-sourced plugin in place — so the deploy directory, not `~/.claude/plugins/cache/`, is what every session runs.
+  `update-plugins.ps1` is what puts the repo's current state there; an edit in this repo reaches running sessions only after it runs.
 - Ad-hoc `dotnet build`/`dotnet test` (when `scribe:csharp-build` isn't loaded): pass `--nologo -clp:ErrorsOnly` and never pipe the gating invocation to `grep`/`tail` — it masks dotnet's exit code.
 - Ad-hoc Python lint/format checks (when a project-specific `scribe:python-build` override isn't in place): use `uvx ruff check .` — an ephemeral, non-project-mutating invocation.
   Never use `uv add`/`uv sync` to install a lint tool for a one-off check.
