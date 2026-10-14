@@ -504,7 +504,7 @@ def parse_verify_field(
             must be exactly ``"hub"`` or ``"git_root"``.
 
     This is the single normalizer for the ``verify:`` field;
-    every other read site (implementer, fixer, baseline, merge-in, plan-validate) must route through
+    every other read site (implementer, fixer, merge-in, plan-validate) must route through
     this function rather than re-implementing the string-vs-mapping branch.
 
     Args:

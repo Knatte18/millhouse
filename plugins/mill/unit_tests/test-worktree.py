@@ -543,9 +543,8 @@ def main() -> int:
             print("PASS: remove_safe exits cleanly when path absent and 'is not a working tree'")
 
         # --- remove_safe prunes a stale nested-worktree registration after force-removing the enclosing task worktree ---
-        # Real git, no mocks: reproduces the exact orphan scenario from GitHub issue tracking
-        # _verify_baseline.py's transient nested worktree — a task worktree force-removed mid
-        # computation leaves its nested `.scratch/nested` worktree's administrative entry behind
+        # Real git, no mocks: reproduces the orphan scenario: a nested worktree whose enclosing
+        # task worktree was force-removed leaves its administrative entry behind
         # in the hub's common gitdir until `git worktree prune` clears it.
         with tempfile.TemporaryDirectory() as tmp:
             hub = Path(tmp) / "hub"
@@ -594,7 +593,7 @@ def main() -> int:
             print("PASS: remove_safe prunes stale nested-worktree registration after force-removing enclosing task worktree")
 
         # --- remove_safe passes -c core.longpaths=true in both the worktree-remove
-        # and worktree-prune argv, mirroring _verify_baseline.py's creation-side placement ---
+        # and worktree-prune argv ---
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "wt"
             path.mkdir()
