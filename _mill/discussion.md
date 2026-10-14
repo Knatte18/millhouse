@@ -48,7 +48,10 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 - The Bash-tool 10-minute cap on agent-mode `--stage finalize` calls (`mill-go-base/SKILL.md`, "Give any `--stage finalize` call an extended Bash-tool timeout").
   It stays an outer bound on the whole finalize call; this task does not restructure how finalize is invoked.
 - Review CLIs, LLM-provider timeouts (`bulk_timeout`, `holistic_timeout`, ...) and `implementer_timeout` — they run LLMs, not verify commands.
-- The existing `dotnet build-server shutdown` post-step and the dotnet lock-race retry — kept as they are, now routed through the new runner.
+- The `dotnet build-server shutdown` post-steps (`_implementer_common._run_verify_gate` and `_done_gate.run_gate`, both `subprocess.run(["dotnet", "build-server", "shutdown"], capture_output=True, timeout=30)`) — left exactly as they are.
+  They are cleanup, not verify commands, so they get no label, no verify timeout, no first-run marker and no `## Verify log` row.
+  (The dotnet lock-race *retry* is a verify command and is routed through the runner — see Decisions.)
+- The three pre-existing `test-bg-liveness.py` failures and the other files already red on `main` (see Constraints).
 - Any new `stuck_type`.
   A timeout is reported as `stuck_type: verify` (see Decisions).
 - Any baseline / pre-flight-capture logic; that mechanism is gone.
@@ -175,7 +178,8 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 
 - Decision: `millpy-bg.py`'s worker heartbeat becomes `[mill-bg] HEARTBEAT <ts> elapsed=<N>s cmd=<cmd>`, where `<cmd>` is the inner argv joined with spaces and cut to 200 characters with a trailing `...` when longer.
   The worker stays stdlib-only (its fast path imports no mill modules).
-  `_bg.check_bg_status` / `_bg._probe_liveness` must keep recognizing the line; the plan checks whether any parser matches on the exact `[mill-bg] HEARTBEAT` text and keeps it a prefix.
+  `_bg.py` does not parse heartbeat text at all (no `HEARTBEAT` match anywhere in it; liveness is PID/mtime/trailing-JSON based), so the format change cannot affect liveness detection and `_bg.py` is not touched.
+  The line keeps the `[mill-bg] HEARTBEAT ` prefix anyway, for anyone grepping logs.
 - Rationale: under `millpy-bg`, the bg log also receives the runner's own `[verify] HEARTBEAT` lines (stderr is redirected into the log), so the log shows both the outer job and the verify command currently running.
 - Rejected: having `millpy-bg` discover the running verify command (cross-process plumbing for information that already arrives on stderr).
 
@@ -208,6 +212,11 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 - Path resolution goes through `_paths.py`; no inline container/hub path building.
 - Verify commands in plan files start with `PYTHONPATH=` (this is a Python project).
 - Tests use in-memory/tempfile fixtures; no real git/LLM in unit tests. Real short-lived child processes (`sys.executable -c ...`) are fine.
+- **Pre-existing red tests on `main`.** The companion task (`e408e454`) removed the verify-baseline waiver, so a batch `verify:` that includes an already-failing test can never pass and halts mill-go.
+  Measured on this worktree at discussion time, `run-all.py` reports `FAIL -- 13 of 125`, including `test-bg-liveness.py` (3 failures: `test_log_oserror_fallback_to_mtime`, `test_systemerror_fallback_to_mtime`, `test_check_bg_status_killed_before_json_fresh_mtime`) and `test-ask-thread.py`.
+  Therefore: no batch `verify:` (batch-level or module-wide) may run `run-all.py` or any test file that fails before the batch's own change.
+  Each verify names the specific test files the batch touches, and the plan writer re-checks each named file passes on the batch's base before using it.
+  Fixing the pre-existing failures is out of scope.
 
 ## Testing
 
@@ -226,8 +235,10 @@ The same runner still executes the batch gates, the finalize replays, the merge-
 - `_done_gate` — `test-done-gate.py`: timeout yields `blocked` with the prefix; `verify_runs` present on `ok` and `blocked`; `skipped` unchanged.
 - `millpy-merge-in-subagent.py` — `test-millpy-merge-in-subagent.py`: runner is used with the generous-terminal env; timeout reported as a failed verify.
 - `millpy-verify-run.py` — new CLI test: JSON shape, exit 0 on pass, 1 on fail and on timeout.
-- `millpy-bg.py` — `test-millpy-bg.py` / `test-bg-liveness.py`: heartbeat line format includes `elapsed=` and `cmd=`, long commands truncated; liveness parsing unaffected.
-- Config sync: whatever existing test checks template/hub key parity covers `pipeline.verify_timeout_minutes`; if none, assert the key exists in the template.
+- `millpy-bg.py` — `test-millpy-bg.py` only (passes on `main`): heartbeat line format includes `elapsed=` and `cmd=`, keeps the `[mill-bg] HEARTBEAT ` prefix, long commands truncated with `...`.
+  `test-bg-liveness.py` is not a verify target (pre-existing failures, see Constraints); liveness is unaffected because `_bg.py` never parses heartbeat text and is not modified.
+- Config sync: mirror `test-ask-thread.py:229-234` — load both the hub `mill-config.yaml` and `plugins/mill/templates/mill-config.yaml` and assert `pipeline.verify_timeout_minutes` is present in each and equals `_verify_run`'s module default constant.
+  Put the assertion in the new `test-verify-run.py`, not in `test-ask-thread.py`, which is already red on `main`.
 
 ## Q&A log
 
