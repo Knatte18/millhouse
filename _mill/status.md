@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-strict-verify-gates
+phase: approved-docs-and-comments
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
 plan: _mill/plan
@@ -29,6 +29,7 @@ approved-fix-finalize-strict  '2026-10-14T09:33:44Z'
 approved-merge-in-recompute-removal  '2026-10-14T09:36:06Z'
 approved-status-and-module-removal  '2026-10-14T09:38:41Z'
 approved-strict-verify-gates  '2026-10-14T09:45:11Z'
+approved-docs-and-comments  '2026-10-14T09:47:26Z'
 ```
 
 ## Batches
@@ -66,9 +67,10 @@ batches:
     commit_sha: bd606c17fc10a94f0f798aef33dceb1f09fd0a46
     verify_baseline_failures: []
   - name: docs-and-comments
-    state: running
+    state: approved
     implementer_session: 8a2ff87e-14be-469f-9570-aca409022833
     start_sha: 092568827a0f0c479e50730e3e3f54841dc5eaff
+    commit_sha: 0dfc0b5a15d550128f32d23bacfe5bffaee5247a
 ```
 ## Inferred-success log
 
