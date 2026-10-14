@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -33,9 +34,11 @@ from _implementer_common import (  # noqa: E402
     _is_valid_commit_sha,
     _extract_failure_signatures,
     _fixer_logic_ancestor_override,
+    _truncate_verify_output,
 )
 import _cleanliness  # noqa: E402
 import _status  # noqa: E402
+import _verify_run  # noqa: E402
 import _subprocess_util  # noqa: E402
 
 
@@ -126,7 +129,101 @@ def _commit_file(project_root: Path, relative_path: str, content: str, message: 
     )
 
 
+def _canned_verify_run(
+    cmd: str,
+    kwargs: dict,
+    *,
+    exit_code: int | None,
+    output: str = "",
+    timed_out: bool = False,
+    output_path: Path | None = None,
+) -> "_verify_run.VerifyRun":
+    """Build the VerifyRun a patched _verify_run.run_verify returns for one call."""
+    return _verify_run.VerifyRun(
+        label=kwargs["label"],
+        cmd=cmd,
+        cwd=kwargs["cwd"],
+        exit_code=exit_code,
+        wall_s=0.0,
+        first_run=False,
+        timed_out=timed_out,
+        output=output,
+        output_path=output_path,
+        timeout_s=kwargs["timeout_s"],
+    )
+
+
+def _canned_run_verify(*outcomes: dict):
+    """
+    Build a _verify_run.run_verify side_effect that answers successive calls with the given outcomes.
+
+    Each outcome is a dict of _canned_verify_run keyword arguments (exit_code, output, timed_out,
+    output_path).
+    Returns (side_effect, calls): calls accumulates (cmd, kwargs) per call for assertions.
+    """
+    remaining = list(outcomes)
+    calls: list[tuple[str, dict]] = []
+
+    def _side_effect(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return _canned_verify_run(cmd, kwargs, **remaining.pop(0))
+
+    return _side_effect, calls
+
+
+def _echo_then_fail(verify_cmd: str):
+    """
+    Build a run_verify side_effect for an "echo '<text>' && ... && exit 1" command.
+
+    The runner record carries the echoed texts, one per line, as its output and exit code 1,
+    which is what the shell would have produced.
+    """
+    echoed_lines = re.findall(r"echo '([^']*)'", verify_cmd)
+    side_effect, _ = _canned_run_verify(
+        {"exit_code": 1, "output": "".join(line + chr(10) for line in echoed_lines)}
+    )
+    return side_effect
+
+
+def _patch_run_verify(side_effect):
+    """Patch the shared runner seam that every verify gate calls."""
+    return unittest.mock.patch("_verify_run.run_verify", side_effect=side_effect)
+
+
+def _exit_code_fake(unexpected_commands: list[str]):
+    """
+    Build the suite-wide default _verify_run.run_verify fake.
+
+    A command of the form "exit <N>" yields a VerifyRun with that exit code and empty output.
+    Any other command is recorded in unexpected_commands and rejected, so a verify call a case
+    did not account for fails the run.
+    """
+
+    def _side_effect(cmd, **kwargs):
+        parts = cmd.split()
+        if len(parts) == 2 and parts[0] == "exit" and parts[1].isdigit():
+            return _canned_verify_run(cmd, kwargs, exit_code=int(parts[1]))
+        unexpected_commands.append(cmd)
+        raise AssertionError(f"unexpected verify command: {cmd!r}")
+
+    return _side_effect
+
+
 def main() -> int:
+    """Run every case under the default verify fake and fail when it saw an unexpected command."""
+    unexpected_commands: list[str] = []
+    with _patch_run_verify(_exit_code_fake(unexpected_commands)):
+        status = _run_cases()
+    if unexpected_commands:
+        print(
+            f"FAIL: unexpected verify commands reached the runner: {unexpected_commands}",
+            file=sys.stderr,
+        )
+        return 1
+    return status
+
+
+def _run_cases() -> int:
     errors = 0
 
     # Case 1: inferred success — clean worktree + new commit
@@ -976,15 +1073,16 @@ def main() -> int:
         original_platform = sys.platform
         try:
             sys.platform = "win32"
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    agent_output,
-                    project_root,
-                    start_sha=base_sha,
-                    snapshot_path=snapshot_path,
-                    verify_cmd=verify_cmd,
+            with _patch_run_verify(_echo_then_fail(verify_cmd)):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        agent_output,
+                        project_root,
+                        start_sha=base_sha,
+                        snapshot_path=snapshot_path,
+                        verify_cmd=verify_cmd,
+                    )
                 )
-            )
             data = json.loads(captured.strip())
             assert data["status"] == "success", (
                 f"expected status=success (benign cleanup on win32), got {data}"
@@ -1026,15 +1124,16 @@ def main() -> int:
         original_platform = sys.platform
         try:
             sys.platform = "win32"
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    agent_output,
-                    project_root,
-                    start_sha=base_sha,
-                    snapshot_path=snapshot_path,
-                    verify_cmd=verify_cmd,
+            with _patch_run_verify(_echo_then_fail(verify_cmd)):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        agent_output,
+                        project_root,
+                        start_sha=base_sha,
+                        snapshot_path=snapshot_path,
+                        verify_cmd=verify_cmd,
+                    )
                 )
-            )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
                 f"expected status=stuck (real failure present), got {data}"
@@ -1076,15 +1175,16 @@ def main() -> int:
         original_platform = sys.platform
         try:
             sys.platform = "win32"
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    agent_output,
-                    project_root,
-                    start_sha=base_sha,
-                    snapshot_path=snapshot_path,
-                    verify_cmd=verify_cmd,
+            with _patch_run_verify(_echo_then_fail(verify_cmd)):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        agent_output,
+                        project_root,
+                        start_sha=base_sha,
+                        snapshot_path=snapshot_path,
+                        verify_cmd=verify_cmd,
+                    )
                 )
-            )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
                 f"expected status=stuck (real failure present), got {data}"
@@ -1126,15 +1226,16 @@ def main() -> int:
         original_platform = sys.platform
         try:
             sys.platform = "win32"
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    agent_output,
-                    project_root,
-                    start_sha=base_sha,
-                    snapshot_path=snapshot_path,
-                    verify_cmd=verify_cmd,
+            with _patch_run_verify(_echo_then_fail(verify_cmd)):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        agent_output,
+                        project_root,
+                        start_sha=base_sha,
+                        snapshot_path=snapshot_path,
+                        verify_cmd=verify_cmd,
+                    )
                 )
-            )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", f"expected status=stuck, got {data}"
             assert data["stuck_type"] == "verify", (
@@ -1171,15 +1272,16 @@ def main() -> int:
         try:
             # Force non-win32 (e.g., linux)
             sys.platform = "linux"
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    agent_output,
-                    project_root,
-                    start_sha=base_sha,
-                    snapshot_path=snapshot_path,
-                    verify_cmd=verify_cmd,
+            with _patch_run_verify(_echo_then_fail(verify_cmd)):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        agent_output,
+                        project_root,
+                        start_sha=base_sha,
+                        snapshot_path=snapshot_path,
+                        verify_cmd=verify_cmd,
+                    )
                 )
-            )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
                 f"expected status=stuck (non-win32 sees failure), got {data}"
@@ -1827,39 +1929,29 @@ def main() -> int:
         errors += 1
 
     # Test A: git_root kwarg selects cwd for the verify subprocess (#554)
-    # Mock subprocess.run so the cwd kwarg is observable without executing real commands.
+    # The runner seam is patched so the cwd kwarg is observable without executing real commands.
     with tempfile.TemporaryDirectory() as tmpdir:
         hub_dir = Path(tmpdir) / "hub"
         repo_dir = Path(tmpdir) / "repo"
         hub_dir.mkdir()
         repo_dir.mkdir()
         try:
-            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
-                # Configure mock to return a passing result (returncode=0)
-                mock_result = unittest.mock.MagicMock()
-                mock_result.returncode = 0
-                mock_result.stdout = ""
-                mock_result.stderr = ""
-                mock_run.return_value = mock_result
-
+            side_effect, calls = _canned_run_verify({"exit_code": 0}, {"exit_code": 0})
+            with _patch_run_verify(side_effect):
                 # Call with git_root; the verify subprocess cwd must equal git_root.
                 result = _run_verify_gate(hub_dir, "echo ok", git_root=repo_dir)
                 assert result is None, f"Test A: expected None (pass), got {result}"
-                # Confirm cwd passed to subprocess.run equals repo_dir (git_root)
-                call_kwargs = mock_run.call_args[1]
-                assert call_kwargs.get("cwd") == repo_dir, (
-                    f"Test A: expected cwd=repo_dir, got {call_kwargs.get('cwd')}"
+                assert calls[0][1]["cwd"] == repo_dir, (
+                    f"Test A: expected cwd=repo_dir, got {calls[0][1]['cwd']}"
                 )
 
                 # Call without git_root; the verify subprocess cwd must equal hub_dir (project_root).
-                mock_run.reset_mock()
                 result = _run_verify_gate(hub_dir, "echo ok")
                 assert result is None, (
                     f"Test A (no git_root): expected None (pass), got {result}"
                 )
-                call_kwargs_no_root = mock_run.call_args[1]
-                assert call_kwargs_no_root.get("cwd") == hub_dir, (
-                    f"Test A (no git_root): expected cwd=hub_dir, got {call_kwargs_no_root.get('cwd')}"
+                assert calls[1][1]["cwd"] == hub_dir, (
+                    f"Test A (no git_root): expected cwd=hub_dir, got {calls[1][1]['cwd']}"
                 )
 
             print("PASS: Test A - git_root kwarg selects verify subprocess cwd (#554)")
@@ -1871,19 +1963,13 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         try:
-            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
-                mock_result = unittest.mock.MagicMock()
-                mock_result.returncode = 0
-                mock_result.stdout = ""
-                mock_result.stderr = ""
-                mock_run.return_value = mock_result
-
+            side_effect, calls = _canned_run_verify({"exit_code": 0})
+            with _patch_run_verify(side_effect):
                 # Explicitly pass git_root=None; cwd must fall back to project_root.
                 result = _run_verify_gate(project_root, "echo ok", git_root=None)
                 assert result is None, f"Test B: expected None (pass), got {result}"
-                call_kwargs = mock_run.call_args[1]
-                assert call_kwargs.get("cwd") == project_root, (
-                    f"Test B: expected cwd=project_root, got {call_kwargs.get('cwd')}"
+                assert calls[0][1]["cwd"] == project_root, (
+                    f"Test B: expected cwd=project_root, got {calls[0][1]['cwd']}"
                 )
 
             print(
@@ -1903,21 +1989,15 @@ def main() -> int:
         repo_dir.mkdir()
         override_dir.mkdir()
         try:
-            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
-                mock_result = unittest.mock.MagicMock()
-                mock_result.returncode = 0
-                mock_result.stdout = ""
-                mock_result.stderr = ""
-                mock_run.return_value = mock_result
-
+            side_effect, calls = _canned_run_verify({"exit_code": 0})
+            with _patch_run_verify(side_effect):
                 # Both git_root and cwd_override supplied; cwd_override must win.
                 result = _run_verify_gate(
                     hub_dir, "echo ok", git_root=repo_dir, cwd_override=override_dir
                 )
                 assert result is None, f"Test B2: expected None (pass), got {result}"
-                call_kwargs = mock_run.call_args[1]
-                assert call_kwargs.get("cwd") == override_dir, (
-                    f"Test B2: expected cwd=override_dir, got {call_kwargs.get('cwd')}"
+                assert calls[0][1]["cwd"] == override_dir, (
+                    f"Test B2: expected cwd=override_dir, got {calls[0][1]['cwd']}"
                 )
 
             print(
@@ -1931,35 +2011,25 @@ def main() -> int:
     # Sub-case C1: verify exits 0 (success) -> cleanup still fires.
     # Sub-case C2: verify exits 1 (failure) -> cleanup still fires.
     # Also asserts cleanup does NOT fire when the command does not contain "dotnet".
+    # The shutdown call is the only subprocess.run the gate makes; verify results come from the runner seam.
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         try:
             dotnet_cmd = "dotnet test MyProject.csproj"
             non_dotnet_cmd = "pytest tests/ -q"
+            shutdown_argv = ["dotnet", "build-server", "shutdown"]
 
-            # Sub-case C1: verify succeeds (returncode=0); dotnet cleanup must still fire.
+            # Sub-case C1: verify succeeds (exit 0); dotnet cleanup must still fire.
+            side_effect, calls = _canned_run_verify({"exit_code": 0})
             with (
                 unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
                 unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
             ):
-                # First call is the verify subprocess; second is the dotnet shutdown call.
-                passing_result = unittest.mock.MagicMock()
-                passing_result.returncode = 0
-                passing_result.stdout = ""
-                passing_result.stderr = ""
-                # The dotnet shutdown call also needs a mock result (ignored by caller).
-                shutdown_result = unittest.mock.MagicMock()
-                mock_run.side_effect = [passing_result, shutdown_result]
-
                 result = _run_verify_gate(project_root, dotnet_cmd)
                 assert result is None, f"Test C1: expected None (pass), got {result}"
-
-                # Confirm dotnet build-server shutdown was called.
-                all_calls = mock_run.call_args_list
                 shutdown_calls = [
-                    c
-                    for c in all_calls
-                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                    c for c in mock_run.call_args_list if c.args and c.args[0] == shutdown_argv
                 ]
                 assert len(shutdown_calls) == 1, (
                     f"Test C1: expected 1 dotnet shutdown call on success, got {shutdown_calls}"
@@ -1967,19 +2037,13 @@ def main() -> int:
 
             print("PASS: Test C1 - dotnet cleanup fires on verify success (#556)")
 
-            # Sub-case C2: verify fails (returncode=1); dotnet cleanup must still fire.
+            # Sub-case C2: verify fails (exit 1); dotnet cleanup must still fire.
+            side_effect, calls = _canned_run_verify({"exit_code": 1})
             with (
                 unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
                 unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
             ):
-                failing_result = unittest.mock.MagicMock()
-                failing_result.returncode = 1
-                # Provide explicit string attrs so error-handling string ops do not raise on MagicMock.
-                failing_result.stdout = ""
-                failing_result.stderr = ""
-                shutdown_result = unittest.mock.MagicMock()
-                mock_run.side_effect = [failing_result, shutdown_result]
-
                 result = _run_verify_gate(project_root, dotnet_cmd)
                 # Verify gate returns a stuck dict on failure.
                 assert result is not None, (
@@ -1988,13 +2052,8 @@ def main() -> int:
                 assert result["stuck_type"] == "verify", (
                     f"Test C2: expected stuck_type=verify, got {result}"
                 )
-
-                # Confirm dotnet build-server shutdown was called even on failure.
-                all_calls = mock_run.call_args_list
                 shutdown_calls = [
-                    c
-                    for c in all_calls
-                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                    c for c in mock_run.call_args_list if c.args and c.args[0] == shutdown_argv
                 ]
                 assert len(shutdown_calls) == 1, (
                     f"Test C2: expected 1 dotnet shutdown call on failure, got {shutdown_calls}"
@@ -2003,26 +2062,18 @@ def main() -> int:
             print("PASS: Test C2 - dotnet cleanup fires on verify failure (#556)")
 
             # Non-dotnet command: cleanup must NOT fire.
+            side_effect, calls = _canned_run_verify({"exit_code": 0})
             with (
                 unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
                 unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
             ):
-                non_dotnet_result = unittest.mock.MagicMock()
-                non_dotnet_result.returncode = 0
-                non_dotnet_result.stdout = ""
-                non_dotnet_result.stderr = ""
-                mock_run.return_value = non_dotnet_result
-
                 result = _run_verify_gate(project_root, non_dotnet_cmd)
                 assert result is None, (
                     f"Test C non-dotnet: expected None (pass), got {result}"
                 )
-
-                all_calls = mock_run.call_args_list
                 shutdown_calls = [
-                    c
-                    for c in all_calls
-                    if c.args and c.args[0] == ["dotnet", "build-server", "shutdown"]
+                    c for c in mock_run.call_args_list if c.args and c.args[0] == shutdown_argv
                 ]
                 assert len(shutdown_calls) == 0, (
                     f"Test C non-dotnet: expected 0 dotnet shutdown calls, got {shutdown_calls}"
@@ -2040,19 +2091,12 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         try:
-            short_stdout = "some stdout line\n"
-            short_stderr = "some stderr line\n"
-            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
-                mock_result = unittest.mock.MagicMock()
-                mock_result.returncode = 1
-                mock_result.stdout = short_stdout
-                mock_result.stderr = short_stderr
-                mock_run.return_value = mock_result
-
+            short_output = "some stdout line\nsome stderr line\n"
+            side_effect, calls = _canned_run_verify({"exit_code": 1, "output": short_output})
+            with _patch_run_verify(side_effect):
                 result = _run_verify_gate(project_root, "echo fail")
             assert result is not None, "Test D: expected stuck dict on failure"
-            expected_reason = (short_stdout + short_stderr).strip()
-            assert result["reason"] == expected_reason, (
+            assert result["reason"] == short_output.strip(), (
                 f"Test D: expected exact stripped output, got {result['reason']!r}"
             )
             assert "[..." not in result["reason"], (
@@ -2076,13 +2120,8 @@ def main() -> int:
             combined = early_block + tail_block
             assert len(combined) > 2000, "Test E fixture must exceed 2000 chars"
 
-            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
-                mock_result = unittest.mock.MagicMock()
-                mock_result.returncode = 1
-                mock_result.stdout = combined
-                mock_result.stderr = ""
-                mock_run.return_value = mock_result
-
+            side_effect, calls = _canned_run_verify({"exit_code": 1, "output": combined})
+            with _patch_run_verify(side_effect):
                 result = _run_verify_gate(project_root, "echo fail")
             assert result is not None, "Test E: expected stuck dict on failure"
             reason = result["reason"]
@@ -2115,13 +2154,8 @@ def main() -> int:
             combined = early_block + tail_block
             assert len(combined) > 2000, "Test F fixture must exceed 2000 chars"
 
-            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
-                mock_result = unittest.mock.MagicMock()
-                mock_result.returncode = 1
-                mock_result.stdout = combined
-                mock_result.stderr = ""
-                mock_run.return_value = mock_result
-
+            side_effect, calls = _canned_run_verify({"exit_code": 1, "output": combined})
+            with _patch_run_verify(side_effect):
                 result = _run_verify_gate(project_root, "echo fail")
             assert result is not None, "Test F: expected stuck dict on failure"
             reason = result["reason"]
@@ -2154,13 +2188,8 @@ def main() -> int:
             combined = early_block + tail_block
             assert len(combined) > 2000, "Test G fixture must exceed 2000 chars"
 
-            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
-                mock_result = unittest.mock.MagicMock()
-                mock_result.returncode = 1
-                mock_result.stdout = combined
-                mock_result.stderr = ""
-                mock_run.return_value = mock_result
-
+            side_effect, calls = _canned_run_verify({"exit_code": 1, "output": combined})
+            with _patch_run_verify(side_effect):
                 result = _run_verify_gate(project_root, "echo fail")
             assert result is not None, "Test G: expected stuck dict on failure"
             reason = result["reason"]
@@ -2202,13 +2231,8 @@ def main() -> int:
             combined = early_block + tail_block
             assert len(combined) > 2000, "Test H fixture must exceed 2000 chars"
 
-            with unittest.mock.patch("_implementer_common.subprocess.run") as mock_run:
-                mock_result = unittest.mock.MagicMock()
-                mock_result.returncode = 1
-                mock_result.stdout = combined
-                mock_result.stderr = ""
-                mock_run.return_value = mock_result
-
+            side_effect, calls = _canned_run_verify({"exit_code": 1, "output": combined})
+            with _patch_run_verify(side_effect):
                 result = _run_verify_gate(project_root, "echo fail")
             assert result is not None, "Test H: expected stuck dict on failure"
             reason = result["reason"]
@@ -2237,34 +2261,25 @@ def main() -> int:
                 'is locked by: "testhost (1234)".'
             )
 
-            failing_result = unittest.mock.MagicMock()
-            failing_result.returncode = 1
-            failing_result.stdout = msb3021_output
-            failing_result.stderr = ""
-
-            shutdown_result = unittest.mock.MagicMock()
-
-            passing_result = unittest.mock.MagicMock()
-            passing_result.returncode = 0
-            passing_result.stdout = ""
-            passing_result.stderr = ""
-
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": 1, "output": msb3021_output}, {"exit_code": 0}
+            )
             with (
                 unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
                 unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
             ):
-                mock_run.side_effect = [failing_result, shutdown_result, passing_result]
-
                 result = _run_verify_gate(project_root, dotnet_cmd)
                 assert result is None, f"Test I1: expected None (retry pass), got {result}"
-
-                call_args_list = mock_run.call_args_list
-                assert len(call_args_list) == 3, (
-                    f"Test I1: expected 3 subprocess.run calls, got {len(call_args_list)}"
+                assert len(calls) == 2, (
+                    f"Test I1: expected 2 verify runs (first + retry), got {len(calls)}"
                 )
-                assert call_args_list[0].args == call_args_list[2].args, (
+                assert calls[0][0] == calls[1][0] == dotnet_cmd, (
                     "Test I1: expected the retry to re-run the same command as the first call"
                 )
+                assert [c.args[0] for c in mock_run.call_args_list] == [
+                    ["dotnet", "build-server", "shutdown"]
+                ], "Test I1: expected exactly one dotnet shutdown call between the runs"
 
             print("PASS: Test I1 - retry succeeds after dotnet lock race (#848, #860)")
         except Exception as exc:
@@ -2282,24 +2297,15 @@ def main() -> int:
                 'is locked by: "testhost (1234)".'
             )
 
-            failing_result = unittest.mock.MagicMock()
-            failing_result.returncode = 1
-            failing_result.stdout = msb3021_output
-            failing_result.stderr = ""
-
-            shutdown_result = unittest.mock.MagicMock()
-
-            failing_result_2 = unittest.mock.MagicMock()
-            failing_result_2.returncode = 1
-            failing_result_2.stdout = "Build FAILED.\nMSB3021: still locked by testhost (5678)."
-            failing_result_2.stderr = ""
-
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": 1, "output": msb3021_output},
+                {"exit_code": 1, "output": "Build FAILED.\nMSB3021: still locked by testhost (5678)."},
+            )
             with (
                 unittest.mock.patch("sys.platform", "win32"),
-                unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
+                _patch_run_verify(side_effect),
+                unittest.mock.patch("_implementer_common.subprocess.run"),
             ):
-                mock_run.side_effect = [failing_result, shutdown_result, failing_result_2]
-
                 result = _run_verify_gate(project_root, dotnet_cmd)
                 assert result is not None, "Test I2: expected stuck dict on still-failing retry"
                 assert result["reason"].startswith(
@@ -2320,25 +2326,23 @@ def main() -> int:
         try:
             dotnet_cmd = "dotnet test MyProject.csproj"
 
-            failing_result = unittest.mock.MagicMock()
-            failing_result.returncode = 1
-            failing_result.stdout = (
-                "Build FAILED.\nCS0103: The name 'Foo' does not exist in the current context"
+            side_effect, calls = _canned_run_verify(
+                {
+                    "exit_code": 1,
+                    "output": "Build FAILED.\nCS0103: The name 'Foo' does not exist in the current context",
+                }
             )
-            failing_result.stderr = ""
-
-            shutdown_result = unittest.mock.MagicMock()
-
             with (
                 unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
                 unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
             ):
-                mock_run.side_effect = [failing_result, shutdown_result]
-
                 result = _run_verify_gate(project_root, dotnet_cmd)
-                call_args_list = mock_run.call_args_list
-                assert len(call_args_list) == 2, (
-                    f"Test I3: expected 2 subprocess.run calls (no retry), got {len(call_args_list)}"
+                assert len(calls) == 1, (
+                    f"Test I3: expected 1 verify run (no retry), got {len(calls)}"
+                )
+                assert len(mock_run.call_args_list) == 1, (
+                    "Test I3: expected only the dotnet shutdown subprocess call"
                 )
                 assert not result["reason"].startswith(
                     "[retried once after dotnet build-server shutdown; still failing] "
@@ -2358,21 +2362,20 @@ def main() -> int:
         try:
             non_dotnet_cmd = "pytest tests/ -q"
 
-            failing_result = unittest.mock.MagicMock()
-            failing_result.returncode = 1
-            failing_result.stdout = "Build FAILED.\nMSB3021: is locked by: testhost"
-            failing_result.stderr = ""
-
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": 1, "output": "Build FAILED.\nMSB3021: is locked by: testhost"}
+            )
             with (
                 unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
                 unittest.mock.patch("_implementer_common.subprocess.run") as mock_run,
             ):
-                mock_run.side_effect = [failing_result]
-
                 result = _run_verify_gate(project_root, non_dotnet_cmd)
-                call_args_list = mock_run.call_args_list
-                assert len(call_args_list) == 1, (
-                    f"Test I4: expected 1 subprocess.run call (no shutdown, no retry), got {len(call_args_list)}"
+                assert len(calls) == 1, (
+                    f"Test I4: expected 1 verify run (no retry), got {len(calls)}"
+                )
+                assert len(mock_run.call_args_list) == 0, (
+                    "Test I4: expected no dotnet shutdown call for a non-dotnet command"
                 )
                 assert result["reason"] == "Build FAILED.\nMSB3021: is locked by: testhost", (
                     f"Test I4: expected the original unmarked failure text in reason, got {result['reason']!r}"
@@ -2384,6 +2387,191 @@ def main() -> int:
         except Exception as exc:
             print(f"FAIL: Test I4 ({exc})", file=sys.stderr)
             errors += 1
+
+    # Case 6a: a timed-out batch gate returns the stuck dict with timed_out=True and the label-bearing timeout prefix.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": None, "timed_out": True, "output": "partial output\n"}
+            )
+            with _patch_run_verify(side_effect):
+                result = _run_verify_gate(
+                    project_root, "sleep 999", timeout_s=90, label="batch-gate"
+                )
+            assert result == {
+                "status": "stuck",
+                "stuck_type": "verify",
+                "reason": "[verify timed out after 90s: batch-gate] partial output",
+                "timed_out": True,
+            }, f"case 6a: unexpected timed-out result {result}"
+            assert calls[0][1]["timeout_s"] == 90, "case 6a: timeout_s must reach the runner"
+            print("PASS: case 6a - timed-out gate returns stuck/verify with timed_out and prefix")
+        except Exception as exc:
+            print(f"FAIL: case 6a ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 6b: timeout_s=None means the runner's default timeout; shell mode, git_root and status_path reach the runner.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            status_file = project_root / "status.md"
+            side_effect, calls = _canned_run_verify({"exit_code": 0})
+            with _patch_run_verify(side_effect):
+                _run_verify_gate(project_root, "exit 0", status_path=status_file)
+            kwargs = calls[0][1]
+            assert kwargs["timeout_s"] == _verify_run.DEFAULT_TIMEOUT_MINUTES * 60, kwargs
+            assert kwargs["shell_mode"] == "posix", kwargs
+            assert kwargs["git_root"] == project_root, kwargs
+            assert kwargs["status_path"] == status_file, kwargs
+            assert kwargs["label"] == "verify", kwargs
+            print("PASS: case 6b - default timeout, posix shell and status path reach the runner")
+        except Exception as exc:
+            print(f"FAIL: case 6b ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 6c: a timed-out run never triggers the lock-race retry, even when its output carries the lock-race signature.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            lock_output = "MSB3021: Unable to copy file. is locked by: testhost"
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": None, "timed_out": True, "output": lock_output}
+            )
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
+                unittest.mock.patch("_implementer_common.subprocess.run"),
+            ):
+                result = _run_verify_gate(project_root, "dotnet test x.csproj", timeout_s=60)
+            assert len(calls) == 1, f"case 6c: expected no retry, got {len(calls)} runs"
+            assert result["timed_out"] is True, result
+            assert not result["reason"].startswith("[retried once"), result
+            print("PASS: case 6c - a timed-out run is never retried as a lock race")
+        except Exception as exc:
+            print(f"FAIL: case 6c ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 6d: the retry run uses label "<label>:retry" with its own full timeout, and `runs` collects both runs in order.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            lock_output = "MSB3021: Unable to copy file. is locked by: testhost"
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": 1, "output": lock_output}, {"exit_code": 0}
+            )
+            collected: list = []
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
+                unittest.mock.patch("_implementer_common.subprocess.run"),
+            ):
+                result = _run_verify_gate(
+                    project_root,
+                    "dotnet test x.csproj",
+                    timeout_s=75,
+                    label="batch-gate",
+                    runs=collected,
+                )
+            assert result is None, result
+            assert [c[1]["label"] for c in calls] == ["batch-gate", "batch-gate:retry"], calls
+            assert [c[1]["timeout_s"] for c in calls] == [75, 75], calls
+            assert [r.label for r in collected] == ["batch-gate", "batch-gate:retry"], collected
+            print("PASS: case 6d - retry label, full retry timeout and run collection")
+        except Exception as exc:
+            print(f"FAIL: case 6d ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 6e: a retry that times out returns the timed-out dict built from the retry run.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            lock_output = "MSB3021: Unable to copy file. is locked by: testhost"
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": 1, "output": lock_output},
+                {"exit_code": None, "timed_out": True, "output": "retry hung"},
+            )
+            with (
+                unittest.mock.patch("sys.platform", "win32"),
+                _patch_run_verify(side_effect),
+                unittest.mock.patch("_implementer_common.subprocess.run"),
+            ):
+                result = _run_verify_gate(
+                    project_root, "dotnet test x.csproj", timeout_s=75, label="batch-gate"
+                )
+            assert result["timed_out"] is True, result
+            assert result["reason"] == (
+                "[verify timed out after 75s: batch-gate:retry] retry hung"
+            ), result
+            print("PASS: case 6e - a timed-out retry reports the retry run")
+        except Exception as exc:
+            print(f"FAIL: case 6e ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 6f: the module-wide run uses label "<label>:module-wide"; the module-wide prefix precedes a timeout prefix and timed_out survives.
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": 0},
+                {"exit_code": None, "timed_out": True, "output": "module hung"},
+            )
+            collected = []
+            with _patch_run_verify(side_effect):
+                result = _run_verify_gates(
+                    project_root,
+                    "exit 0",
+                    "exit 0",
+                    timeout_s=30,
+                    label="batch-gate",
+                    runs=collected,
+                )
+            assert [c[1]["label"] for c in calls] == ["batch-gate", "batch-gate:module-wide"], calls
+            assert [r.label for r in collected] == ["batch-gate", "batch-gate:module-wide"], collected
+            assert result["timed_out"] is True, result
+            assert result["reason"] == (
+                "[module-wide verify] [verify timed out after 30s: batch-gate:module-wide] module hung"
+            ), result
+            print("PASS: case 6f - module-wide label, ordering of runs and prefix order")
+        except Exception as exc:
+            print(f"FAIL: case 6f ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 6g: a failure reason ends with the "[verify output: <path>]" suffix; an unlaunchable command reports "verify gate raised".
+    with tempfile.TemporaryDirectory() as tmpdir:
+        project_root = Path(tmpdir)
+        try:
+            output_path = project_root / ".scratch" / "verify" / "x.out"
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": 2, "output": "boom\n", "output_path": output_path},
+                {"exit_code": None, "output": "No such file"},
+            )
+            with _patch_run_verify(side_effect):
+                result = _run_verify_gate(project_root, "exit 2")
+                launch_failure = _run_verify_gate(project_root, "nonexistent-binary")
+            assert result["reason"] == f"boom\n[verify output: {output_path}]", result
+            assert launch_failure["reason"] == "verify gate raised: No such file", launch_failure
+            assert "timed_out" not in launch_failure, launch_failure
+            print("PASS: case 6g - failure reason carries the output path; launch failure wording kept")
+        except Exception as exc:
+            print(f"FAIL: case 6g ({exc})", file=sys.stderr)
+            errors += 1
+
+    # Case 6h: _truncate_verify_output leaves short text alone and truncates long text with the omitted-content marker.
+    try:
+        assert _truncate_verify_output("short") == "short"
+        assert _truncate_verify_output("x" * 2000) == "x" * 2000
+        long_text = "FAIL\tpkg\t0.1s\n" + ("a" * 2500)
+        truncated = _truncate_verify_output(long_text)
+        omitted_len = len(long_text) - 2000
+        assert truncated == (
+            f"[... {omitted_len} earlier chars omitted; earlier failures:\nFAIL\tpkg\t0.1s ...]\n"
+            + long_text[-2000:]
+        ), truncated[:120]
+        print("PASS: case 6h - _truncate_verify_output keeps the 2000-character tail behaviour")
+    except Exception as exc:
+        print(f"FAIL: case 6h ({exc})", file=sys.stderr)
+        errors += 1
 
     # Case 36 -- Bug #557 (parsed success, start-batch commit only -> stuck/logic)
     # Verifies that when the only commit since start_sha is a "mill-go: start batch" commit, the parsed-success path emits stuck/logic rather than success.
@@ -4756,16 +4944,17 @@ def main() -> int:
         project_root = Path(tmpdir)
         _setup_fixture(project_root)
         try:
-            module_ran_marker = project_root / "module-ran.txt"
-            result = _run_verify_gates(
-                project_root, "exit 1", "echo ran > module-ran.txt"
-            )
+            side_effect, calls = _canned_run_verify({"exit_code": 1})
+            with _patch_run_verify(side_effect):
+                result = _run_verify_gates(
+                    project_root, "exit 1", "echo ran > module-ran.txt"
+                )
             assert result is not None, "case 72a: expected a stuck dict"
             assert result["stuck_type"] == "verify", (
                 f"case 72a: expected stuck_type=verify, got {result}"
             )
-            assert not module_ran_marker.exists(), (
-                "case 72a: module-wide command must not run after a batch failure"
+            assert [cmd for cmd, _ in calls] == ["exit 1"], (
+                f"case 72a: module-wide command must not run after a batch failure, got {calls}"
             )
             print("PASS: case 72a - failing batch verify blocks before the module-wide gate")
         except Exception as exc:
@@ -4795,9 +4984,13 @@ def main() -> int:
 
         # The stuck dict from a failing gate has exactly status, stuck_type, reason.
         try:
-            result = _run_verify_gate(
-                project_root, "echo '--- FAIL: TestFoo (0.00s)' && exit 1"
+            side_effect, calls = _canned_run_verify(
+                {"exit_code": 1, "output": "--- FAIL: TestFoo (0.00s)\n"}
             )
+            with _patch_run_verify(side_effect):
+                result = _run_verify_gate(
+                    project_root, "echo '--- FAIL: TestFoo (0.00s)' && exit 1"
+                )
             assert result is not None, "case 72d: expected a stuck dict"
             assert set(result) == {"status", "stuck_type", "reason"}, (
                 f"case 72d: unexpected stuck dict keys {sorted(result)}"
@@ -5172,23 +5365,27 @@ def main() -> int:
             capture_output=True,
         )
         verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+        failing_side_effect, _ = _canned_run_verify(
+            {"exit_code": 1, "output": "--- FAIL: TestNew (0.00s)\n"}
+        )
         agent_output = json.dumps(
             {"status": "success", "session_id": "case78", "cards_done": [5]}
         )
         captured = ""
         try:
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    agent_output,
-                    project_root,
-                    start_sha=batch_start_sha,
-                    verify_cmd=verify_cmd,
-                    session_id="case78",
-                    task_dir=project_root / "_mill",
-                    parent_branch="main",
-                    status_path=status_path,
+            with _patch_run_verify(failing_side_effect):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        agent_output,
+                        project_root,
+                        start_sha=batch_start_sha,
+                        verify_cmd=verify_cmd,
+                        session_id="case78",
+                        task_dir=project_root / "_mill",
+                        parent_branch="main",
+                        status_path=status_path,
+                    )
                 )
-            )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
                 f"case 78: expected strict blocking, got {data}"
@@ -5252,20 +5449,24 @@ def main() -> int:
             capture_output=True,
         )
         verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+        failing_side_effect, _ = _canned_run_verify(
+            {"exit_code": 1, "output": "--- FAIL: TestNew (0.00s)\n"}
+        )
         captured = ""
         try:
             # snapshot_path omitted (defaults to None) -> the "elif start_sha is not None and
             # snapshot_path is None" inference branch, with no parseable status JSON in output.
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    "no structured status here, just log noise",
-                    project_root,
-                    start_sha=batch_start_sha,
-                    verify_cmd=verify_cmd,
-                    session_id="case79",
-                    status_path=status_path,
+            with _patch_run_verify(failing_side_effect):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        "no structured status here, just log noise",
+                        project_root,
+                        start_sha=batch_start_sha,
+                        verify_cmd=verify_cmd,
+                        session_id="case79",
+                        status_path=status_path,
+                    )
                 )
-            )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
                 f"case 79: expected strict blocking, got {data}"
@@ -5337,6 +5538,9 @@ def main() -> int:
             capture_output=True,
         )
         verify_cmd = "echo '--- FAIL: TestNew (0.00s)' && exit 1"
+        failing_side_effect, _ = _canned_run_verify(
+            {"exit_code": 1, "output": "--- FAIL: TestNew (0.00s)\n"}
+        )
         agent_output = json.dumps(
             {"status": "success", "session_id": "case80", "cards_done": [5]}
         )
@@ -5344,16 +5548,17 @@ def main() -> int:
         try:
             # task_dir/parent_branch deliberately omitted here -- this case isolates the
             # failing-verify blocking behavior with no downstream dirty-tree gate involved.
-            rc, captured = _capture_stdout(
-                lambda: _forward_output(
-                    agent_output,
-                    project_root,
-                    start_sha=batch_start_sha,
-                    verify_cmd=verify_cmd,
-                    session_id="case80",
-                    status_path=status_path,
+            with _patch_run_verify(failing_side_effect):
+                rc, captured = _capture_stdout(
+                    lambda: _forward_output(
+                        agent_output,
+                        project_root,
+                        start_sha=batch_start_sha,
+                        verify_cmd=verify_cmd,
+                        session_id="case80",
+                        status_path=status_path,
+                    )
                 )
-            )
             data = json.loads(captured.strip())
             assert data["status"] == "stuck", (
                 f"case 80: expected strict blocking, got {data}"

@@ -13,7 +13,7 @@ import _pygit2_util
 import _status
 import _subprocess_util
 import _timestamp
-from _verify_run import _posix_shell_run_args
+import _verify_run
 from pathlib import Path
 
 
@@ -763,25 +763,70 @@ def _extract_failure_signatures(output: str) -> list[str]:
 
 
 
+def _truncate_verify_output(text: str) -> str:
+    """
+    Shorten verify output to a failure-reason body.
+
+    Text of 2000 characters or fewer is returned unchanged.
+    Longer text keeps its last 2000 characters, preceded by a marker giving the omitted prefix
+    length and up to 20 failure-summary lines recovered from that prefix, so an earlier failing
+    package or test is not silently dropped when a later, less informative failure lands in the
+    kept tail.
+    """
+    if len(text) <= 2000:
+        return text
+    tail = text[-2000:]
+    omitted = text[:-2000]
+    fail_lines = _extract_failure_signatures(omitted)[:20]
+    marker = f"[... {len(omitted)} earlier chars omitted"
+    if fail_lines:
+        marker += "; earlier failures:\n" + "\n".join(fail_lines)
+    marker += " ...]\n"
+    return marker + tail
+
+
+def _verify_failure_reason(run: "_verify_run.VerifyRun", prefix: str = "") -> str:
+    """Build a failure reason: optional prefix, truncated run output, output-file suffix."""
+    return prefix + _truncate_verify_output(run.output.strip()) + _verify_run.output_suffix(run)
+
+
+def _timed_out_stuck(run: "_verify_run.VerifyRun") -> dict:
+    """Build the stuck dict for a verify run killed by its timeout."""
+    return {
+        "status": "stuck",
+        "stuck_type": "verify",
+        "reason": _verify_failure_reason(run, _verify_run.timeout_prefix(run)),
+        "timed_out": True,
+    }
+
+
 def _run_verify_gate(
     project_root: Path,
     verify_cmd: str | None,
     *,
     git_root: Path | None = None,
     cwd_override: Path | None = None,
+    timeout_s: float | None = None,
+    status_path: Path | None = None,
+    label: str = "verify",
+    runs: list | None = None,
 ) -> dict | None:
     """
     Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is
     None.
 
-    When verify_cmd is not None, runs the command via bash on Windows (so the POSIX env-prefix
-    syntax is honoured) and via subprocess.run with shell=True elsewhere, capturing output as text.
-    On non-zero return code, returns a stuck dict with stuck_type="verify".
-    When the combined stdout+stderr is over 2000 characters, reason is an omitted-content marker
-    (byte count of the omitted prefix, plus up to 20 extracted earlier-failure summary lines when
-    any are found) followed by the last 2000 characters;
-    under 2000 characters, reason is the stripped output unchanged.
-    On success (rc 0) or when verify_cmd is None, returns None.
+    The command runs through the shared verify runner (POSIX shell semantics, combined output saved
+    to a file, bounded by a timeout).
+    Every run, including the lock-race retry, is appended to `runs` when it is not None.
+    A timed-out run returns a stuck dict with stuck_type="verify" and timed_out=True, whose reason
+    starts with the timeout prefix naming `label`; it is never retried or treated as benign.
+    A command that cannot be launched returns a stuck dict reading "verify gate raised: <message>".
+    On a non-zero exit, returns a stuck dict with stuck_type="verify" whose reason is the truncated
+    output followed by the saved-output path.
+    When the combined output is over 2000 characters, the reason keeps the last 2000 characters
+    behind an omitted-content marker (byte count of the omitted prefix, plus up to 20 extracted
+    earlier-failure summary lines when any are found).
+    On success (exit 0) or when verify_cmd is None, returns None.
 
     On Windows (sys.platform == "win32"), applies an additional gate: if the output contains a
     benign cleanup-race signature and no test failures (per _is_benign_windows_cleanup), treats the
@@ -790,11 +835,12 @@ def _run_verify_gate(
     On Windows, when the command contains "dotnet" and the failure output matches a dotnet
     build-server file-lock signature (per _has_dotnet_lock_race_signature: MSB3021, MSB3027, or
     "is locked by:"), retries the same command once -- after the unconditional post-run shutdown
-    below has already run. A passing retry returns None exactly like any other pass. A
-    still-failing retry returns a stuck dict built from the retry's own output, with reason
-    prefixed by "[retried once after dotnet build-server shutdown; still failing] ".
+    below has already run -- under the label `<label>:retry` and a full timeout of its own.
+    A passing retry returns None exactly like any other pass. A still-failing retry returns a stuck
+    dict built from the retry's own output, with reason prefixed by
+    "[retried once after dotnet build-server shutdown; still failing] ".
 
-    After the verify subprocess completes (regardless of exit code), if the platform is win32 and
+    After the first verify run completes (regardless of exit code), if the platform is win32 and
     the command contains "dotnet", runs `dotnet build-server shutdown` to release
     VBCSCompiler/MSBuild locks that prevent re-runs.
     This call is wrapped in try/except so a TimeoutExpired or FileNotFoundError here never poisons
@@ -810,10 +856,14 @@ def _run_verify_gate(
             When set, it always wins over both git_root and project_root -- it reflects an author's
                 explicit choice, whereas git_root/project_root are positional fallbacks for the
                 plain-string verify format.
+        timeout_s: Seconds before a run is killed; None means the runner's default timeout.
+        status_path: status.md that receives one Verify log row per run, or None to skip the row.
+        label: Name of this verify site, used in the runner's file names, markers and log rows.
+        runs: Accumulator that receives every VerifyRun, or None to discard them.
 
     Returns:
-        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on non-zero
-        return (unless win32 benign cleanup), or None on success or when verify_cmd is None.
+        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <text>} on failure
+        (unless win32 benign cleanup), or None on success or when verify_cmd is None.
     """
     if verify_cmd is None:
         return None
@@ -825,28 +875,29 @@ def _run_verify_gate(
         if cwd_override is not None
         else (git_root if git_root is not None else project_root)
     )
+    effective_timeout_s = (
+        timeout_s if timeout_s is not None else _verify_run.DEFAULT_TIMEOUT_MINUTES * 60
+    )
+
+    def run_once(run_label: str) -> "_verify_run.VerifyRun":
+        run = _verify_run.run_verify(
+            verify_cmd,
+            cwd=effective_cwd,
+            label=run_label,
+            git_root=git_root if git_root is not None else project_root,
+            timeout_s=effective_timeout_s,
+            shell_mode="posix",
+            status_path=status_path,
+        )
+        if runs is not None:
+            runs.append(run)
+        return run
 
     try:
-        # Plan verify commands use POSIX syntax (e.g.
-        # the mandated "PYTHONPATH= " env-prefix).
-        # subprocess shell=True routes through cmd.exe on Windows, which cannot parse a leading VAR= env-prefix and fails with "'PYTHONPATH' is not recognized".
-        # Run through bash when available so the POSIX verify command is honoured cross-platform;
-        # fall back to shell=True only when bash is absent.
-        run_args, run_kwargs = _posix_shell_run_args(verify_cmd)
-        result = subprocess.run(
-            run_args,
-            capture_output=True,
-            text=True,
-            cwd=effective_cwd,
-            **run_kwargs,
-        )
+        run = run_once(label)
         # dotnet cleanup: release testhost/MSBuild locks before caller retries.
         # Wrapped in try/except so a TimeoutExpired or FileNotFoundError here never poisons the verify verdict (best-effort, non-fatal).
-        if (
-            sys.platform == "win32"
-            and verify_cmd is not None
-            and "dotnet" in verify_cmd.lower()
-        ):
+        if sys.platform == "win32" and "dotnet" in verify_cmd.lower():
             try:
                 subprocess.run(
                     ["dotnet", "build-server", "shutdown"],
@@ -855,66 +906,54 @@ def _run_verify_gate(
                 )
             except Exception:
                 pass
-        if result.returncode != 0:
-            output = result.stdout + result.stderr
-            # On Windows, check if this is a benign cleanup-race with no test failure
-            if sys.platform == "win32" and _is_benign_windows_cleanup(output):
-                return None
-            retry_marker = ""
-            if (
-                sys.platform == "win32"
-                and verify_cmd is not None
-                and "dotnet" in verify_cmd.lower()
-                and _has_dotnet_lock_race_signature(output)
-            ):
-                # A stale build-server node from an earlier dotnet invocation in this
-                # worktree can still hold file handles into bin/obj when this command
-                # runs. The unconditional shutdown above already blocked until that
-                # process exited, so a bare re-run of the same command usually clears
-                # the race with no code changes (GitHub #848, #860).
-                retry_result = subprocess.run(
-                    run_args,
-                    capture_output=True,
-                    text=True,
-                    cwd=effective_cwd,
-                    **run_kwargs,
-                )
-                if retry_result.returncode == 0:
-                    return None
-                output = retry_result.stdout + retry_result.stderr
-                if sys.platform == "win32" and _is_benign_windows_cleanup(output):
-                    return None
-                retry_marker = (
-                    "[retried once after dotnet build-server shutdown; "
-                    "still failing] "
-                )
-            # Truncation enriches the reason with an omitted-content marker plus up to 20 extracted earlier-failure summary lines recovered from the omitted portion (#731) -- without this, an earlier failing package/test's identity can be silently dropped when a later, less- informative failure lands in the kept tail.
-            output_stripped = output.strip()
-            if len(output_stripped) > 2000:
-                tail = output_stripped[-2000:]
-                omitted = output_stripped[:-2000]
-                fail_lines = _extract_failure_signatures(omitted)[:20]
-                marker = f"[... {len(omitted)} earlier chars omitted"
-                if fail_lines:
-                    marker += "; earlier failures:\n" + "\n".join(fail_lines)
-                marker += " ...]\n"
-                reason = marker + tail
-            else:
-                reason = output_stripped
+        if run.timed_out:
+            return _timed_out_stuck(run)
+        if run.exit_code is None:
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
-                "reason": retry_marker + reason,
+                "reason": f"verify gate raised: {run.output}",
             }
+        if run.exit_code == 0:
+            return None
+
+        # On Windows, check if this is a benign cleanup-race with no test failure
+        if sys.platform == "win32" and _is_benign_windows_cleanup(run.output):
+            return None
+        retry_marker = ""
+        if (
+            sys.platform == "win32"
+            and "dotnet" in verify_cmd.lower()
+            and _has_dotnet_lock_race_signature(run.output)
+        ):
+            # A stale build-server node from an earlier dotnet invocation in this
+            # worktree can still hold file handles into bin/obj when this command
+            # runs. The unconditional shutdown above already blocked until that
+            # process exited, so a bare re-run of the same command usually clears
+            # the race with no code changes (GitHub #848, #860).
+            run = run_once(f"{label}:retry")
+            if run.timed_out:
+                return _timed_out_stuck(run)
+            if run.exit_code == 0:
+                return None
+            if sys.platform == "win32" and _is_benign_windows_cleanup(run.output):
+                return None
+            retry_marker = (
+                "[retried once after dotnet build-server shutdown; "
+                "still failing] "
+            )
+        return {
+            "status": "stuck",
+            "stuck_type": "verify",
+            "reason": _verify_failure_reason(run, retry_marker),
+        }
     except Exception as e:
-        # On any exception (e.g., missing binary), return stuck dict so caller can distinguish this from a genuine pass
+        # On any exception, return stuck dict so caller can distinguish this from a genuine pass
         return {
             "status": "stuck",
             "stuck_type": "verify",
             "reason": f"verify gate raised: {e}",
         }
-
-    return None
 
 
 def _run_verify_gates(
@@ -925,6 +964,10 @@ def _run_verify_gates(
     git_root: Path | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
+    timeout_s: float | None = None,
+    status_path: Path | None = None,
+    label: str = "verify",
+    runs: list | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -959,12 +1002,23 @@ def _run_verify_gates(
             parse_verify_field.
             Takes precedence over git_root/project_root;
             see _run_verify_gate.
+        timeout_s: Per-command timeout in seconds, applied to each gate; None means the default.
+        status_path: status.md that receives one Verify log row per run, or None to skip the row.
+        label: Verify label of the batch gate; the module-wide gate uses `<label>:module-wide`.
+        runs: Accumulator that receives every VerifyRun in execution order, or None.
 
     Returns:
         A stuck dict from the first gate that fails, or None when both pass (or are not configured).
     """
     batch_result = _run_verify_gate(
-        project_root, verify_cmd, git_root=git_root, cwd_override=cwd_override
+        project_root,
+        verify_cmd,
+        git_root=git_root,
+        cwd_override=cwd_override,
+        timeout_s=timeout_s,
+        status_path=status_path,
+        label=label,
+        runs=runs,
     )
     if batch_result is not None:
         return batch_result
@@ -977,6 +1031,10 @@ def _run_verify_gates(
         module_wide_verify_cmd,
         git_root=git_root,
         cwd_override=module_wide_cwd_override,
+        timeout_s=timeout_s,
+        status_path=status_path,
+        label=f"{label}:module-wide",
+        runs=runs,
     )
     if module_result is not None:
         # Prefix the reason so the operator can identify the source of the failure.
