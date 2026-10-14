@@ -34,7 +34,9 @@ implementing  '2026-10-14T11:46:22Z'
 ```yaml
 batches:
   - name: verify-run-core
-    state: pending
+    state: running
+    implementer_session: 980f6c84-186d-4626-89bb-1b805ffca1ae
+    start_sha: ed1858475e27fd61104f6f4b4f894fa8f4138743
   - name: cleanliness-status-exclusion
     state: pending
   - name: implementer-gates
