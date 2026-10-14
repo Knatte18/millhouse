@@ -396,10 +396,10 @@ This three-step pattern applies at every dispatch point:
    `--duration-s`/`--tool-calls`/`--cost-usd` flags at all.
 
    For `millpy-fix.py` specifically, "the same standard arguments" means re-passing `--scope` and `--review-file <path>` exactly as given to the prepare-stage call — `millpy-fix.py` requires `--review-file` unconditionally at every `--stage`, not just `prepare` (its argparse validates `args.review_file is None` before branching on `--stage`), so a `--stage finalize` call that omits it fails argument parsing before finalize logic ever runs.
-   Give any `--stage finalize` call an extended Bash-tool timeout — recommend 600000ms (10 minutes) — whenever that CLI's finalize stage replays a batch's `verify:` command as a regression guard: this currently applies to both `millpy-fix.py --stage finalize` and `millpy-implement.py --stage finalize`, each of which replays every batch's `verify:` command sequentially, which can exceed the default 2-minute Bash tool timeout on plans with several slow verify suites.
-   This timeout note is scoped to finalize calls for CLIs whose finalize stage replays verify — fix-CLI (both `--nits-only` and full fix, holistic scope) and implementer-CLI;
-   review-CLI finalize calls don't run verify commands and aren't affected.
-   `--stage finalize`'s verify replay (`_run_verify_gate` in `_implementer_common.py`) runs the batch's `verify:` command via `subprocess.run` with no `env=` override, so it inherits whatever PATH the **orchestrator's own Bash-tool shell** happens to have at the moment `--stage finalize` is invoked — not the implementer subagent's own shell environment, which is a separate process the orchestrator cannot introspect.
+   `millpy-implement.py --stage finalize` and `millpy-fix.py --stage finalize` replay `verify:` commands, so those Bash calls use this wording: Run this Bash call with `run_in_background: true` and no `timeout`. `pipeline.verify_timeout_minutes` bounds each verify command it runs, so the Bash tool's 10-minute cap must not cut it off first. Wait for the call's completion notification, then read its output; the JSON result is the last stdout line starting with `{`.
+   Review-CLI finalize calls run no verify and keep foreground calls.
+   A finalize envelope that ran verify carries `verify_runs` (label, cmd, exit code, wall time, first-run, timed-out per command), and a timed-out gate is `stuck_type: verify` with `timed_out: true` and a `[verify timed out after <N>s: <label>]` reason prefix, handled by the existing verify stuck route; live progress is in `<git_root>/.scratch/verify/verify.log`.
+   `--stage finalize`'s verify replay (`_verify_run.run_verify`, called from `_run_verify_gate` in `_implementer_common.py`) inherits the **orchestrator's own Bash-tool shell** environment and only adds `PYTHONIOENCODING`, `MSBUILDDISABLENODEREUSE` and `DOTNET_CLI_USE_MSBUILD_SERVER`, so it sees whatever PATH that shell has at the moment `--stage finalize` is invoked — not the implementer subagent's own shell environment, which is a separate process the orchestrator cannot introspect.
    If a project's `verify:` command depends on a toolchain directory that is not on the orchestrator's default PATH (e.g. `$HOME/go/bin` for `gopls`-dependent Go tooling), export it in the orchestrator's shell before running `/mill-go`, or `--stage finalize`'s regression replay can spuriously report `stuck_type: verify` even though the implementer's own verify run (in its own session) passed cleanly.
 
 5.5. **`incomplete` recovery (implementer only — agent mode):** When the finalize envelope from step 5 has `stuck_type: incomplete`, the batch is provably partial: some cards were committed but not all.
@@ -563,12 +563,12 @@ if not pipeline_cfg.get('done_gate_baseline_preflight', False):
 gate_cmd = pipeline_cfg.get('done_gate')
 if not gate_cmd:
     raise SystemExit(0)
-result = _done_gate.run_preflight(gate_cmd, git_root)
+result = _done_gate.run_preflight(gate_cmd, git_root, hub_root=hub_root)
 print(json.dumps(result))
 "
 ```
 
-Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended for finalize-stage verify replays above: `run_preflight` invokes the configured `done_gate` command, which is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
+Run this Bash call with `run_in_background: true` and no `timeout`. `pipeline.verify_timeout_minutes` bounds each verify command it runs, so the Bash tool's 10-minute cap must not cut it off first. Wait for the call's completion notification, then read its output; the JSON result is the last stdout line starting with `{`.
 
 Parse stdout for a JSON line (absent when the flag/`done_gate` check above short-circuited via `SystemExit(0)` -- that is the normal skip path, not an error).
 If the JSON line's `result` is `blocked`, log the reason (ASCII-only) but do **NOT** halt — proceed to batch 1 regardless.

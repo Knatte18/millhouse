@@ -134,29 +134,33 @@ cfg = _config.load_config(hub_root, git_root)
 gate_cmd = (cfg.get('pipeline') or {}).get('done_gate')
 if not gate_cmd:
     sys.exit(0)
-result = _done_gate.run_gate(gate_cmd, git_root)
+result = _done_gate.run_gate(gate_cmd, git_root, hub_root=hub_root)
 print(json.dumps(result))
 sys.exit(1 if result['result'] == 'blocked' else 0)
 "
 ```
 
-Give this Bash-tool call the same extended 600000ms (10-minute) timeout recommended in `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" step 5 for finalize-stage verify replays: `gate_cmd` is an arbitrary, potentially slow project command (e.g. a full regression suite) with no bound on runtime, sharing the identical default-2-minute-Bash-timeout risk that motivated the original finalize-stage-CLI fix.
+Run this Bash call with `run_in_background: true` and no `timeout`. `pipeline.verify_timeout_minutes` bounds each verify command it runs, so the Bash tool's 10-minute cap must not cut it off first. Wait for the call's completion notification, then read its output; the JSON result is the last stdout line starting with `{`.
+The snippet's exit code arrives in the completion notification.
 
 Parse stdout for a JSON line.
 If the exit code is non-zero and the JSON line has `result: blocked`, proceed to the fixer-dispatch check below before halting.
 
 **Fixer-dispatch check.**
 
+Keep-verify-log commit: every gate run appends a `## Verify log` row to `status.md`.
+Before every lock-release/notify/halt on a still-`blocked` result below, when `git -C <worktree> status --porcelain -- <status_path>` is non-empty, commit `git -C <worktree> add <status_path> && git -C <worktree> commit -m "<VARIANT_LABEL>: keep verify log for blocked done gate"` and push, so the rows are durable even though `phase: done` is not set.
+
 1. Check whether `<git_root>/.claude/agents/mill-done-gate-fixer.md` exists (a plain filesystem existence check, e.g. `Path(git_root, ".claude", "agents", "mill-done-gate-fixer.md").exists()`).
-2. **If it exists:** dispatch it once via `Agent(subagent_type: "mill-done-gate-fixer")` — not through the CLI prepare/finalize family `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" documents for implementer/reviewer/fixer — with a brief naming the plan overview (`<plan_dir>/00-overview.md`), the configured `done_gate` command (`gate_cmd`), and the captured failure output (the JSON's `reason` field). Wait for the dispatch to complete, then re-run the same "0. Pre-done gate" snippet above once more (a second `_done_gate.run_gate(gate_cmd, git_root)` call). If this re-run's `result['result'] == 'ok'`, proceed to the existing numbered step 1 (`_status.append_phase(status_path, "done", ...)`) as normal — the gate now passes. If it is still `'blocked'`: release the builder lock and notify (`_notify.notify("<VARIANT_LABEL>.blocked", "done gate failed", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`), then halt with `BLOCKED: done gate failed — <reason>` (the re-run's `reason` field), appending the note "mill-done-gate-fixer was already attempted and did not resolve the failure."
-   Before that release/notify, when `parent_escalated_done_gate` is false, set it true and load the `ask-thread` skill with site `go-handoff-done-gate`, reason `f"done gate failed: {reason}"` (the re-run's `reason` field), actions `retry,halt`.
+2. **If it exists:** dispatch it once via `Agent(subagent_type: "mill-done-gate-fixer")` — not through the CLI prepare/finalize family `plugins/mill/skills/mill-go-base/SKILL.md`'s "## Agent-mode dispatch" documents for implementer/reviewer/fixer — with a brief naming the plan overview (`<plan_dir>/00-overview.md`), the configured `done_gate` command (`gate_cmd`), and the captured failure output (the JSON's `reason` field). Wait for the dispatch to complete, then re-run the same "0. Pre-done gate" snippet above once more (a second `_done_gate.run_gate(gate_cmd, git_root)` call). If this re-run's `result['result'] == 'ok'`, proceed to the existing numbered step 1 (`_status.append_phase(status_path, "done", ...)`) as normal — the gate now passes. If it is still `'blocked'`: run the keep-verify-log commit above, then release the builder lock and notify (`_notify.notify("<VARIANT_LABEL>.blocked", "done gate failed", slug=slug)` then `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-builder-lock.py" release`), then halt with `BLOCKED: done gate failed — <reason>` (the re-run's `reason` field), appending the note "mill-done-gate-fixer was already attempted and did not resolve the failure."
+   Before that release/notify (and after the keep-verify-log commit), when `parent_escalated_done_gate` is false, set it true and load the `ask-thread` skill with site `go-handoff-done-gate`, reason `f"done gate failed: {reason}"` (the re-run's `reason` field), actions `retry,halt`.
    - On `retry`: dispatch `Agent(subagent_type: "mill-done-gate-fixer")` once more with the same brief plus, appended at the end, a `Parent guidance:` heading followed by the guidance verbatim.
-     Wait for it, then re-run the "0. Pre-done gate" snippet: `ok` -> numbered step 1; still `blocked` -> the release/notify/halt above with its "already attempted" note.
-   - On `halt`: the release/notify/halt above, with `halt_suffix` appended to the `BLOCKED:` message.
+     Wait for it, then re-run the "0. Pre-done gate" snippet: `ok` -> numbered step 1; still `blocked` -> the keep-verify-log commit, then the release/notify/halt above with its "already attempted" note.
+   - On `halt`: the keep-verify-log commit, then the release/notify/halt above, with `halt_suffix` appended to the `BLOCKED:` message.
 
    Do NOT set `phase: done` when the gate fires;
    the task remains in its current phase so the operator can investigate the failure.
-3. **If it does not exist:** skip the dispatch entirely and go straight to the same lock-release/notify sequence and halt as step 2's still-blocked branch, but without the "already attempted" note — `BLOCKED: done gate failed — <reason>` using the original run's `reason` field.
+3. **If it does not exist:** skip the dispatch entirely and run the keep-verify-log commit, then go straight to the same lock-release/notify sequence and halt as step 2's still-blocked branch, but without the "already attempted" note — `BLOCKED: done gate failed — <reason>` using the original run's `reason` field.
    This step never escalates to the parent, since there is nothing to re-dispatch.
    Do NOT set `phase: done` when the gate fires;
    the task remains in its current phase so the operator can investigate the failure.
