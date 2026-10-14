@@ -133,14 +133,17 @@ For each `(name, cmd, cwd)`:
   on the first entry `p` where `p in cmd` is true, print `[verify] skipped {p} (allowlisted as known-broken)` to stdout (where `{p}` is the literal matched entry), increment `skipped`, and `continue` to the next `(name, cmd, cwd)` triple without running the command and without invoking the verify-fix sub-agent.
   If no entry in `skip_list` matches, fall through to the next bullet.
 - Resolve the run cwd: `hub_root` when `cwd == hub_root`, `git_root` when `cwd == git_root`, and `git_root` when `cwd is None` (the string-form default — matching `_implementer_common._run_verify_gate`'s actual live-dispatch behavior: mill-go's own batch verify calls always pass `git_root=git_root` to `_run_verify_gate`, which resolves a plain-string `verify:` command's cwd to `git_root` whenever `git_root` is not `None`, per that function's own docstring — "When None, falls back to project_root" — so `git_root` is what a plain-string `verify:` command was actually exercised against during implementation, and this replay step must match that, not `hub_root`).
-  Run the command from that resolved cwd.
-  On success: increment `ran` and continue to the next triple.
-- On failure → **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
-  If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-merge-in-subagent.py` and `<args> = --mode verify-fix --cmd "<cmd>" --checkpoint "$CHK"`.
+  Run the command through the CLI: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-verify-run.py" --label "merge-in:<name>" --cmd "<cmd>" --cwd "<resolved cwd>"`.
+  Run this Bash call with `run_in_background: true` and no `timeout`. `pipeline.verify_timeout_minutes` bounds each verify command it runs, so the Bash tool's 10-minute cap must not cut it off first. Wait for the call's completion notification, then read its output; the JSON result is the last stdout line starting with `{`.
+  Success is exit 0 / `exit_code == 0` in its JSON: increment `ran` and continue to the next triple.
+- On failure with `timed_out: true` in the CLI's JSON: skip the verify-fix dispatch entirely, roll back (Rollback block below), and escalate to the caller with the JSON's `reason`.
+- On any other failure → **Dispatch mode:** Resolve dispatch mode via `_agent_dispatch.resolve_dispatch_mode(cfg)`.
+  If `agent` (Claude provider only): follow the Agent-mode dispatch pattern (see "## Agent-mode dispatch" in `plugins/mill/skills/mill-go-base/SKILL.md`) with `<cli> = millpy-merge-in-subagent.py` and `<args> = --mode verify-fix --cmd "<cmd>" --checkpoint "$CHK" --label "merge-in:<name>"`.
+  The `--stage prepare` and `--stage finalize` Bash calls all run verify, so each uses the background wording above.
   Special handling: when the prepare stage reports `dispatch_needed: false` in its JSON output (verify already passed), skip the Agent tool invocation and finalize call, and use the embedded success envelope directly.
   On `{"status":"success"}`: increment `ran`, continue to next batch verify.
-  On `{"status":"stuck"}`: roll back → `git reset --hard "$CHK"` — preserve checkpoint, escalate to the caller.
-  If `subprocess` or `psmux`: use the subprocess/psmux branch — `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode verify-fix --cmd "<cmd>" --checkpoint "$CHK"` — same success/stuck handling as agent mode.
+  On `{"status":"stuck"}` from either stage (including a timed-out or launch-failed initial verify from prepare, where no dispatch happens): roll back (Rollback block below), escalate to the caller.
+  If `subprocess` or `psmux`: use the subprocess/psmux branch — `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" "${CLAUDE_PLUGIN_ROOT}/scripts/millpy-merge-in-subagent.py" --mode verify-fix --cmd "<cmd>" --checkpoint "$CHK" --label "merge-in:<name>"` (run with the background wording above) — same success/stuck handling as agent mode.
 
 If `iter_batch_verifies` returns `[]` (no plan,
 or every batch had null verify) → skip verify entirely.
@@ -155,10 +158,15 @@ Staging is unconditional on `_mill/briefs` existing, but the commit is gated on 
 if [ -d <worktree>/_mill/briefs ]; then
   git -C <worktree> add _mill/briefs/
 fi
+if [ -f <worktree>/_mill/status.md ]; then
+  git -C <worktree> add _mill/status.md
+fi
 if [ -n "$(git -C <worktree> diff --cached --name-only)" ]; then
   git -C <worktree> commit -m "mill-merge-in: commit dispatch briefs"
 fi
 ```
+
+The `status.md` staging commits the `## Verify log` rows written by step 4 before `mill-merge`'s cleanup commit removes `_mill/`.
 
 **Why staged-only, not unscoped porcelain:** `git status --porcelain` also reports unrelated unstaged/untracked worktree state that may already exist when `mill-merge-in` is invoked -- state this skill's own earlier steps had no part in creating -- and gating on that would either sweep foreign dirt into this commit or, worse, pass the non-empty check while nothing is actually staged, making `git commit` fail with "nothing to commit" even though the guard said there was something to commit. Checking `git diff --cached` (staged-only) avoids both failure modes, since briefs (if added above) are the only thing this step ever stages or expects to find staged.
 
@@ -204,13 +212,48 @@ The checkpoint is deleted on success (step 5b) and preserved only when the skill
 
 ## Rollback
 
-If any step between 2 and 5 fails:
+If any step between 2 and 5 fails, run this four-step block (every "roll back -> `git reset --hard "$CHK"`" reference in steps 2-4 means this block).
+It carries the `## Verify log` rows written by step 4 across the reset, since the reset would otherwise discard them.
 
-```bash
-git reset --hard "$CHK"
-```
+1. Save the rows:
 
-Do **not** delete the checkpoint.
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
+   import _paths, _status
+   git_root = _paths.resolve_git_root()
+   status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), '_mill/status.md')
+   rows_path = git_root / '.scratch' / 'verify' / 'rollback-rows.json'
+   rows_path.parent.mkdir(parents=True, exist_ok=True)
+   rows_path.write_text(json.dumps(_status.read_verify_log_rows(status_path) if status_path.exists() else []))
+   "
+   ```
+
+2. Reset:
+
+   ```bash
+   git reset --hard "$CHK"
+   ```
+
+3. Restore the rows, print the count, and delete the JSON file:
+
+   ```bash
+   PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "$MILL_PYTHON" -c "
+   import json
+   import _paths, _status
+   git_root = _paths.resolve_git_root()
+   status_path = _paths.resolve_task_path(_paths.resolve_hub_path(), '_mill/status.md')
+   rows_path = git_root / '.scratch' / 'verify' / 'rollback-rows.json'
+   rows = json.loads(rows_path.read_text())
+   count = _status.restore_verify_log_rows(status_path, rows) if status_path.exists() and rows else 0
+   rows_path.unlink()
+   print(count)
+   "
+   ```
+
+4. When the printed count is above 0: `git add <status_path> && git commit -m "mill-merge-in: keep verify log across rollback"` and push.
+
+The checkpoint branch is still preserved -- do **not** delete it.
 Surface the failure to the caller.
 If called from `mill-merge`, the caller releases its merge lock and aborts;
 if standalone, the user investigates.
