@@ -1,7 +1,7 @@
 # Status
 
 ```yaml
-phase: approved-status-and-module-removal
+phase: approved-strict-verify-gates
 slug: drop-verify-baseline-preflight
 branch: hanf/drop-verify-baseline-preflight
 plan: _mill/plan
@@ -28,6 +28,7 @@ approved-implement-stage-removal  '2026-10-14T09:31:44Z'
 approved-fix-finalize-strict  '2026-10-14T09:33:44Z'
 approved-merge-in-recompute-removal  '2026-10-14T09:36:06Z'
 approved-status-and-module-removal  '2026-10-14T09:38:41Z'
+approved-strict-verify-gates  '2026-10-14T09:45:11Z'
 ```
 
 ## Batches
@@ -59,9 +60,10 @@ batches:
     commit_sha: 089a654f57dc0a3792caddff90569f7685372ef4
     verify_baseline_failures: []
   - name: strict-verify-gates
-    state: running
+    state: approved
     implementer_session: d3a3c3ed-e894-436a-9308-72d95b562869
     start_sha: bf0f59252a52ef9e5a617806a7c94ff8da226c4a
+    commit_sha: bd606c17fc10a94f0f798aef33dceb1f09fd0a46
     verify_baseline_failures: []
   - name: docs-and-comments
     state: pending
