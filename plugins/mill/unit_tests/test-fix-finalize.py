@@ -517,8 +517,8 @@ def main() -> int:
             print(f"FAIL: test 5 ({exc})", file=sys.stderr)
             errors += 1
 
-    # Test 7: --scope holistic forwards batch_verify_baseline as the sorted union of every
-    # contributing batch's own verify_baseline_failures list (#916 -- Card 6/7).
+    # Test 7: --scope holistic finalize calls finalize_from_output without
+    # module_verify_baseline / batch_verify_baseline kwargs (strict verify replay).
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir)
         (project_root / "_mill").mkdir(parents=True)
@@ -560,15 +560,9 @@ def main() -> int:
                 return_value={"yaml": {"task": "Test", "branch": "test-branch"}, "timeline": []}
             )
             mock_modules["_status"].read_branch = unittest.mock.MagicMock(return_value="test-branch")
-            # Two contributing batches, each with a distinct non-empty verify_baseline_failures
-            # list, with an overlapping signature ("sigShared") to prove the union deduplicates.
             mock_modules["_status"].read_batches = unittest.mock.MagicMock(
-                return_value=[
-                    {"name": "batch-one", "verify_baseline_failures": ["sigA", "sigShared"]},
-                    {"name": "batch-two", "verify_baseline_failures": ["sigB", "sigShared"]},
-                ]
+                return_value=[{"name": "batch-one"}, {"name": "batch-two"}]
             )
-            mock_modules["_status"].get_module_verify_baseline = unittest.mock.MagicMock(return_value=None)
             mock_modules["_reviewers"].load = unittest.mock.MagicMock(return_value={})
             mock_modules["_reviewers"].resolve = unittest.mock.MagicMock(
                 return_value={"model": "claude-haiku-4-5-20251001"}
@@ -585,8 +579,7 @@ def main() -> int:
                 return_value=("module-wide-verify-cmd", None)
             )
             # Both batches contribute a runnable verify command in DAG order -- the exact shape
-            # `iter_batch_verifies` returns -- so the holistic union loop below has something to
-            # iterate over.
+            # `iter_batch_verifies` returns.
             mock_modules["_plan_dag"].iter_batch_verifies = unittest.mock.MagicMock(
                 return_value=[
                     ("batch-one", "exit 0", None),
@@ -652,13 +645,16 @@ def main() -> int:
 
                     if mock_finalize.called:
                         call_args = mock_finalize.call_args
-                        if call_args.kwargs.get("batch_verify_baseline") == ["sigA", "sigB", "sigShared"]:
+                        forwarded_baseline_kwargs = {"module_verify_baseline", "batch_verify_baseline"} & set(
+                            call_args.kwargs
+                        )
+                        if not forwarded_baseline_kwargs:
                             print(
-                                "PASS: --scope holistic forwards sorted union of contributing batches' baselines"
+                                "PASS: --scope holistic finalize forwards no baseline kwargs"
                             )
                         else:
                             print(
-                                f"FAIL: holistic-scope baseline union - call_args={call_args}",
+                                f"FAIL: holistic-scope finalize forwarded baseline kwargs - call_args={call_args}",
                                 file=sys.stderr,
                             )
                             errors += 1

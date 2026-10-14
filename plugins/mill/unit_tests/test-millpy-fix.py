@@ -974,10 +974,11 @@ class TestMillpyFix(unittest.TestCase):
             stderr_buf.getvalue(),
         )
 
-    def test_holistic_finalize_baseline_union_skips_unknown_baseline_batch(self):
+    def test_holistic_finalize_forwards_no_baseline_kwargs(self):
         """
-        A batch with no `verify_baseline_failures` key (unknown baseline) contributes nothing to
-        the holistic union; only recorded lists do, and with no recorded key at all the kwarg is None.
+        Holistic finalize forwards neither `module_verify_baseline` nor `batch_verify_baseline`,
+        even when a status.md batch entry still carries a legacy `verify_baseline_failures` value;
+        the verify commands are still forwarded.
         """
         plan_dir = self.tmp_path / "_mill" / "plan"
         overview_text = (
@@ -1034,16 +1035,20 @@ class TestMillpyFix(unittest.TestCase):
             self.assertEqual(rc, 0)
             return captured_kwargs
 
-        # Neither batch has the key: no baseline at all.
-        self.assertIsNone(run_holistic_finalize().get("batch_verify_baseline"))
+        # Legacy cached-baseline key written straight into the fixture text: it must be ignored.
+        status_text = status_path.read_text(encoding="utf-8")
+        legacy_entry = '    state: approved\n    verify_baseline_failures: ["--- FAIL: TestA (0.01s)"]\n'
+        self.assertIn("    state: approved\n", status_text)
+        status_path.write_text(
+            status_text.replace("    state: approved\n", legacy_entry, 1), encoding="utf-8"
+        )
+        self.assertIn("verify_baseline_failures", status_path.read_text(encoding="utf-8"))
 
-        # batch1 recorded, batch2 unknown (key absent): the union is exactly batch1's list.
-        millpy_fix._status.set_batch_field(
-            status_path, "batch1", "verify_baseline_failures", ["--- FAIL: TestA (0.01s)"]
-        )
-        self.assertEqual(
-            run_holistic_finalize().get("batch_verify_baseline"), ["--- FAIL: TestA (0.01s)"]
-        )
+        forwarded_kwargs = run_holistic_finalize()
+        self.assertNotIn("module_verify_baseline", forwarded_kwargs)
+        self.assertNotIn("batch_verify_baseline", forwarded_kwargs)
+        self.assertIsNotNone(forwarded_kwargs.get("verify_cmd"))
+        self.assertIn("module_wide_verify_cmd", forwarded_kwargs)
 
     def test_holistic_finalize_status_path_logs_target_removed_skip(self):
         """Card 5: an approved batch whose verify command references a path a later approved batch's
