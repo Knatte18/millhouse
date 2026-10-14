@@ -464,6 +464,7 @@ def append_phase(status_path: Path | str, phase: str, timestamp: str) -> None:
 
 _BATCHES_HEADING = "## Batches"
 _RECOVERY_LOG_HEADING = "## Tracked-file recovery log"
+_VERIFY_LOG_HEADING = "## Verify log"
 _INFERRED_SUCCESS_LOG_HEADING = "## Inferred-success log"
 _FORK_FALLBACK_LOG_HEADING = "## Fork-fallback log"
 _BATCH_ALLOWED_KEYS = {
@@ -1204,6 +1205,173 @@ def append_recovery_log(
         lines.insert(fence_close_idx, new_row)
 
     status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Verify log — one row per verify command run
+# ---------------------------------------------------------------------------
+
+
+def _find_verify_log_block(lines: list[str]) -> tuple[int, int, int, int] | None:
+    r"""Locate the verify-log section's heading and fenced-text body.
+
+    Returns ``(heading_idx, fence_open_idx, fence_close_idx, section_end_idx)``:
+    the ``## Verify log`` line, the opening ``\`\`\`text`` fence, the closing ``\`\`\``,
+    and the last line of the section (before the next ``## `` heading, or EOF).
+
+    Returns ``None`` if the heading is absent.
+
+    Raises:
+        ValueError: the heading is present but its fenced block is missing or unterminated.
+    """
+    heading_idx = None
+    for i, line in enumerate(lines):
+        if line.rstrip() == _VERIFY_LOG_HEADING:
+            heading_idx = i
+            break
+    if heading_idx is None:
+        return None
+
+    section_end_idx = len(lines) - 1
+    for j in range(heading_idx + 1, len(lines)):
+        if lines[j].startswith("## "):
+            section_end_idx = j - 1
+            break
+
+    fence_open_idx = None
+    for j in range(heading_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == _TIMELINE_FENCE:
+            fence_open_idx = j
+            break
+    if fence_open_idx is None:
+        raise ValueError(f"{_VERIFY_LOG_HEADING} section missing its {_TIMELINE_FENCE} block")
+    fence_close_idx = None
+    for j in range(fence_open_idx + 1, section_end_idx + 1):
+        if lines[j].strip() == "```":
+            fence_close_idx = j
+            break
+    if fence_close_idx is None:
+        raise ValueError(f"{_VERIFY_LOG_HEADING} {_TIMELINE_FENCE} block is unterminated")
+    return (heading_idx, fence_open_idx, fence_close_idx, section_end_idx)
+
+
+def normalize_log_field(text: str, max_len: int | None = None) -> str:
+    """
+    Reduce free text to a single-line, backtick-free, ASCII-only log field.
+
+    Whitespace runs (newlines included) collapse to one space and the ends are stripped.
+    Backticks become ``'`` so the text cannot close the fenced log block.
+    Non-ASCII characters become ``?``.
+    When ``max_len`` is given and the result is longer, it is cut to ``max_len`` characters
+    followed by ``...``.
+    """
+    collapsed = " ".join(text.split())
+    collapsed = collapsed.replace("`", "'")
+    collapsed = "".join(ch if ord(ch) < 128 else "?" for ch in collapsed)
+    if max_len is not None and len(collapsed) > max_len:
+        return collapsed[:max_len] + "..."
+    return collapsed
+
+
+def _insert_verify_log_rows(lines: list[str], rows: list[str]) -> None:
+    """Add ``rows`` to the verify-log block in ``lines``, creating the section when absent."""
+    located = _find_verify_log_block(lines)
+    if located is None:
+        if lines and lines[-1].strip() != "":
+            lines.append("")
+        lines.extend([_VERIFY_LOG_HEADING, "", _TIMELINE_FENCE, *rows, "```"])
+    else:
+        _heading_idx, _fence_open, fence_close_idx, _section_end = located
+        lines[fence_close_idx:fence_close_idx] = rows
+
+
+def append_verify_log(
+    status_path: Path | str,
+    *,
+    timestamp: str,
+    label: str,
+    exit: int | str,
+    wall_s: float,
+    first_run: bool,
+    cmd: str,
+) -> None:
+    """
+    Append one row describing a finished verify command to ``status.md``.
+
+    The ``## Verify log`` section is created at the end of the file on first call;
+    later calls insert one row before the closing fence, never rewriting prior rows.
+    ``label`` and ``cmd`` pass through ``normalize_log_field`` so the row stays on one line
+    (``cmd`` is cut to 300 characters).
+
+    Args:
+        status_path: Absolute path to the status.md file.
+        timestamp: ISO-8601 UTC timestamp, written through ``quote_scalar``.
+        label: Short name of the verify site, for example ``batch-1``.
+        exit: The process exit code, or the string ``timeout`` or ``launch-error``.
+        wall_s: Wall-clock seconds the command ran.
+        first_run: Whether this was the first verify run in the checkout.
+        cmd: The command text that ran.
+
+    Raises:
+        ValueError: the verify-log heading is present but its fenced block is missing or
+            unterminated.
+    """
+    status_path = _as_path(status_path, "append_verify_log")
+    lines = status_path.read_text(encoding="utf-8").splitlines()
+    row = (
+        f"{quote_scalar(timestamp)}  {normalize_log_field(label)}  exit={exit}  "
+        f"wall={wall_s:.1f}s  first_run={'true' if first_run else 'false'}  "
+        f"cmd={normalize_log_field(cmd, 300)}"
+    )
+    _insert_verify_log_rows(lines, [row])
+    status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def read_verify_log_rows(status_path: Path | str) -> list[str]:
+    """
+    Return the row lines inside the ``## Verify log`` fenced block, verbatim and in order.
+
+    Returns ``[]`` when the section is absent.
+
+    Raises:
+        ValueError: the heading is present but its fenced block is missing or unterminated.
+    """
+    status_path = _as_path(status_path, "read_verify_log_rows")
+    lines = status_path.read_text(encoding="utf-8").splitlines()
+    located = _find_verify_log_block(lines)
+    if located is None:
+        return []
+    _heading_idx, fence_open_idx, fence_close_idx, _section_end = located
+    return lines[fence_open_idx + 1 : fence_close_idx]
+
+
+def restore_verify_log_rows(status_path: Path | str, rows: list[str]) -> int:
+    """
+    Re-add verify-log rows lost to a file reset, skipping rows already present.
+
+    Each row whose exact line text is not yet in the block is appended in order;
+    the section is created when absent and at least one row needs adding.
+    The file is not written when nothing needs adding.
+
+    Returns the number of rows appended.
+    """
+    status_path = _as_path(status_path, "restore_verify_log_rows")
+    lines = status_path.read_text(encoding="utf-8").splitlines()
+    located = _find_verify_log_block(lines)
+    present = set()
+    if located is not None:
+        _heading_idx, fence_open_idx, fence_close_idx, _section_end = located
+        present = set(lines[fence_open_idx + 1 : fence_close_idx])
+    missing = []
+    for row in rows:
+        if row not in present:
+            missing.append(row)
+            present.add(row)
+    if not missing:
+        return 0
+    _insert_verify_log_rows(lines, missing)
+    status_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return len(missing)
 
 
 # ---------------------------------------------------------------------------
