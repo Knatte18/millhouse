@@ -270,6 +270,20 @@ def main() -> int:
         if legacy_errors == 0:
             print(f"PASS: write_all_sh deletes all legacy .py and .ps1 wrappers for {len(SHORTCUT_SCRIPTS)} scripts")
 
+    # --- write_all_sh on a fresh clone with no .millhouse/ yet -> directory created, wrappers written ---
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mill_dir = Path(tmpdir) / ".millhouse"
+        fake_latest_path = Path(tmpdir) / "fake-latest"
+        written = write_all_sh(mill_dir, fake_latest_path)
+        if len(written) != len(SHORTCUT_SCRIPTS):
+            print(
+                f"FAIL: write_all_sh into missing mill_dir wrote {len(written)} files, expected {len(SHORTCUT_SCRIPTS)}",
+                file=sys.stderr,
+            )
+            errors += 1
+        else:
+            print("PASS: write_all_sh creates a missing mill_dir before writing")
+
     if errors:
         print(f"\n{errors} test(s) FAILED", file=sys.stderr)
         return 1

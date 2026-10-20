@@ -73,13 +73,13 @@ The mill convention is to invoke the venv Python binary directly with an explici
 # WRONG — invokes from source tree
 PYTHONPATH="plugins/mill/scripts" uv run --project plugins/mill python -c "..."
 
-# RIGHT — invokes from cache (mill-setup bootstrapper exception; all other skills use "$MILL_PYTHON")
+# RIGHT — invokes from the deployed copy (mill-setup bootstrapper exception; all other skills use "$MILL_PYTHON")
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "..."
 ```
 
 This direct-binary form is used by mill-setup only (bootstrapper exception — Phase 4.8 writes `MILL_PYTHON` to `~/.claude/settings.json`;
 all other mill skills use `"$MILL_PYTHON"`).
-The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the cache path is unavailable — for example, running unit tests from the millhouse repo itself.
+The source-tree form (`uv run --project plugins/mill ...`) remains the documented exception for cases where the deployed copy is unavailable — for example, running unit tests from the millhouse repo itself.
 
 **Compute `<VENV_PYTHON>` once, before Phase 1**, and reuse the same literal path for every command in every later phase (same treatment as `<container>`, `<hub-path>`, `<wiki-dir>` — a token substituted by whoever is executing the skill, not a persisted shell variable):
 
@@ -304,7 +304,7 @@ When rendering the command: fill `<repo-url-or-None>` with `r'<value>'` when `--
 Fill `<branch-or-None>` with `r'<value>'` when `--branch` was given, `None` when only `--from-url` was given.
 Passing `None` for an omitted argument preserves whatever value the file already has (partial-update semantics).
 
-Note: `.millhouse/` does not exist on a fresh install at the time this phase fires (it is created in Phase 4 by `create_hub_links`).
+Note: `.millhouse/` does not exist on a fresh install at the time this phase fires.
 No separate `mkdir` is needed — `_config.set_local_wiki_overrides` calls `cfg_path.parent.mkdir(parents=True, exist_ok=True)` before writing.
 
 Note: comments in `.millhouse/config.local.yaml` are lost when this phase rewrites the file.
@@ -396,32 +396,30 @@ The wrapper format branches on platform (`os.name == 'nt'` → `.cmd`; else → 
 
 On Windows, creates `.millhouse/<script>.cmd` forwarders for every user-callable mill script.
 On POSIX, creates `.millhouse/<script>.sh` forwarders (executable, `#!/bin/sh`) for the same scripts.
-Each wrapper hardcodes the path of the currently-latest plugin cache entry and delegates to the real script via a direct Python invocation:
+Each wrapper hardcodes the plugin root (the deploy directory `${CLAUDE_PLUGIN_ROOT}` resolves to) and delegates to the real script via a direct Python invocation.
+The writer creates `.millhouse/` if it does not exist yet — no earlier phase does on a fresh clone.
+Never point the wrappers at `~/.claude/plugins/cache/`: for the directory-sourced `millhouse` marketplace that copy is a snapshot taken at install time, which Claude Code does not read and `update-plugins` does not refresh.
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
-import os, _shortcuts
+import os, sys, _shortcuts, _config
 from pathlib import Path
-cache = Path.home() / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
-latest_path = max((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.name)
+plugin_root = _config.resolve_plugin_root_from_syspath(sys.path)
 writer = _shortcuts.write_all if os.name == 'nt' else _shortcuts.write_all_sh
-written = writer(Path('.millhouse'), latest_path)
+written = writer(Path('.millhouse'), plugin_root)
 print(f'wrote {len(written)} wrappers' if written else 'wrappers up to date')
 "
 ```
 
 Log `wrote N wrappers` or `wrappers up to date` based on the returned list.
 
-**Windows only** — set the `PYTHONPATH` Windows user environment variable to the scripts directory of the latest installed plugin version via Python `winreg`:
+**Windows only** — set the `PYTHONPATH` Windows user environment variable to the plugin root's scripts directory via Python `winreg`:
 
 ```bash
 PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "
-import _winenv
-from pathlib import Path
+import sys, _winenv, _config
 
-cache = Path.home() / '.claude' / 'plugins' / 'cache' / 'millhouse' / 'mill'
-latest_path = max((p for p in cache.iterdir() if p.is_dir()), key=lambda p: p.name)
-scripts = str(latest_path / 'scripts')
+scripts = str(_config.resolve_plugin_root_from_syspath(sys.path) / 'scripts')
 changed = _winenv.set_user_env_var('PYTHONPATH', scripts)
 print(f'Set PYTHONPATH (User) = {scripts}' if changed else f'PYTHONPATH (User) already correct: {scripts}')
 "
@@ -429,7 +427,8 @@ print(f'Set PYTHONPATH (User) = {scripts}' if changed else f'PYTHONPATH (User) a
 
 Log: `Set PYTHONPATH (User) = <scripts> or PYTHONPATH (User) already correct: <scripts>. Note: takes effect in NEW shell sessions; current mill-setup session must keep using the inline PYTHONPATH prefix above.`
 
-**Note:** After running `update-plugins.ps1` (Windows) or updating the plugin cache (POSIX) to install a new plugin version, re-run `/mill-setup` to refresh PYTHONPATH and the wrappers to the new version.
+**Note:** `update-plugins` deploys in place to the same directory, so the wrappers and PYTHONPATH stay valid across deploys.
+Re-run `/mill-setup` only if the deploy directory moves.
 If upgrading from a pre-wrapper hub (one where `.millhouse/` still contains legacy `.py` or `.ps1` wrappers), re-run `/mill-setup` — Phase 4.7 is idempotent and will replace legacy wrappers with `.cmd`/`.sh` wrappers in a single pass, and Phase 8 will verify their absence.
 
 
@@ -444,7 +443,7 @@ It also reconciles `permissions.deny`: `_claude_settings.reconcile_destructive_d
 Unlike the `MILL_PYTHON` env write, the permission-allowlist merge does **not** require a session restart to take effect — permission allowlist entries apply to new tool calls, not to already-active session state.
 
 This phase also installs the wiki-guard PreToolUse Bash hook via `_claude_settings.reconcile_wiki_guard_hook`, replacing the legacy inline grep hook.
-The hook command embeds the versioned plugin cache path, so the guard fails open until this phase is re-run after a plugin cache refresh.
+The hook command embeds the absolute plugin root, so the guard fails open if the deploy directory moves, until this phase is re-run.
 Like the allowlist and denylist, it takes effect immediately without a restart.
 
 ```bash
@@ -611,7 +610,7 @@ halt with a specific error if any fails:
   On POSIX, also check the `.sh` wrapper is executable (`os.access(path, os.X_OK)`).
 - **Windows only:** `PYTHONPATH` user env var contains `<CLAUDE_PLUGIN_ROOT>/scripts` (verify via `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import _winenv; v=_winenv.get_user_env_var('PYTHONPATH'); assert v and '${CLAUDE_PLUGIN_ROOT}/scripts' in v, f'PYTHONPATH missing or incorrect: {v}'; print(f'OK: PYTHONPATH={v}')")`).
   Skip this check entirely on POSIX.
-- `MILL_PYTHON` in `~/.claude/settings.json` equals `<VENV_PYTHON>` (i.e. the cache venv — `CLAUDE_PLUGIN_ROOT` always resolves to the plugin cache, never the dev tree);
+- `MILL_PYTHON` in `~/.claude/settings.json` equals `<VENV_PYTHON>` (i.e. the deployed venv — `CLAUDE_PLUGIN_ROOT` always resolves to the deploy directory, never the dev tree);
   verify via: `PYTHONPATH="${CLAUDE_PLUGIN_ROOT}/scripts" "<VENV_PYTHON>" -c "import json, os, sys; from pathlib import Path; import _config; venv=_config.resolve_plugin_root_from_syspath(sys.path)/'.venv'; expected=str(venv/'Scripts'/'python.exe') if os.name=='nt' else str(venv/'bin'/'python'); d=json.loads((Path.home()/'.claude'/'settings.json').read_text(encoding='utf-8')); actual=d['env']['MILL_PYTHON']; assert actual==expected,f'MILL_PYTHON wrong: {actual!r} != {expected!r}'; print(f'OK: MILL_PYTHON={actual}')"` (runs and applies on both platforms)
 - `.millhouse/config.local.yaml` exists
 - Wiki daemon starts successfully: `_client.list_tasks_brief(wiki_path)` returns without error and Home.md exists in the wiki clone.
@@ -688,8 +687,8 @@ Re-running after a partial or complete setup is always safe:
   an unmarked file is backed up first (Phase 7b).
 - Keybindings block replaced in place;
   an unchanged file is not rewritten (Phase 7b).
-- Shortcut wrappers (`.cmd` on Windows, `.sh` on POSIX) re-checked against the current latest plugin version on every run — only stale/missing ones are rewritten (Phase 4.7).
-- PYTHONPATH user env var re-set to the current latest plugin version on every run (Windows only; that sub-step is a no-op on POSIX).
+- Shortcut wrappers (`.cmd` on Windows, `.sh` on POSIX) re-checked against the plugin root on every run — only stale/missing ones are rewritten (Phase 4.7).
+- PYTHONPATH user env var re-set to the plugin root's scripts directory on every run (Windows only; that sub-step is a no-op on POSIX).
 - Phase 4.8 is idempotent: compares existing `.env.MILL_PYTHON` against computed value;
   writes only if they differ.
 

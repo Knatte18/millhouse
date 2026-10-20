@@ -1,7 +1,7 @@
 """
 Cross-platform directory-junction helpers.
 
-Mill places junctions inside ``.millhouse/`` to stitch each working clone to a single shared wiki
+Mill places junctions at the worktree root to stitch each working clone to a single shared wiki
 clone (``.wiki``) and to the currently active task directory (``.active``).
 We need one abstraction that works on both Windows (the primary dev platform) and POSIX (CI, macOS
 contributors).
@@ -174,8 +174,7 @@ def create(target: Path, link_path: Path) -> None:
     """
     Create a directory junction (Windows) or symlink (POSIX) at ``link_path``.
 
-    The parent of ``link_path`` is created if missing, so callers don't have to pre-mkdir
-    ``.millhouse/`` before adding a junction inside it.
+    The parent of ``link_path`` is created if missing, so callers don't have to pre-mkdir it.
     Both arguments should be absolute paths — relative paths work but make the resulting junction
     harder to reason about on Windows.
 

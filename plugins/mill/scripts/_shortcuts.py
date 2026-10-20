@@ -10,9 +10,9 @@ After writing wrappers, any legacy ``.py`` or ``.ps1`` wrappers for the same scr
 exist in ``mill_dir`` are deleted (idempotent cleanup).
 
 Public API:
-    write_all(mill_dir, latest_path)
+    write_all(mill_dir, plugin_root)
     Render and write every CMD wrapper under ``mill_dir`` (Windows).
-    write_all_sh(mill_dir, latest_path)
+    write_all_sh(mill_dir, plugin_root)
     Render and write every ``.sh`` wrapper under ``mill_dir`` (POSIX), executable bit set.
     Both return the list of paths that were created or overwritten.
 
@@ -49,7 +49,7 @@ _TEMPLATE_PATH_SH = Path(__file__).resolve().parent.parent / "templates" / "shor
 
 def _write_wrappers(
     mill_dir: Path,
-    latest_path: Path,
+    plugin_root: Path,
     *,
     template_path: Path,
     extension: str,
@@ -62,12 +62,14 @@ def _write_wrappers(
     in template, extension, the ``MILL_PYTHON`` interpreter path, and whether the executable bit is
     set.
     """
+    # No other mill-setup phase creates .millhouse/ on a fresh clone, so the writer owns it.
+    mill_dir.mkdir(parents=True, exist_ok=True)
     tokens = {"MILL_PYTHON": str(mill_python)}
     written: list[Path] = []
     for script in SHORTCUT_SCRIPTS:
         rendered = _render.render(
             template_path,
-            {**tokens, "SCRIPT": script, "SCRIPT_PATH": str(latest_path / "scripts" / f"{script}.py")},
+            {**tokens, "SCRIPT": script, "SCRIPT_PATH": str(plugin_root / "scripts" / f"{script}.py")},
         )
         target = mill_dir / f"{script}.{extension}"
         if target.exists() and target.read_text(encoding="utf-8") == rendered:
@@ -85,7 +87,7 @@ def _clean_legacy_wrappers(mill_dir: Path) -> None:
         (mill_dir / f"{script}.ps1").unlink(missing_ok=True)
 
 
-def write_all(mill_dir: Path, latest_path: Path) -> list[Path]:
+def write_all(mill_dir: Path, plugin_root: Path) -> list[Path]:
     """
     Render and write all Windows ``.cmd`` shortcut wrappers under ``mill_dir``.
 
@@ -99,9 +101,9 @@ def write_all(mill_dir: Path, latest_path: Path) -> list[Path]:
     Args:
         mill_dir: Directory in which to write the wrappers (typically ``.millhouse/`` at the repo
             root).
-            Must already exist.
-        latest_path: Absolute path to the latest plugin cache entry; used to construct SCRIPT_PATH
-            and MILL_PYTHON tokens.
+            Created if missing.
+        plugin_root: Absolute path to the plugin copy Claude Code runs (``CLAUDE_PLUGIN_ROOT``);
+            used to construct SCRIPT_PATH and MILL_PYTHON tokens.
 
     Returns:
         List of ``Path`` objects for every .cmd file that was created or rewritten.
@@ -109,17 +111,17 @@ def write_all(mill_dir: Path, latest_path: Path) -> list[Path]:
     """
     written = _write_wrappers(
         mill_dir,
-        latest_path,
+        plugin_root,
         template_path=_TEMPLATE_PATH,
         extension="cmd",
-        mill_python=latest_path / ".venv" / "Scripts" / "python.exe",
+        mill_python=plugin_root / ".venv" / "Scripts" / "python.exe",
         executable=False,
     )
     _clean_legacy_wrappers(mill_dir)
     return written
 
 
-def write_all_sh(mill_dir: Path, latest_path: Path) -> list[Path]:
+def write_all_sh(mill_dir: Path, plugin_root: Path) -> list[Path]:
     """
     Render and write all POSIX ``.sh`` shortcut wrappers under ``mill_dir``.
 
@@ -130,9 +132,9 @@ def write_all_sh(mill_dir: Path, latest_path: Path) -> list[Path]:
     Args:
         mill_dir: Directory in which to write the wrappers (typically ``.millhouse/`` at the repo
             root).
-            Must already exist.
-        latest_path: Absolute path to the latest plugin cache entry; used to construct SCRIPT_PATH
-            and MILL_PYTHON tokens.
+            Created if missing.
+        plugin_root: Absolute path to the plugin copy Claude Code runs (``CLAUDE_PLUGIN_ROOT``);
+            used to construct SCRIPT_PATH and MILL_PYTHON tokens.
 
     Returns:
         List of ``Path`` objects for every .sh file that was created or rewritten.
@@ -140,10 +142,10 @@ def write_all_sh(mill_dir: Path, latest_path: Path) -> list[Path]:
     """
     written = _write_wrappers(
         mill_dir,
-        latest_path,
+        plugin_root,
         template_path=_TEMPLATE_PATH_SH,
         extension="sh",
-        mill_python=latest_path / ".venv" / "bin" / "python",
+        mill_python=plugin_root / ".venv" / "bin" / "python",
         executable=True,
     )
     _clean_legacy_wrappers(mill_dir)

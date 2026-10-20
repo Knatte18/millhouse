@@ -75,8 +75,8 @@ def build_wiki_guard_command(plugin_root: Path) -> str:
     """
     Build the PreToolUse hook command that runs the wiki-guard script from plugin_root.
 
-    The command embeds the versioned plugin cache path, so it goes stale (and the guard fails
-    open) after a plugin cache refresh until mill-setup Phase 4.8 is re-run.
+    The command embeds the absolute plugin root, so it goes stale (and the guard fails open) if
+    the deploy directory moves, until mill-setup Phase 4.8 is re-run.
 
     Args:
         plugin_root: The plugin root directory containing scripts/.
