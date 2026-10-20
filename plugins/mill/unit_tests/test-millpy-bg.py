@@ -444,7 +444,8 @@ def main() -> int:
             assert ret == 0, f"expected 0, got {ret}"
             log_text = log_path.read_text(encoding="utf-8")
             heartbeat_pattern = re.compile(
-                r"^\[mill-bg\] HEARTBEAT \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\n?$",
+                r"^\[mill-bg\] HEARTBEAT \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z "
+                r"elapsed=\d+s cmd=.+\n?$",
                 re.MULTILINE,
             )
             heartbeat_lines = [
@@ -467,6 +468,52 @@ def main() -> int:
         failures.append(f"FAIL (q) heartbeat presence: {exc}")
     except Exception as exc:
         failures.append(f"FAIL (q) heartbeat presence ({type(exc).__name__}): {exc}")
+
+    # (q2) heartbeat names the elapsed time and the inner command
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "test-heartbeat-cmd.log"
+            with unittest.mock.patch.object(_worker_mod, "_HEARTBEAT_INTERVAL_S", 0.05):
+                _worker_main([
+                    "--log", str(log_path), "--",
+                    sys.executable, "-c", "import time; time.sleep(0.2)",
+                ])
+            heartbeat_lines = [
+                ln for ln in log_path.read_text(encoding="utf-8").splitlines()
+                if ln.startswith("[mill-bg] HEARTBEAT ")
+            ]
+            assert heartbeat_lines, "no HEARTBEAT line in log"
+            assert re.search(r" elapsed=\d+s cmd=", heartbeat_lines[0]), heartbeat_lines[0]
+            assert heartbeat_lines[0].endswith("import time; time.sleep(0.2)"), heartbeat_lines[0]
+        print("PASS (q2): heartbeat line carries elapsed seconds and the inner command")
+    except AssertionError as exc:
+        failures.append(f"FAIL (q2) heartbeat cmd: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (q2) heartbeat cmd ({type(exc).__name__}): {exc}")
+
+    # (q3) a long inner command is cut to 200 characters plus "..."
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_path = Path(tmpdir) / "test-heartbeat-long.log"
+            long_arg = "x" * 400
+            with unittest.mock.patch.object(_worker_mod, "_HEARTBEAT_INTERVAL_S", 0.05):
+                _worker_main([
+                    "--log", str(log_path), "--",
+                    sys.executable, "-c", f"import time; time.sleep(0.2)  # {long_arg}",
+                ])
+            heartbeat_lines = [
+                ln for ln in log_path.read_text(encoding="utf-8").splitlines()
+                if ln.startswith("[mill-bg] HEARTBEAT ")
+            ]
+            assert heartbeat_lines, "no HEARTBEAT line in log"
+            cmd_text = heartbeat_lines[0].split(" cmd=", 1)[1]
+            expected = " ".join([sys.executable, "-c", f"import time; time.sleep(0.2)  # {long_arg}"])
+            assert cmd_text == expected[:200] + "...", cmd_text
+        print("PASS (q3): heartbeat cuts a long command to 200 characters plus ...")
+    except AssertionError as exc:
+        failures.append(f"FAIL (q3) heartbeat long cmd: {exc}")
+    except Exception as exc:
+        failures.append(f"FAIL (q3) heartbeat long cmd ({type(exc).__name__}): {exc}")
 
     # (r) heartbeat writes through the single already-open log handle, never a second handle
     try:

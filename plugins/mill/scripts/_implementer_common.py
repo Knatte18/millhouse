@@ -1,10 +1,10 @@
 """Shared helpers for millpy-implement.py and millpy-fix.py."""
 
+import contextlib
 import html
+import io
 import json
-import os
 import re
-import shutil
 import subprocess
 import sys
 import _agent_dispatch
@@ -13,6 +13,7 @@ import _pygit2_util
 import _status
 import _subprocess_util
 import _timestamp
+import _verify_run
 from pathlib import Path
 
 
@@ -433,6 +434,19 @@ def _is_brief_path(path: str) -> bool:
     return "/_mill/briefs/" in "/" + path
 
 
+def _porcelain_dirt(stdout: str) -> list[str]:
+    """
+    Return the non-empty `git status --porcelain` lines whose path is not a status.md.
+
+    status.md is orchestrator-owned; its dirt is never implementer work.
+    """
+    return [
+        line
+        for line in stdout.splitlines()
+        if line.strip() and not _cleanliness.is_status_md_path(line[3:])
+    ]
+
+
 def _in_scope_dirty_stuck(
     project_root: Path,
     task_dir: Path | None,
@@ -452,6 +466,7 @@ def _in_scope_dirty_stuck(
     gate, so it cannot false-block finalize if it becomes dirty again for reasons unrelated to the
     current batch. Do not "fix" this function to match compute_terminal_dirt's broader scope --
     that would reintroduce the false-block this function exists to avoid.
+    `_mill/status.md` is excluded the same way: the Verify log makes it dirty between orchestrator commits.
     `_mill/briefs/` paths, at any depth (flat or under a hub subdirectory), are excluded from `owned_paths` entirely -- they are Builder-owned
     orchestration bookkeeping (rendered prompt / captured transcript), never implementer content
     this gate exists to police, and the Builder already stages and commits them itself at
@@ -488,7 +503,7 @@ def _in_scope_dirty_stuck(
             return None
         owned_paths = {
             line for line in diff_result.stdout.splitlines()
-            if line and not _is_brief_path(line)
+            if line and not _is_brief_path(line) and not _cleanliness.is_status_md_path(line)
         }
         porcelain_lines = _pygit2_util.status_porcelain(project_root, include_untracked=False)
         dirt = [line for line in porcelain_lines if line[3:] in owned_paths]
@@ -625,30 +640,8 @@ def _is_benign_windows_cleanup(output: str) -> bool:
     return has_cleanup_signature and not has_failure_marker
 
 
-def _posix_shell_run_args(cmd: str) -> tuple:
-    """
-    Build subprocess.run args to route POSIX shell commands through bash on Windows.
-
-    On Windows (os.name == "nt"), when bash is available, returns args to invoke bash -c explicitly.
-    On other platforms or when bash is unavailable, returns the command string with shell=True so
-    the native shell processes it.
-
-    POSIX verify commands often start with "PYTHONPATH= " (env-prefix syntax) that cmd.exe cannot
-    parse.
-    Running through bash honours this syntax cross-platform.
-
-    Args:
-        cmd: The command string (e.g., "PYTHONPATH= pytest tests/ -q").
-
-    Returns:
-        A tuple (run_args, run_kwargs) where run_args is either a list ([bash, "-c", cmd]) or a
-        string (cmd), and run_kwargs is either {} or {"shell": True} to be unpacked into
-        subprocess.run.
-    """
-    bash = shutil.which("bash") if os.name == "nt" else None
-    if bash:
-        return [bash, "-c", cmd], {}
-    return cmd, {"shell": True}
+# Pathspec that drops status.md (at any depth) from a whole-tree `git diff`.
+_STATUS_MD_EXCLUDE_PATHSPEC = ["--", ":/", ":(top,exclude,glob)**/_mill/status.md"]
 
 
 def _is_formatter_drift_only(project_root: Path) -> bool:
@@ -692,7 +685,7 @@ def _is_formatter_drift_only(project_root: Path) -> bool:
         # Check if tracked files have changes. --ignore-cr-at-eol ensures that a pure CRLF-vs-LF delta (e.g.
         # from text-mode CRLF translation on Windows) is treated the same as whitespace and does not prevent drift detection.
         result_diff = _subprocess_util.run(
-            ["git", "-C", str(project_root), "diff", "--ignore-cr-at-eol"],
+            ["git", "-C", str(project_root), "diff", "--ignore-cr-at-eol", *_STATUS_MD_EXCLUDE_PATHSPEC],
             check=False,
         )
         if result_diff.returncode != 0:
@@ -704,7 +697,7 @@ def _is_formatter_drift_only(project_root: Path) -> bool:
         # Check if those changes are purely whitespace. --ignore-cr-at-eol is added here too because git diff -w does not suppress CR-at-EOL diffs on its own;
         # a CRLF-only delta would still appear as content under -w without this flag, causing a false "not formatter drift" result.
         result_diff_w = _subprocess_util.run(
-            ["git", "-C", str(project_root), "diff", "-w", "--ignore-cr-at-eol"],
+            ["git", "-C", str(project_root), "diff", "-w", "--ignore-cr-at-eol", *_STATUS_MD_EXCLUDE_PATHSPEC],
             check=False,
         )
         if result_diff_w.returncode != 0:
@@ -788,25 +781,70 @@ def _extract_failure_signatures(output: str) -> list[str]:
 
 
 
+def _truncate_verify_output(text: str) -> str:
+    """
+    Shorten verify output to a failure-reason body.
+
+    Text of 2000 characters or fewer is returned unchanged.
+    Longer text keeps its last 2000 characters, preceded by a marker giving the omitted prefix
+    length and up to 20 failure-summary lines recovered from that prefix, so an earlier failing
+    package or test is not silently dropped when a later, less informative failure lands in the
+    kept tail.
+    """
+    if len(text) <= 2000:
+        return text
+    tail = text[-2000:]
+    omitted = text[:-2000]
+    fail_lines = _extract_failure_signatures(omitted)[:20]
+    marker = f"[... {len(omitted)} earlier chars omitted"
+    if fail_lines:
+        marker += "; earlier failures:\n" + "\n".join(fail_lines)
+    marker += " ...]\n"
+    return marker + tail
+
+
+def _verify_failure_reason(run: "_verify_run.VerifyRun", prefix: str = "") -> str:
+    """Build a failure reason: optional prefix, truncated run output, output-file suffix."""
+    return prefix + _truncate_verify_output(run.output.strip()) + _verify_run.output_suffix(run)
+
+
+def _timed_out_stuck(run: "_verify_run.VerifyRun") -> dict:
+    """Build the stuck dict for a verify run killed by its timeout."""
+    return {
+        "status": "stuck",
+        "stuck_type": "verify",
+        "reason": _verify_failure_reason(run, _verify_run.timeout_prefix(run)),
+        "timed_out": True,
+    }
+
+
 def _run_verify_gate(
     project_root: Path,
     verify_cmd: str | None,
     *,
     git_root: Path | None = None,
     cwd_override: Path | None = None,
+    timeout_s: float | None = None,
+    status_path: Path | None = None,
+    label: str = "verify",
+    runs: list | None = None,
 ) -> dict | None:
     """
     Run a verify command and return a stuck dict on failure, None on success or when verify_cmd is
     None.
 
-    When verify_cmd is not None, runs the command via bash on Windows (so the POSIX env-prefix
-    syntax is honoured) and via subprocess.run with shell=True elsewhere, capturing output as text.
-    On non-zero return code, returns a stuck dict with stuck_type="verify".
-    When the combined stdout+stderr is over 2000 characters, reason is an omitted-content marker
-    (byte count of the omitted prefix, plus up to 20 extracted earlier-failure summary lines when
-    any are found) followed by the last 2000 characters;
-    under 2000 characters, reason is the stripped output unchanged.
-    On success (rc 0) or when verify_cmd is None, returns None.
+    The command runs through the shared verify runner (POSIX shell semantics, combined output saved
+    to a file, bounded by a timeout).
+    Every run, including the lock-race retry, is appended to `runs` when it is not None.
+    A timed-out run returns a stuck dict with stuck_type="verify" and timed_out=True, whose reason
+    starts with the timeout prefix naming `label`; it is never retried or treated as benign.
+    A command that cannot be launched returns a stuck dict reading "verify gate raised: <message>".
+    On a non-zero exit, returns a stuck dict with stuck_type="verify" whose reason is the truncated
+    output followed by the saved-output path.
+    When the combined output is over 2000 characters, the reason keeps the last 2000 characters
+    behind an omitted-content marker (byte count of the omitted prefix, plus up to 20 extracted
+    earlier-failure summary lines when any are found).
+    On success (exit 0) or when verify_cmd is None, returns None.
 
     On Windows (sys.platform == "win32"), applies an additional gate: if the output contains a
     benign cleanup-race signature and no test failures (per _is_benign_windows_cleanup), treats the
@@ -815,11 +853,12 @@ def _run_verify_gate(
     On Windows, when the command contains "dotnet" and the failure output matches a dotnet
     build-server file-lock signature (per _has_dotnet_lock_race_signature: MSB3021, MSB3027, or
     "is locked by:"), retries the same command once -- after the unconditional post-run shutdown
-    below has already run. A passing retry returns None exactly like any other pass. A
-    still-failing retry returns a stuck dict built from the retry's own output, with reason
-    prefixed by "[retried once after dotnet build-server shutdown; still failing] ".
+    below has already run -- under the label `<label>:retry` and a full timeout of its own.
+    A passing retry returns None exactly like any other pass. A still-failing retry returns a stuck
+    dict built from the retry's own output, with reason prefixed by
+    "[retried once after dotnet build-server shutdown; still failing] ".
 
-    After the verify subprocess completes (regardless of exit code), if the platform is win32 and
+    After the first verify run completes (regardless of exit code), if the platform is win32 and
     the command contains "dotnet", runs `dotnet build-server shutdown` to release
     VBCSCompiler/MSBuild locks that prevent re-runs.
     This call is wrapped in try/except so a TimeoutExpired or FileNotFoundError here never poisons
@@ -835,10 +874,14 @@ def _run_verify_gate(
             When set, it always wins over both git_root and project_root -- it reflects an author's
                 explicit choice, whereas git_root/project_root are positional fallbacks for the
                 plain-string verify format.
+        timeout_s: Seconds before a run is killed; None means the runner's default timeout.
+        status_path: status.md that receives one Verify log row per run, or None to skip the row.
+        label: Name of this verify site, used in the runner's file names, markers and log rows.
+        runs: Accumulator that receives every VerifyRun, or None to discard them.
 
     Returns:
-        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <tail>} on non-zero
-        return (unless win32 benign cleanup), or None on success or when verify_cmd is None.
+        A stuck dict {"status": "stuck", "stuck_type": "verify", "reason": <text>} on failure
+        (unless win32 benign cleanup), or None on success or when verify_cmd is None.
     """
     if verify_cmd is None:
         return None
@@ -850,28 +893,29 @@ def _run_verify_gate(
         if cwd_override is not None
         else (git_root if git_root is not None else project_root)
     )
+    effective_timeout_s = (
+        timeout_s if timeout_s is not None else _verify_run.DEFAULT_TIMEOUT_MINUTES * 60
+    )
+
+    def run_once(run_label: str) -> "_verify_run.VerifyRun":
+        run = _verify_run.run_verify(
+            verify_cmd,
+            cwd=effective_cwd,
+            label=run_label,
+            git_root=git_root if git_root is not None else project_root,
+            timeout_s=effective_timeout_s,
+            shell_mode="posix",
+            status_path=status_path,
+        )
+        if runs is not None:
+            runs.append(run)
+        return run
 
     try:
-        # Plan verify commands use POSIX syntax (e.g.
-        # the mandated "PYTHONPATH= " env-prefix).
-        # subprocess shell=True routes through cmd.exe on Windows, which cannot parse a leading VAR= env-prefix and fails with "'PYTHONPATH' is not recognized".
-        # Run through bash when available so the POSIX verify command is honoured cross-platform;
-        # fall back to shell=True only when bash is absent.
-        run_args, run_kwargs = _posix_shell_run_args(verify_cmd)
-        result = subprocess.run(
-            run_args,
-            capture_output=True,
-            text=True,
-            cwd=effective_cwd,
-            **run_kwargs,
-        )
+        run = run_once(label)
         # dotnet cleanup: release testhost/MSBuild locks before caller retries.
         # Wrapped in try/except so a TimeoutExpired or FileNotFoundError here never poisons the verify verdict (best-effort, non-fatal).
-        if (
-            sys.platform == "win32"
-            and verify_cmd is not None
-            and "dotnet" in verify_cmd.lower()
-        ):
+        if sys.platform == "win32" and "dotnet" in verify_cmd.lower():
             try:
                 subprocess.run(
                     ["dotnet", "build-server", "shutdown"],
@@ -880,66 +924,54 @@ def _run_verify_gate(
                 )
             except Exception:
                 pass
-        if result.returncode != 0:
-            output = result.stdout + result.stderr
-            # On Windows, check if this is a benign cleanup-race with no test failure
-            if sys.platform == "win32" and _is_benign_windows_cleanup(output):
-                return None
-            retry_marker = ""
-            if (
-                sys.platform == "win32"
-                and verify_cmd is not None
-                and "dotnet" in verify_cmd.lower()
-                and _has_dotnet_lock_race_signature(output)
-            ):
-                # A stale build-server node from an earlier dotnet invocation in this
-                # worktree can still hold file handles into bin/obj when this command
-                # runs. The unconditional shutdown above already blocked until that
-                # process exited, so a bare re-run of the same command usually clears
-                # the race with no code changes (GitHub #848, #860).
-                retry_result = subprocess.run(
-                    run_args,
-                    capture_output=True,
-                    text=True,
-                    cwd=effective_cwd,
-                    **run_kwargs,
-                )
-                if retry_result.returncode == 0:
-                    return None
-                output = retry_result.stdout + retry_result.stderr
-                if sys.platform == "win32" and _is_benign_windows_cleanup(output):
-                    return None
-                retry_marker = (
-                    "[retried once after dotnet build-server shutdown; "
-                    "still failing] "
-                )
-            # Truncation enriches the reason with an omitted-content marker plus up to 20 extracted earlier-failure summary lines recovered from the omitted portion (#731) -- without this, an earlier failing package/test's identity can be silently dropped when a later, less- informative failure lands in the kept tail.
-            output_stripped = output.strip()
-            if len(output_stripped) > 2000:
-                tail = output_stripped[-2000:]
-                omitted = output_stripped[:-2000]
-                fail_lines = _extract_failure_signatures(omitted)[:20]
-                marker = f"[... {len(omitted)} earlier chars omitted"
-                if fail_lines:
-                    marker += "; earlier failures:\n" + "\n".join(fail_lines)
-                marker += " ...]\n"
-                reason = marker + tail
-            else:
-                reason = output_stripped
+        if run.timed_out:
+            return _timed_out_stuck(run)
+        if run.exit_code is None:
             return {
                 "status": "stuck",
                 "stuck_type": "verify",
-                "reason": retry_marker + reason,
+                "reason": f"verify gate raised: {run.output}",
             }
+        if run.exit_code == 0:
+            return None
+
+        # On Windows, check if this is a benign cleanup-race with no test failure
+        if sys.platform == "win32" and _is_benign_windows_cleanup(run.output):
+            return None
+        retry_marker = ""
+        if (
+            sys.platform == "win32"
+            and "dotnet" in verify_cmd.lower()
+            and _has_dotnet_lock_race_signature(run.output)
+        ):
+            # A stale build-server node from an earlier dotnet invocation in this
+            # worktree can still hold file handles into bin/obj when this command
+            # runs. The unconditional shutdown above already blocked until that
+            # process exited, so a bare re-run of the same command usually clears
+            # the race with no code changes (GitHub #848, #860).
+            run = run_once(f"{label}:retry")
+            if run.timed_out:
+                return _timed_out_stuck(run)
+            if run.exit_code == 0:
+                return None
+            if sys.platform == "win32" and _is_benign_windows_cleanup(run.output):
+                return None
+            retry_marker = (
+                "[retried once after dotnet build-server shutdown; "
+                "still failing] "
+            )
+        return {
+            "status": "stuck",
+            "stuck_type": "verify",
+            "reason": _verify_failure_reason(run, retry_marker),
+        }
     except Exception as e:
-        # On any exception (e.g., missing binary), return stuck dict so caller can distinguish this from a genuine pass
+        # On any exception, return stuck dict so caller can distinguish this from a genuine pass
         return {
             "status": "stuck",
             "stuck_type": "verify",
             "reason": f"verify gate raised: {e}",
         }
-
-    return None
 
 
 def _run_verify_gates(
@@ -950,6 +982,10 @@ def _run_verify_gates(
     git_root: Path | None = None,
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
+    timeout_s: float | None = None,
+    status_path: Path | None = None,
+    label: str = "verify",
+    runs: list | None = None,
 ) -> dict | None:
     """
     Run the batch-level verify gate and, if it passes, the module-wide verify gate.
@@ -984,12 +1020,23 @@ def _run_verify_gates(
             parse_verify_field.
             Takes precedence over git_root/project_root;
             see _run_verify_gate.
+        timeout_s: Per-command timeout in seconds, applied to each gate; None means the default.
+        status_path: status.md that receives one Verify log row per run, or None to skip the row.
+        label: Verify label of the batch gate; the module-wide gate uses `<label>:module-wide`.
+        runs: Accumulator that receives every VerifyRun in execution order, or None.
 
     Returns:
         A stuck dict from the first gate that fails, or None when both pass (or are not configured).
     """
     batch_result = _run_verify_gate(
-        project_root, verify_cmd, git_root=git_root, cwd_override=cwd_override
+        project_root,
+        verify_cmd,
+        git_root=git_root,
+        cwd_override=cwd_override,
+        timeout_s=timeout_s,
+        status_path=status_path,
+        label=label,
+        runs=runs,
     )
     if batch_result is not None:
         return batch_result
@@ -1002,6 +1049,10 @@ def _run_verify_gates(
         module_wide_verify_cmd,
         git_root=git_root,
         cwd_override=module_wide_cwd_override,
+        timeout_s=timeout_s,
+        status_path=status_path,
+        label=f"{label}:module-wide",
+        runs=runs,
     )
     if module_result is not None:
         # Prefix the reason so the operator can identify the source of the failure.
@@ -1333,6 +1384,8 @@ def emit_prepare(
     start_sha: str | None = None,
     nits_only: bool = False,
     effort: str | None = None,
+    *,
+    verify_runs: list[dict] | None = None,
 ) -> int:
     """Write brief and emit prepare JSON envelope.
 
@@ -1348,6 +1401,8 @@ def emit_prepare(
             Omitted from the envelope (not emitted as `false`) when this stays at its default.
         effort: Effort tier resolved from the reviewer/implementer registry spec (e.g. "high");
             included in the envelope as "effort" when not None, omitted otherwise.
+        verify_runs: Summaries of the verify runs made while preparing; included in the envelope
+            as "verify_runs" when not None, omitted otherwise.
     """
     brief_path = _agent_dispatch.write_brief(
         briefs_dir, role, scope, round_n, prompt_text
@@ -1370,6 +1425,8 @@ def emit_prepare(
         envelope["nits_only"] = True
     if effort is not None:
         envelope["effort"] = effort
+    if verify_runs is not None:
+        envelope["verify_runs"] = verify_runs
     print(json.dumps(envelope))
     return 0
 
@@ -1381,12 +1438,15 @@ def emit_prepare_no_dispatch(
     scope: str,
     round_n: int,
     project_root: Path,
+    *,
+    verify_runs: list[dict] | None = None,
 ) -> int:
     """Emit prepare JSON with dispatch_needed:false for verify-fix pass case.
 
     When verify passes in prepare, there is nothing to dispatch.
     This emits a special prepare envelope with dispatch_needed:false and an embedded success
     envelope.
+    When ``verify_runs`` is not None it is included in the envelope as "verify_runs".
     Returns 0.
     """
     result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
@@ -1409,6 +1469,8 @@ def emit_prepare_no_dispatch(
         "round": round_n,
         "envelope": embedded_envelope,
     }
+    if verify_runs is not None:
+        envelope["verify_runs"] = verify_runs
     print(json.dumps(envelope))
     return 0
 
@@ -1434,6 +1496,8 @@ def finalize_from_output(
     module_wide_cwd_override: Path | None = None,
     commit_sha_field_name: str = "commit_sha",
     card_commit_messages: dict[int, str] | None = None,
+    verify_timeout_s: float | None = None,
+    verify_label: str | None = None,
 ) -> int:
     """Read sub-agent output and finalize.
 
@@ -1479,6 +1543,10 @@ def finalize_from_output(
         card_commit_messages: Forwarded unchanged to _forward_output.
             See _forward_output for the full-batch-history fallback this enables.
             Defaults to None (fallback disabled, as before this parameter existed).
+        verify_timeout_s: Per-command verify timeout in seconds, forwarded to _forward_output;
+            None means the runner's default.
+        verify_label: Verify-site label for the runner's markers and Verify log rows, forwarded to
+            _forward_output; None means "verify".
     """
     # Normalize to Path for safety -- call sites pass this via Path(args.agent_output),
     # but the parameter is documented (not enforced) as Path.
@@ -1516,6 +1584,8 @@ def finalize_from_output(
         module_wide_cwd_override=module_wide_cwd_override,
         commit_sha_field_name=commit_sha_field_name,
         card_commit_messages=card_commit_messages,
+        verify_timeout_s=verify_timeout_s,
+        verify_label=verify_label,
     )
 
 
@@ -1561,6 +1631,10 @@ def _fixer_logic_ancestor_override(
     cwd_override: Path | None = None,
     module_wide_cwd_override: Path | None = None,
     session_id: str | None = None,
+    timeout_s: float | None = None,
+    status_path: Path | None = None,
+    label: str = "verify",
+    runs: list | None = None,
 ) -> dict | None:
     """
     Override a fixer's self-reported ``stuck_type: logic`` when the ancestry and working tree show
@@ -1576,7 +1650,8 @@ def _fixer_logic_ancestor_override(
     Checks, in order:
       1. A real content commit exists since start_sha (`_content_commit_count`).
           None or 0 means the self-report stands -- return None.
-      2. The working tree is clean (`git status --porcelain --untracked-files=no` has no output).
+      2. The working tree is clean (`git status --porcelain --untracked-files=no` has no output
+          beyond a dirty status.md).
           A dirty tree means a genuine unresolved problem -- return None.
       3. `_run_verify_gates` passes (returns None) for the already-committed state.
           A non-None result means verify still fails -- the self-reported logic stuck is not
@@ -1592,6 +1667,7 @@ def _fixer_logic_ancestor_override(
             `_run_verify_gates`.
         session_id: Session identifier for the overridden envelope;
             falls back to the literal "unknown" when not supplied.
+        timeout_s, status_path, label, runs: forwarded unchanged to `_run_verify_gates`.
 
     Returns:
         `{"status": "success", "commit_sha": <HEAD>, "session_id": ..., "inferred": True}` when all
@@ -1604,7 +1680,7 @@ def _fixer_logic_ancestor_override(
         ["git", "status", "--porcelain", "--untracked-files=no"],
         cwd=project_root,
     )
-    if _status_result.stdout.strip():
+    if _porcelain_dirt(_status_result.stdout):
         return None
 
     _gate_result = _run_verify_gates(
@@ -1614,6 +1690,10 @@ def _fixer_logic_ancestor_override(
         git_root=git_root,
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
+        timeout_s=timeout_s,
+        status_path=status_path,
+        label=label,
+        runs=runs,
     )
     if _gate_result is not None:
         return None
@@ -1625,6 +1705,32 @@ def _fixer_logic_ancestor_override(
         "session_id": session_id or "unknown",
         "inferred": True,
     }
+
+
+def _attach_verify_runs(text: str, runs: list) -> str:
+    """
+    Add a "verify_runs" summary list to every JSON status envelope line in text.
+
+    Lines that are not a JSON object with a "status" key pass through unchanged, and text is
+    returned unchanged when runs is empty.
+    """
+    if not runs:
+        return text
+    summaries = [run.summary() for run in runs]
+    rewritten = []
+    for line in text.splitlines(keepends=True):
+        stripped = line.rstrip("\r\n")
+        try:
+            envelope = json.loads(stripped)
+        except json.JSONDecodeError:
+            rewritten.append(line)
+            continue
+        if isinstance(envelope, dict) and "status" in envelope:
+            envelope["verify_runs"] = summaries
+            rewritten.append(json.dumps(envelope) + line[len(stripped):])
+        else:
+            rewritten.append(line)
+    return "".join(rewritten)
 
 
 def _forward_output(
@@ -1648,6 +1754,77 @@ def _forward_output(
     module_wide_cwd_override: Path | None = None,
     commit_sha_field_name: str = "commit_sha",
     card_commit_messages: dict[int, str] | None = None,
+    verify_timeout_s: float | None = None,
+    verify_label: str | None = None,
+) -> int:
+    """
+    Finalize a sub-agent's output: print exactly one JSON status envelope on stdout and return 0.
+
+    Every verify run made while finalizing is summarised under a "verify_runs" key on each
+    envelope; no key is added when no verify ran.
+    All other parameters, and the gates they drive, are documented on `_forward_output_body`.
+
+    Args:
+        verify_timeout_s: Per-command verify timeout in seconds; None means the runner's default.
+        verify_label: Verify-site label for the runner's markers and Verify log rows; None means
+            "verify".
+    """
+    verify_runs: list = []
+    captured = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(captured):
+            return _forward_output_body(
+                output,
+                project_root,
+                start_sha=start_sha,
+                snapshot_path=snapshot_path,
+                session_id=session_id,
+                verify_cmd=verify_cmd,
+                module_wide_verify_cmd=module_wide_verify_cmd,
+                card_ids=card_ids,
+                commit_none_card_ids=commit_none_card_ids,
+                task_dir=task_dir,
+                parent_branch=parent_branch,
+                nits_only=nits_only,
+                status_path=status_path,
+                nits_scope=nits_scope,
+                git_root=git_root,
+                cwd_override=cwd_override,
+                module_wide_cwd_override=module_wide_cwd_override,
+                commit_sha_field_name=commit_sha_field_name,
+                card_commit_messages=card_commit_messages,
+                verify_timeout_s=verify_timeout_s,
+                verify_label=verify_label,
+                verify_runs=verify_runs,
+            )
+    finally:
+        sys.stdout.write(_attach_verify_runs(captured.getvalue(), verify_runs))
+
+
+def _forward_output_body(
+    output: str,
+    project_root: Path,
+    *,
+    start_sha: str | None = None,
+    snapshot_path: Path | None = None,
+    session_id: str | None = None,
+    verify_cmd: str | None = None,
+    module_wide_verify_cmd: str | None = None,
+    card_ids: set[int] | None = None,
+    commit_none_card_ids: set[int] | None = None,
+    task_dir: Path | None = None,
+    parent_branch: str | None = None,
+    nits_only: bool = False,
+    status_path: Path | None = None,
+    nits_scope: str | None = None,
+    git_root: Path | None = None,
+    cwd_override: Path | None = None,
+    module_wide_cwd_override: Path | None = None,
+    commit_sha_field_name: str = "commit_sha",
+    card_commit_messages: dict[int, str] | None = None,
+    verify_timeout_s: float | None = None,
+    verify_label: str | None = None,
+    verify_runs: list,
 ) -> int:
     """Extract the last JSON object containing a 'status' key from output.
 
@@ -1730,18 +1907,24 @@ def _forward_output(
                 git_root=git_root,
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
+                timeout_s=verify_timeout_s,
+                status_path=status_path,
+                label=verify_label or "verify",
+                runs=verify_runs,
             )
             if gate_result is not None:
                 # Reclassify a verify failure that is really a partial-batch stop (stuck_type:transient) or a no-content stop (stuck_type:logic).
-                gate_result = _reclassify_verify_failure(
-                    gate_result,
-                    project_root,
-                    start_sha,
-                    card_ids,
-                    _gate_session_id,
-                    cards_done=_cards_done,
-                    commit_none_card_ids=commit_none_card_ids,
-                )
+                # A timed-out gate stays stuck/verify so the verify self-resolve route sees it.
+                if not gate_result.get("timed_out"):
+                    gate_result = _reclassify_verify_failure(
+                        gate_result,
+                        project_root,
+                        start_sha,
+                        card_ids,
+                        _gate_session_id,
+                        cards_done=_cards_done,
+                        commit_none_card_ids=commit_none_card_ids,
+                    )
                 # Add commit_sha only for verify/transient/incomplete results;
                 # logic (no-content) results match the sibling no-content gates that omit commit_sha.
                 if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
@@ -1911,6 +2094,10 @@ def _forward_output(
                 cwd_override=cwd_override,
                 module_wide_cwd_override=module_wide_cwd_override,
                 session_id=session_id or parsed.get("session_id"),
+                timeout_s=verify_timeout_s,
+                status_path=status_path,
+                label=verify_label or "verify",
+                runs=verify_runs,
             )
             if _override is not None:
                 print(json.dumps(_override))
@@ -1971,7 +2158,7 @@ def _forward_output(
                         ],
                         check=True,
                     )
-                    if result_full.stdout.strip():
+                    if _porcelain_dirt(result_full.stdout):
                         # Check if the remaining dirt is only formatter drift
                         if _is_formatter_drift_only(project_root):
                             # Auto-commit formatter drift
@@ -1990,7 +2177,7 @@ def _forward_output(
                                 )
                                 if (
                                     result_check.returncode == 0
-                                    and not result_check.stdout.strip()
+                                    and not _porcelain_dirt(result_check.stdout)
                                 ):
                                     # Tree is now clean; get the new HEAD after drift commit
                                     result_head = _subprocess_util.run(
@@ -2009,18 +2196,24 @@ def _forward_output(
                                         git_root=git_root,
                                         cwd_override=cwd_override,
                                         module_wide_cwd_override=module_wide_cwd_override,
+                                        timeout_s=verify_timeout_s,
+                                        status_path=status_path,
+                                        label=verify_label or "verify",
+                                        runs=verify_runs,
                                     )
                                     if gate_result is not None:
                                         # No parsed success JSON on this inference path -- there is nothing to self-report from, so cards_done is always None here (the absent-field fallback always applies).
-                                        gate_result = _reclassify_verify_failure(
-                                            gate_result,
-                                            project_root,
-                                            start_sha,
-                                            card_ids,
-                                            session_id,
-                                            cards_done=None,
-                                            commit_none_card_ids=commit_none_card_ids,
-                                        )
+                                        # A timed-out gate stays stuck/verify so the verify self-resolve route sees it.
+                                        if not gate_result.get("timed_out"):
+                                            gate_result = _reclassify_verify_failure(
+                                                gate_result,
+                                                project_root,
+                                                start_sha,
+                                                card_ids,
+                                                session_id,
+                                                cards_done=None,
+                                                commit_none_card_ids=commit_none_card_ids,
+                                            )
                                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                                             gate_result["commit_sha"] = new_head
                                         print(json.dumps(gate_result))
@@ -2116,18 +2309,24 @@ def _forward_output(
                         git_root=git_root,
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
+                        timeout_s=verify_timeout_s,
+                        status_path=status_path,
+                        label=verify_label or "verify",
+                        runs=verify_runs,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
-                        gate_result = _reclassify_verify_failure(
-                            gate_result,
-                            project_root,
-                            start_sha,
-                            card_ids,
-                            session_id,
-                            cards_done=None,
-                            commit_none_card_ids=commit_none_card_ids,
-                        )
+                        # A timed-out gate stays stuck/verify so the verify self-resolve route sees it.
+                        if not gate_result.get("timed_out"):
+                            gate_result = _reclassify_verify_failure(
+                                gate_result,
+                                project_root,
+                                start_sha,
+                                card_ids,
+                                session_id,
+                                cards_done=None,
+                                commit_none_card_ids=commit_none_card_ids,
+                            )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))
@@ -2214,7 +2413,7 @@ def _forward_output(
                     ],
                     check=True,
                 )
-                if not result_full.stdout.strip():
+                if not _porcelain_dirt(result_full.stdout):
                     # Apply verify gates before emitting success
                     gate_result = _run_verify_gates(
                         project_root,
@@ -2223,18 +2422,24 @@ def _forward_output(
                         git_root=git_root,
                         cwd_override=cwd_override,
                         module_wide_cwd_override=module_wide_cwd_override,
+                        timeout_s=verify_timeout_s,
+                        status_path=status_path,
+                        label=verify_label or "verify",
+                        runs=verify_runs,
                     )
                     if gate_result is not None:
                         # No parsed success JSON on this inference path -- cards_done is always None (the absent-field fallback always applies).
-                        gate_result = _reclassify_verify_failure(
-                            gate_result,
-                            project_root,
-                            start_sha,
-                            card_ids,
-                            session_id,
-                            cards_done=None,
-                            commit_none_card_ids=commit_none_card_ids,
-                        )
+                        # A timed-out gate stays stuck/verify so the verify self-resolve route sees it.
+                        if not gate_result.get("timed_out"):
+                            gate_result = _reclassify_verify_failure(
+                                gate_result,
+                                project_root,
+                                start_sha,
+                                card_ids,
+                                session_id,
+                                cards_done=None,
+                                commit_none_card_ids=commit_none_card_ids,
+                            )
                         if gate_result.get("stuck_type") in ("verify", "transient", "incomplete"):
                             gate_result["commit_sha"] = head
                         print(json.dumps(gate_result))

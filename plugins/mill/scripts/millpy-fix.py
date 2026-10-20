@@ -36,6 +36,7 @@ import _review_common
 import _reviewers
 import _status
 import _timestamp
+import _verify_run
 from _implementer_common import (
     _forward_output,
     _has_windows_lock_error_signature,
@@ -325,9 +326,14 @@ def main(argv=None) -> int:
     # primary-clone template) config than the task hub's own mill-config.yaml.
     # All downstream reads of cfg must observe this corrected value, per cfg-reload-after-active-hub.
     cfg = _review_common.load_config(project_root, mill_dir)
+    try:
+        verify_timeout_s = _verify_run.timeout_seconds(cfg)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
 
     try:
-        status_path = _paths.require_status_path(project_root, cfg)
+        status_path =_paths.require_status_path(project_root, cfg)
     except _paths.TaskHubError as e:
         print(str(e), file=sys.stderr)
         return 1
@@ -428,6 +434,8 @@ def main(argv=None) -> int:
         batch_verifies = _plan_dag.iter_batch_verifies(
             plan_base, project_root, git_root, status_path=status_path
         )
+        # The joined holistic command runs as one runner command, so the per-command budget scales with the number of joined batch commands.
+        holistic_timeout_s = verify_timeout_s * max(1, len(batch_verifies))
         _report_skipped_verifies(
             plan_base, project_root, git_root, status_path, batch_verifies
         )
@@ -448,6 +456,8 @@ def main(argv=None) -> int:
             cwd_override=cwd_override,
             module_wide_verify_cmd=module_wide_verify_cmd,
             module_wide_cwd_override=module_wide_cwd_override,
+            verify_timeout_s=holistic_timeout_s,
+            verify_label=f"fix:{args.scope}",
         )
 
     # Compute the fixer-brief carve-out clause once, from the already-parsed --nits-only flag.
@@ -487,6 +497,8 @@ def main(argv=None) -> int:
     batch_verifies = _plan_dag.iter_batch_verifies(
         plan_base, project_root, git_root, status_path=status_path
     )
+    # The joined holistic command runs as one runner command, so the per-command budget scales with the number of joined batch commands.
+    holistic_timeout_s = verify_timeout_s * max(1, len(batch_verifies))
     _report_skipped_verifies(
         plan_base, project_root, git_root, status_path, batch_verifies
     )
@@ -629,6 +641,8 @@ def main(argv=None) -> int:
         nits_scope="holistic",
         git_root=git_root,
         cwd_override=cwd_override,
+        verify_timeout_s=holistic_timeout_s,
+        verify_label=f"fix:{args.scope}",
     )
 
 

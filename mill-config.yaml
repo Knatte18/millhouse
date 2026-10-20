@@ -37,6 +37,7 @@ pipeline:
   parent_escalation_timeout_minutes: 60  # minutes ask-thread waits for a reply in either mode (automatic halt escalation, direct /ask-thread); 0 disables automatic escalation only, direct mode then waits the 60-minute default
   done_gate: null  # Repo-wide check command run from git_root before marking done; null = disabled. Default to including the language's lint command (e.g. golangci-lint run, ruff check .) even when a full test run is skipped as too slow. e.g. "go test ./... && golangci-lint run" or "dotnet test". (#561)
   done_gate_baseline_preflight: false  # Opt-in Prepare-phase done_gate baseline capture for self-capturing regression suites; see done_gate above. (#650)
+  verify_timeout_minutes: 20  # Per-command bound (minutes) on every verify command run via _verify_run.run_verify: batch and module-wide gates, finalize replays, done gate, merge-in replays. Must be a positive number; a timeout fails the gate loudly.
 merge:
   model: sonnethigh
   verify_fix_rounds: 3

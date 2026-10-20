@@ -40,6 +40,7 @@ import _render
 import _review_common
 import _reviewers
 import _status
+import _verify_run
 from _implementer_common import _forward_output, emit_prepare, finalize_from_output
 from wiki import WikiStartupError
 
@@ -183,8 +184,13 @@ def main(argv=None) -> int:
     mill_dir = project_root / ".millhouse"
     # Reload cfg against the resolve_active_hub()-corrected root: the bootstrap cfg above was loaded against project_root before this correction, so it can miss the hub's own mill-config.yaml whenever the hub lives in a subdirectory of the git repo (see cfg-reload-after-active-hub).
     cfg = _review_common.load_config(project_root, mill_dir)
+    try:
+        verify_timeout_s = _verify_run.timeout_seconds(cfg)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
 
-    plan_dir = cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
+    plan_dir =cfg.get("paths", {}).get("plan_dir", "_mill/plan/")
     try:
         status_path = _paths.require_status_path(project_root, cfg)
     except _paths.TaskHubError as e:
@@ -332,6 +338,8 @@ def main(argv=None) -> int:
             git_root=git_root,
             cwd_override=cwd_override,
             module_wide_cwd_override=module_wide_cwd_override,
+            verify_timeout_s=verify_timeout_s,
+            verify_label=args.batch_name,
         )
 
     # Stages: prepare and full (need pre-commit, render, and setup)
@@ -600,6 +608,8 @@ def main(argv=None) -> int:
         git_root=git_root,
         cwd_override=cwd_override,
         module_wide_cwd_override=module_wide_cwd_override,
+        verify_timeout_s=verify_timeout_s,
+        verify_label=args.batch_name,
     )
 
 

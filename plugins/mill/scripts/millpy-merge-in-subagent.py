@@ -13,8 +13,13 @@ Flags:
     paths of files with conflict markers
 
   verify-fix mode:
-    --cmd CMD the verify command to re-run --checkpoint SHA git SHA of the merge commit; used to
-    diff what the merge changed
+    --cmd CMD the verify command to re-run
+    --label LABEL label for the verify runner's log lines and Verify log rows
+    --checkpoint SHA git SHA of the merge commit; used to diff what the merge changed
+
+  A timed-out or unlaunchable verify command prints a stuck envelope without dispatching the
+  sub-agent.
+  Verify-fix envelopes carry "verify_runs", the summaries of the verify runs made.
 
 Exit codes:
     0 — sub-agent ran;
@@ -29,7 +34,6 @@ import html
 import json
 import os
 import re
-import subprocess
 import _subprocess_util
 import sys
 import uuid
@@ -43,7 +47,15 @@ import _paths
 import _render
 import _review_common
 import _reviewers
-from _implementer_common import _extract_status_json, _forward_output, _posix_shell_run_args, emit_prepare, emit_prepare_no_dispatch, finalize_from_output
+import _verify_run
+from _implementer_common import (
+    _extract_status_json,
+    _forward_output,
+    _truncate_verify_output,
+    emit_prepare,
+    emit_prepare_no_dispatch,
+    finalize_from_output,
+)
 
 
 # DU-conflict resolution needs branch intent; the resolver had no signal before #314.
@@ -215,6 +227,99 @@ def _generous_terminal_env() -> dict:
     return env
 
 
+def _run_merge_verify(
+    cmd: str,
+    label: str,
+    project_root: Path,
+    git_root: Path,
+    timeout_s: float,
+    status_path: Path | None,
+) -> _verify_run.VerifyRun:
+    """
+    Run one merge-in verify command through the shared verify runner.
+
+    The command runs through bash in ``project_root`` with a generous terminal geometry
+    environment, a ``timeout_s`` kill, and a Verify log row appended to ``status_path`` when given.
+
+    Returns:
+        The ``VerifyRun`` record; failure, timeout and launch failure are reported in it.
+    """
+    return _verify_run.run_verify(
+        cmd,
+        cwd=project_root,
+        label=label,
+        git_root=git_root,
+        timeout_s=timeout_s,
+        shell_mode="posix",
+        env=_generous_terminal_env(),
+        status_path=status_path,
+    )
+
+
+def _verify_stuck_envelope(run: _verify_run.VerifyRun) -> dict | None:
+    """
+    Build the stuck envelope for a verify run that no code change can fix.
+
+    Returns:
+        A ``stuck_type: verify`` dict for a timed-out run (with ``timed_out: true``) or for a
+        launch failure, or ``None`` when the command ran to an exit code.
+    """
+    if run.timed_out:
+        return {
+            "status": "stuck",
+            "stuck_type": "verify",
+            "timed_out": True,
+            "reason": _verify_run.timeout_prefix(run)
+            + _truncate_verify_output(run.output.strip())
+            + _verify_run.output_suffix(run),
+        }
+    if run.exit_code is None:
+        return {
+            "status": "stuck",
+            "stuck_type": "verify",
+            "reason": f"verify gate raised: {run.output}",
+        }
+    return None
+
+
+def _run_summaries(runs: list[_verify_run.VerifyRun]) -> list[dict]:
+    """Return the loggable ``summary()`` dict of each verify run."""
+    return [run.summary() for run in runs]
+
+
+def _print_envelope_with_runs(envelope: dict, runs: list[_verify_run.VerifyRun]) -> None:
+    """Print ``envelope`` as one JSON line carrying the summaries of the verify ``runs``."""
+    print(json.dumps({**envelope, "verify_runs": _run_summaries(runs)}))
+
+
+def _success_envelope(project_root: Path) -> dict:
+    """Build the success envelope carrying the current HEAD sha of ``project_root``."""
+    sha_result = _subprocess_util.run(["git", "rev-parse", "HEAD"], cwd=project_root)
+    sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
+    return {"status": "success", "commit_sha": sha}
+
+
+def _print_post_fix_envelope(runs: list[_verify_run.VerifyRun], project_root: Path) -> int:
+    """
+    Print the final verify-fix envelope from the post-fix verify run, the last of ``runs``.
+
+    A pass prints success; a timeout, launch failure or non-zero exit prints a stuck envelope.
+    Always returns 0, the exit code for a delivered verdict.
+    """
+    run = runs[-1]
+    envelope = _verify_stuck_envelope(run)
+    if envelope is None and run.exit_code == 0:
+        envelope = _success_envelope(project_root)
+    if envelope is None:
+        envelope = {
+            "status": "stuck",
+            "stuck_type": "verify",
+            "reason": _truncate_verify_output(run.output.strip()) + _verify_run.output_suffix(run),
+        }
+    _print_envelope_with_runs(envelope, runs)
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Dispatch a Sonnet sub-agent for merge-in conflict or verify-fix work."
@@ -235,6 +340,11 @@ def main(argv=None) -> int:
         "--cmd",
         default=None,
         help="(verify-fix mode) The verify command to run.",
+    )
+    parser.add_argument(
+        "--label",
+        default="merge-in:verify-fix",
+        help="(verify-fix mode) Label for the verify runner's log lines and Verify log rows; the SKILL passes merge-in:<batch>.",
     )
     parser.add_argument(
         "--checkpoint",
@@ -301,6 +411,13 @@ def main(argv=None) -> int:
     # Downstream consumers (verify-cwd resolution, conflict handling, finalize dispatch) must observe this corrected value, per cfg-reload-after-active-hub.
     cfg = _review_common.load_config(project_root, mill_dir)
 
+    try:
+        verify_timeout_s = _verify_run.timeout_seconds(cfg)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    status_path = _verify_run.resolve_status_path(project_root, cfg)
+
     # Stage: finalize (early exit before mode-specific logic)
     if args.stage == "finalize":
         if not args.agent_output:
@@ -311,29 +428,10 @@ def main(argv=None) -> int:
                 print("--cmd is required for verify-fix mode", file=sys.stderr)
                 return 1
             # Re-run verify command before finalizing
-            _run_args, _run_kwargs = _posix_shell_run_args(args.cmd)
-            post_verify_result = subprocess.run(
-                _run_args,
-                capture_output=True,
-                text=True,
-                cwd=project_root,
-                env=_generous_terminal_env(),
-                **_run_kwargs,
+            post_verify_run = _run_merge_verify(
+                args.cmd, f"{args.label}:post-fix", project_root, git_root, verify_timeout_s, status_path
             )
-            # Case A: verify passes with no fixer needed (initial verify was 0)
-            # Case B: fixer ran, post-fix verify passes
-            if post_verify_result.returncode == 0:
-                sha_result = _subprocess_util.run(
-                    ["git", "rev-parse", "HEAD"],
-                    cwd=project_root,
-                )
-                sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
-                print(json.dumps({"status": "success", "commit_sha": sha}))
-                return 0
-            # Case C: fixer ran, post-fix verify still fails
-            verify_output = (post_verify_result.stdout + post_verify_result.stderr).strip()
-            print(json.dumps({"status": "stuck", "stuck_type": "verify", "reason": verify_output}))
-            return 0
+            return _print_post_fix_envelope([post_verify_run], project_root)
         elif args.mode == "conflicts":
             # Replicate finalize_from_output's own is_file() guard inline -- that guard is unreachable on the gate-fail branch below, so a missing --agent-output file must not crash with a raw FileNotFoundError here.
             if not Path(args.agent_output).is_file():
@@ -387,7 +485,13 @@ def main(argv=None) -> int:
     if args.mode == "conflicts":
         return _run_conflicts(args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort, stage=args.stage)
     else:
-        return _run_verify_fix(args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort, stage=args.stage)
+        return _run_verify_fix(
+            args, project_root, plugin_root, cfg, timeout, impl_model, impl_effort,
+            stage=args.stage,
+            git_root=git_root,
+            verify_timeout_s=verify_timeout_s,
+            status_path=status_path,
+        )
 
 
 def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None, stage: str = "full") -> int:
@@ -439,7 +543,20 @@ def _run_conflicts(args, project_root: Path, plugin_root: Path, cfg: dict, timeo
     return _forward_output(output, project_root, commit_sha_field_name="pre_merge_head")
 
 
-def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, timeout: int, impl_model: str, impl_effort: str | None, stage: str = "full") -> int:
+def _run_verify_fix(
+    args,
+    project_root: Path,
+    plugin_root: Path,
+    cfg: dict,
+    timeout: int,
+    impl_model: str,
+    impl_effort: str | None,
+    stage: str = "full",
+    *,
+    git_root: Path,
+    verify_timeout_s: float,
+    status_path: Path | None,
+) -> int:
     if args.cmd is None:
         print("--cmd is required for verify-fix mode", file=sys.stderr)
         return 1
@@ -449,34 +566,31 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         print("--checkpoint is required for verify-fix full mode", file=sys.stderr)
         return 1
 
-    # Shell-escaped user verify command — _subprocess_util.run does not support shell=True.
-    _run_args, _run_kwargs = _posix_shell_run_args(args.cmd)
-    result = subprocess.run(
-        _run_args,
-        capture_output=True,
-        text=True,
-        cwd=project_root,
-        env=_generous_terminal_env(),
-        **_run_kwargs,
+    result = _run_merge_verify(
+        args.cmd, args.label, project_root, git_root, verify_timeout_s, status_path
     )
+    runs = [result]
 
-    # Stage: prepare (special case: verify passes)
-    if stage == "prepare" and result.returncode == 0:
-        briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
-        model_tier = _agent_dispatch.model_to_tier(impl_model)
-        session_id = str(uuid.uuid4())
-        return emit_prepare_no_dispatch(model_tier, session_id, "merge", "verify-fix", 1, project_root)
-
-    if result.returncode == 0:
-        sha_result = _subprocess_util.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=project_root,
-        )
-        sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
-        print(json.dumps({"status": "success", "commit_sha": sha}))
+    # A timeout or launch failure is not something a code change can fix, so the fixer is never dispatched.
+    stuck = _verify_stuck_envelope(result)
+    if stuck is not None:
+        _print_envelope_with_runs(stuck, runs)
         return 0
 
-    verify_output = (result.stdout + result.stderr).strip()
+    # Stage: prepare (special case: verify passes)
+    if stage == "prepare" and result.exit_code == 0:
+        model_tier = _agent_dispatch.model_to_tier(impl_model)
+        session_id = str(uuid.uuid4())
+        return emit_prepare_no_dispatch(
+            model_tier, session_id, "merge", "verify-fix", 1, project_root,
+            verify_runs=_run_summaries(runs),
+        )
+
+    if result.exit_code == 0:
+        _print_envelope_with_runs(_success_envelope(project_root), runs)
+        return 0
+
+    verify_output = result.output.strip()
 
     diff_result = _subprocess_util.run(
         ["git", "diff", f"{args.checkpoint}..HEAD"],
@@ -500,7 +614,10 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         briefs_dir = _paths.resolve_task_path(project_root, "_mill/briefs/")
         model_tier = _agent_dispatch.model_to_tier(impl_model)
         session_id = str(uuid.uuid4())
-        return emit_prepare(briefs_dir, "merge", "verify-fix", 1, prompt_text, model_tier, session_id, effort=impl_effort)
+        return emit_prepare(
+            briefs_dir, "merge", "verify-fix", 1, prompt_text, model_tier, session_id,
+            effort=impl_effort, verify_runs=_run_summaries(runs),
+        )
 
     # Stage: full (default)
     try:
@@ -519,30 +636,12 @@ def _run_verify_fix(args, project_root: Path, plugin_root: Path, cfg: dict, time
         return 1
 
     # Post-sub-agent re-verification (only in full mode)
-    _run_args, _run_kwargs = _posix_shell_run_args(args.cmd)
-    post_verify_result = subprocess.run(
-        _run_args,
-        capture_output=True,
-        text=True,
-        cwd=project_root,
-        env=_generous_terminal_env(),
-        **_run_kwargs,
-    )
-
-    # Case B: fixer ran, post-fix verify passes
-    if post_verify_result.returncode == 0:
-        sha_result = _subprocess_util.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=project_root,
+    runs.append(
+        _run_merge_verify(
+            args.cmd, f"{args.label}:post-fix", project_root, git_root, verify_timeout_s, status_path
         )
-        sha = sha_result.stdout.strip() if sha_result.returncode == 0 else ""
-        print(json.dumps({"status": "success", "commit_sha": sha}))
-        return 0
-
-    # Case C: fixer ran, post-fix verify still fails
-    verify_output = (post_verify_result.stdout + post_verify_result.stderr).strip()
-    print(json.dumps({"status": "stuck", "stuck_type": "verify", "reason": verify_output}))
-    return 0
+    )
+    return _print_post_fix_envelope(runs, project_root)
 
 
 if __name__ == "__main__":
